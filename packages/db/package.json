@@ -1,0 +1,19 @@
+{
+  "name": "@botmaker/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "probar": "tsx scripts/probar-migraciones.ts",
+    "sql": "tsx scripts/armar-sql.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@campaignsuite/botmaker": "workspace:*",
+    "@campaignsuite/platform": "workspace:*",
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "botmaker",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "turbo run dev --filter=@botmaker/web",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:probar": "pnpm --filter @botmaker/db probar",
+    "db:sql": "pnpm --filter @botmaker/db sql",
+    "probar": "pnpm --filter @campaignsuite/botmaker probar",
+    "probar:celular": "node scripts/probar-celular.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.3",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

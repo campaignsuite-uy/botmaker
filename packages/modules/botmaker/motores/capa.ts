@@ -1,0 +1,220 @@
+/**
+ * Capa de motores: el único lugar del producto que llama a un modelo. El resto pide interpretar, responder con base o
+ * copiloto y recibe una salida validada, sin saber qué modelo contestó.
+ *
+ * Por cada pedido:
+ *  1. Toma el motor principal y el de respaldo de esa función en el bot (bots.bot_engines).
+ *  2. En vivo, mira el gasto del día y del mes contra los topes del bot: si no queda, no llama a nadie (solo menús).
+ *  3. Cambia teléfonos, correos y documentos por marcas en lo que escribió la persona.
+ *  4. Llama al principal con su tiempo máximo; si falla, tarda o devuelve algo que no valida, llama al respaldo.
+ *  5. Registra cada intento (sin textos) en bots.engine_calls, que suma el gasto del día.
+ *  6. Si nada sirvió, devuelve salida null: el motor de conversación sigue solo con menús.
+ */
+import { fichaMotor, type FichaMotor } from '../dominio/motores';
+import { diaUtc, inicioMesUtc } from '../dominio/formato';
+import type { FuncionMotor, MotorFuncion, NuevaLlamada, UsoMotor } from '../dominio/tipos';
+import type { Repositorio } from '../datos/repositorio';
+import { contratoCopiloto, contratoInterpretar, contratoResponder, extraerJson, MAX_TOKENS, type EntradaDe, type SalidaDe } from './contratos';
+import { marcarDatosPersonales } from './marcas';
+import { instruccionesCopiloto, instruccionesInterpretar, instruccionesResponder, type ContextoBot, type Instrucciones } from './prompts';
+import type { Adaptador, LlamadaCruda } from './tipos';
+
+export interface PedidoCapa<F extends FuncionMotor> {
+  funcion: F;
+  uso: UsoMotor;
+  bot: { id: string; campanaId: string };
+  contexto: ContextoBot;
+  entrada: EntradaDe[F];
+  /** Quién lo disparó (el equipo: copiloto, simulador, pruebas). null en vivo. */
+  personaId: string | null;
+  /** Solo para probar un motor puntual (Ajustes › Motores): se salta la elección del bot y el respaldo. */
+  soloMotor?: string;
+}
+
+export interface IntentoMotor {
+  motorId: string;
+  respaldo: boolean;
+  ok: boolean;
+  error: string | null;
+  demoraMs: number;
+  costoUsd: number;
+}
+
+export interface ResultadoCapa<F extends FuncionMotor> {
+  salida: SalidaDe[F] | null;
+  /** El motor que dio la salida. */
+  motorId: string | null;
+  respaldo: boolean;
+  /** Por qué no hubo salida. */
+  motivo: 'tope_diario' | 'tope_mensual' | 'sin_motor' | 'fallaron' | null;
+  intentos: IntentoMotor[];
+  costoUsd: number;
+  demoraMs: number;
+  simulado: boolean;
+}
+
+export type RepositorioCapa = Pick<Repositorio, 'bot' | 'fichas' | 'motoresDeBot' | 'gastoBot' | 'registrarLlamada'>;
+
+export interface OpcionesCapa {
+  repo: RepositorioCapa;
+  adaptadores: { openrouter: Adaptador; simulado: Adaptador };
+  /** Todo al motor simulado (la demo y las pruebas). Ver motores/claves.ts → simularMotores. */
+  simular: boolean;
+  ahora?: () => Date;
+}
+
+function instrucciones<F extends FuncionMotor>(p: PedidoCapa<F>, entrada: EntradaDe[F]): Instrucciones {
+  if (p.funcion === 'interpretar') return instruccionesInterpretar(p.contexto, entrada as EntradaDe['interpretar']);
+  if (p.funcion === 'responder') return instruccionesResponder(p.contexto, entrada as EntradaDe['responder']);
+  return instruccionesCopiloto(p.contexto, entrada as EntradaDe['copiloto']);
+}
+
+function contrato<F extends FuncionMotor>(p: PedidoCapa<F>) {
+  if (p.funcion === 'interpretar') return contratoInterpretar(p.entrada as EntradaDe['interpretar']);
+  if (p.funcion === 'responder') return contratoResponder;
+  return contratoCopiloto;
+}
+
+/** Lo que escribió la persona, con marcas en lugar de sus datos. El copiloto es del equipo: va tal cual. */
+function marcar<F extends FuncionMotor>(p: PedidoCapa<F>): EntradaDe[F] {
+  if (p.funcion === 'copiloto') return p.entrada;
+  const m = (t: string) => marcarDatosPersonales(t).texto;
+  const turnos = (p.entrada as EntradaDe['interpretar']).turnos.map((t) => (t.quien === 'persona' ? { ...t, texto: m(t.texto) } : t));
+  if (p.funcion === 'interpretar') {
+    const e = p.entrada as EntradaDe['interpretar'];
+    return { ...e, mensaje: m(e.mensaje), turnos } as EntradaDe[F];
+  }
+  const e = p.entrada as EntradaDe['responder'];
+  return { ...e, pregunta: m(e.pregunta), turnos } as EntradaDe[F];
+}
+
+export class CapaMotores {
+  private readonly ahora: () => Date;
+
+  constructor(private readonly o: OpcionesCapa) {
+    this.ahora = o.ahora ?? (() => new Date());
+  }
+
+  get simula(): boolean {
+    return this.o.simular;
+  }
+
+  async llamar<F extends FuncionMotor>(p: PedidoCapa<F>): Promise<ResultadoCapa<F>> {
+    const vacio = (motivo: ResultadoCapa<F>['motivo'], intentos: IntentoMotor[] = []): ResultadoCapa<F> => ({
+      salida: null, motorId: null, respaldo: false, motivo, intentos,
+      costoUsd: intentos.reduce((a, i) => a + i.costoUsd, 0), demoraMs: intentos.reduce((a, i) => a + i.demoraMs, 0), simulado: this.o.simular,
+    });
+
+    const fichas = await this.o.repo.fichas();
+    let elegidos: { ficha: FichaMotor; respaldo: boolean }[];
+    let tiempoMaximoMs: number;
+    if (p.soloMotor) {
+      const f = fichaMotor(p.soloMotor, fichas);
+      if (!f) return vacio('sin_motor');
+      const delBot = (await this.o.repo.motoresDeBot(p.bot.id)).find((m) => m.funcion === p.funcion);
+      elegidos = [{ ficha: f, respaldo: false }];
+      tiempoMaximoMs = delBot?.tiempoMaximoMs ?? 10000;
+    } else {
+      const m: MotorFuncion | undefined = (await this.o.repo.motoresDeBot(p.bot.id)).find((x) => x.funcion === p.funcion);
+      if (!m) return vacio('sin_motor');
+      elegidos = [
+        { id: m.principal, respaldo: false },
+        ...(m.respaldo ? [{ id: m.respaldo, respaldo: true }] : []),
+      ].flatMap((x) => {
+        const f = fichaMotor(x.id, fichas);
+        return f && f.activo ? [{ ficha: f, respaldo: x.respaldo }] : [];
+      });
+      tiempoMaximoMs = m.tiempoMaximoMs;
+      if (!elegidos.length) return vacio('sin_motor');
+    }
+
+    // Topes del bot: solo en vivo (lo demás lo acota el tope de su clave en OpenRouter).
+    if (p.uso === 'en_vivo') {
+      const bot = await this.o.repo.bot(p.bot.id);
+      if (bot) {
+        const hoy = diaUtc(this.ahora());
+        const [dia, mes] = await Promise.all([
+          this.o.repo.gastoBot(p.bot.id, hoy, 'en_vivo'),
+          this.o.repo.gastoBot(p.bot.id, inicioMesUtc(this.ahora()), 'en_vivo'),
+        ]);
+        if (dia >= bot.topeDiarioUsd) return vacio('tope_diario');
+        if (mes >= bot.topeMensualUsd) return vacio('tope_mensual');
+      }
+    }
+
+    const entrada = marcar(p);
+    const { sistema, usuario } = instrucciones(p, entrada);
+    const { esquema, zod } = contrato(p);
+    const intentos: IntentoMotor[] = [];
+
+    for (const { ficha, respaldo } of elegidos) {
+      const adaptador = this.o.simular || ficha.ruta === 'simulado' ? this.o.adaptadores.simulado : this.o.adaptadores.openrouter;
+      const simulado = adaptador.ruta === 'simulado';
+      let cruda: LlamadaCruda;
+      try {
+        cruda = await adaptador.llamar({ ficha, funcion: p.funcion, uso: p.uso, sistema, usuario, esquema, maxTokens: MAX_TOKENS[p.funcion], tiempoMaximoMs, entrada });
+      } catch (e) {
+        cruda = { ok: false, contenido: null, error: `Error del adaptador: ${String((e as Error)?.message ?? e).slice(0, 150)}`, demoraMs: 0, costoUsd: null, tokensEntrada: null, tokensSalida: null, tokensCache: null, tokensRazonamiento: null, proveedor: null, idGeneracion: null };
+      }
+      let salida: SalidaDe[F] | null = null;
+      let error = cruda.error;
+      if (cruda.ok && cruda.contenido) {
+        const v = (() => {
+          try {
+            return zod.safeParse(extraerJson(cruda.contenido));
+          } catch {
+            return null;
+          }
+        })();
+        if (v?.success) salida = v.data as SalidaDe[F];
+        else error = 'La salida no cumple el contrato (JSON inválido o fuera del catálogo).';
+      }
+      const intento: IntentoMotor = {
+        motorId: simulado ? 'simulado' : ficha.id,
+        respaldo,
+        ok: !!salida,
+        error: salida ? null : (error ?? 'Sin salida.'),
+        demoraMs: cruda.demoraMs,
+        costoUsd: cruda.costoUsd ?? 0,
+      };
+      intentos.push(intento);
+      await this.registrar(p, ficha, cruda, intento, simulado);
+      if (salida) {
+        return {
+          salida, motorId: intento.motorId, respaldo, motivo: null, intentos,
+          costoUsd: intentos.reduce((a, i) => a + i.costoUsd, 0), demoraMs: intentos.reduce((a, i) => a + i.demoraMs, 0), simulado: this.o.simular || simulado,
+        };
+      }
+    }
+    return vacio('fallaron', intentos);
+  }
+
+  private async registrar<F extends FuncionMotor>(p: PedidoCapa<F>, ficha: FichaMotor, c: LlamadaCruda, i: IntentoMotor, simulado: boolean): Promise<void> {
+    const l: NuevaLlamada = {
+      botId: p.bot.id,
+      campanaId: p.bot.campanaId,
+      uso: p.uso,
+      funcion: p.funcion,
+      motorId: i.motorId,
+      modelo: simulado ? 'simulado' : ficha.modelo,
+      proveedor: c.proveedor ?? '',
+      respaldo: i.respaldo,
+      ok: i.ok,
+      error: i.error ? i.error.slice(0, 300) : null,
+      demoraMs: c.demoraMs,
+      tokensEntrada: c.tokensEntrada,
+      tokensSalida: c.tokensSalida,
+      tokensCache: c.tokensCache,
+      tokensRazonamiento: c.tokensRazonamiento,
+      costoUsd: c.costoUsd ?? 0,
+      idGeneracion: c.idGeneracion,
+      personaId: p.personaId,
+    };
+    try {
+      await this.o.repo.registrarLlamada(l);
+    } catch (e) {
+      // El registro no puede tirar abajo la respuesta del bot: queda en el registro del servidor (Sentry, etapa 8).
+      console.warn(`[motores] No se pudo registrar la llamada: ${(e as Error).message}`);
+    }
+  }
+}

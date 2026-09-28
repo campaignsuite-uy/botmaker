@@ -1,0 +1,46 @@
+/*
+ * Estilos propios de BotMaker. Todo lo común sale de @campaignsuite/ui (tokens, marco, cajas, tablas, formularios);
+ * acá solo lo que no existe, con el prefijo bots- y los mismos tokens. Solo modo oscuro.
+ */
+
+.bots-form { max-width: 880px; }
+.bots-opciones { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bots-opciones legend { margin-bottom: 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gris); }
+.bots-opcion { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--linea); border-radius: var(--radio); cursor: pointer; }
+.bots-opcion:has(input:checked) { border-color: var(--lavanda); background: var(--lavanda-suave); }
+.bots-opcion input { margin-top: 3px; accent-color: var(--lavanda); }
+.bots-lista { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+.bots-estado { display: inline-block; padding: 3px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-radius: var(--radio); border: 1px solid var(--linea); color: var(--texto-3); }
+.bots-estado--publicado { color: var(--bien); background: var(--bien-suave); border-color: transparent; }
+.bots-estado--pausado { color: var(--atencion); background: var(--atencion-suave); border-color: transparent; }
+.bots-estado--archivado { color: var(--gris); }
+.bots-motor-corto { display: block; white-space: nowrap; }
+
+.bots-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+.bots-dato { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bots-dato__etiqueta { font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gris); }
+.bots-dato__valor { font-size: 13px; overflow-wrap: anywhere; }
+.bots-solo-lectura { margin: 0; grid-column: 1 / -1; }
+
+.bots-tabla-motores select.entrada { min-width: 200px; }
+.bots-avisos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.bots-aviso { font-size: 12px; padding: 8px 12px; border-left: 2px solid var(--linea); background: var(--fila-a); color: var(--texto-3); }
+.bots-aviso--atencion { border-left-color: var(--atencion); color: var(--texto-2); }
+.bots-aviso--info { border-left-color: var(--lavanda); }
+.bots-probar { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--linea); padding-top: 14px; }
+.bots-probar .entrada { width: auto; min-width: 180px; }
+.bots-fila-form { flex-wrap: nowrap; }
+.bots-fila-form .entrada { width: auto; min-width: 140px; }
+
+.bots-barras { display: flex; align-items: flex-end; gap: 3px; height: 120px; border-bottom: 1px solid var(--linea); }
+.bots-barras__col { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 0; }
+.bots-barras__relleno { width: 100%; background: var(--lavanda); opacity: 0.85; }
+
+@media (max-width: 760px) {
+  .bots-datos { grid-template-columns: minmax(0, 1fr); }
+  .bots-tabla-motores select.entrada { min-width: 150px; }
+  .bots-probar .entrada { min-width: 0; max-width: 100%; }
+  .bots-fila-form { flex-wrap: wrap; }
+  .bots-barras { gap: 1px; }
+}

@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "packages/modules/*"
+
+# Paquetes que pueden correr su script de instalación. pnpm 10 lee onlyBuiltDependencies; pnpm 11 o más, allowBuilds.
+# esbuild: el binario de tsx y del build de Next.
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["CAMPAIGNSUITE_DATOS", "CAMPAIGNSUITE_SOLO_LECTURA", "VERCEL", "BOTS_SIMULAR"],
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": [".next/**", "!.next/cache/**"] },
+    "typecheck": { "dependsOn": [] },
+    "test": { "dependsOn": [] },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["SUPABASE_*", "NEXT_PUBLIC_SUPABASE_*", "BOTS_*", "CAMPAIGNSUITE_*"]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# Pruebas automáticas en cada push y en cada pull request: las mismas que exige CampaignSuite para integrar.
+# Tipos, pruebas unitarias (en los tres modos), base (PGlite), pantallas, build de la app y uso en el celular.
+# No usa ninguna clave: la demo en memoria y el motor simulado alcanzan.
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      # Toma la versión de pnpm de "packageManager" en package.json.
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tipos
+        run: pnpm typecheck
+      - name: Pruebas unitarias
+        run: pnpm test
+      - name: Pruebas unitarias como en Vercel (demo online)
+        run: pnpm test
+        env: { VERCEL: '1', CAMPAIGNSUITE_DATOS: demo, CAMPAIGNSUITE_SOLO_LECTURA: '1' }
+      - name: Pruebas unitarias como en Vercel (con Supabase)
+        run: pnpm test
+        env: { VERCEL: '1', CAMPAIGNSUITE_DATOS: supabase }
+      - name: Base de datos (migraciones, matriz y reglas por fila, con PGlite)
+        run: pnpm db:probar
+      - name: Pantallas con cada persona
+        run: pnpm probar
+      - name: Build de la app
+        run: pnpm build
+      - name: Navegador para la prueba del celular
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Uso en el celular
+        run: pnpm probar:celular

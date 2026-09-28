@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm -w run typecheck && pnpm -w run test && pnpm run build",
+  "regions": ["gru1"]
+}

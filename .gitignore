@@ -1,0 +1,20 @@
+node_modules
+.next
+.turbo
+*.tsbuildinfo
+.env
+.env.*
+!.env.ejemplo
+!**/.env.ejemplo
+coverage
+dist
+packages/db/salida/
+resultados/
+
+# macOS
+.DS_Store
+
+# Los genera Next.js al correr dev o build (next-env.d.ts cambia entre los dos)
+apps/web/next-env.d.ts
+apps/web/AGENTS.md
+apps/web/CLAUDE.md

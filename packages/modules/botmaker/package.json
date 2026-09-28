@@ -1,0 +1,44 @@
+{
+  "name": "@campaignsuite/botmaker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./dominio/*": "./dominio/*.ts",
+    "./datos": "./datos/index.ts",
+    "./datos/*": "./datos/*.ts",
+    "./motores": "./motores/index.ts",
+    "./motores/*": "./motores/*.ts",
+    "./vistas/*": "./vistas/*.ts",
+    "./ui/estilos.css": "./ui/estilos.css",
+    "./ui/contexto": "./ui/contexto.ts",
+    "./ui/*": "./ui/*.tsx",
+    "./acciones/*": "./acciones/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "probar": "tsx scripts/correr-pruebas.ts"
+  },
+  "dependencies": {
+    "@campaignsuite/platform": "workspace:*",
+    "@campaignsuite/ui": "workspace:*",
+    "@supabase/supabase-js": "^2.117.0",
+    "zod": "^4.1.0"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "next": "^16.3.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}
