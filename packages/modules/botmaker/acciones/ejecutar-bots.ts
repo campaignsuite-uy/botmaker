@@ -138,7 +138,7 @@ export async function ejecutarArchivarBot(c: ContextoNucleo, fd: FormData): Prom
 }
 
 /**
- * Probar un motor: un pedido chico de prueba (motores/prueba.ts) al motor elegido, con la clave del copiloto. Queda
+ * Probar un motor: un pedido chico de prueba (motores/prueba.ts) al motor elegido, con la clave de tareas de fondo. Queda
  * registrado como uso "pruebas" con su costo. Vuelve con el resultado en la dirección (sin textos del bot).
  */
 export async function ejecutarProbarMotor(c: ContextoNucleo, capa: CapaMotores, fd: FormData): Promise<Salida> {

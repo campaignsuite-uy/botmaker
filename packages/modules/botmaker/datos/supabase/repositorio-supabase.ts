@@ -88,6 +88,11 @@ export class RepositorioSupabase implements Repositorio {
     return f ? M.aBot(f) : null;
   }
 
+  async topesBot(botId: string): Promise<Topes | null> {
+    const f = datos(await this.servicio.from('bots').select('daily_cap_usd, monthly_cap_usd').eq('id', botId).maybeSingle(), 'leer los topes del bot') as { daily_cap_usd: number | string; monthly_cap_usd: number | string } | null;
+    return f ? { diarioUsd: Number(f.daily_cap_usd), mensualUsd: Number(f.monthly_cap_usd) } : null;
+  }
+
   async fichas(): Promise<FichaMotor[]> {
     const filas = datos(await this.servicio.from('engines').select('*').order('id'), 'leer los motores') as M.FilaMotor[];
     return filas.map(M.aFicha);

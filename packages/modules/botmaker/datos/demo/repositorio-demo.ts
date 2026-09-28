@@ -12,7 +12,7 @@ import { esquemaCambiosBot, esquemaDatosPersonales, esquemaNuevoBot, esquemaTope
 import { FICHAS_MOTORES, MOTORES_POR_DEFECTO, fichaMotor, type FichaMotor } from '../../dominio/motores';
 import { exigir, type Accion } from '../../dominio/permisos';
 import type {
-  Bot, CambiosBot, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolEfectivo, RolModulo, Topes, UsoMotor,
+  Bot, CambiosBot, EleccionMotores, FuncionMotor, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolEfectivo, RolModulo, Topes, UsoMotor,
 } from '../../dominio/tipos';
 import { PRODUCTO } from '../../dominio/tipos';
 import { ErrorDatos } from '../errores';
@@ -82,6 +82,11 @@ export class RepositorioDemo implements Repositorio {
   async bot(botId: string): Promise<Bot | null> {
     const b = this.e.bots.find((x) => x.id === botId);
     return b ? { ...b } : null;
+  }
+
+  async topesBot(botId: string): Promise<Topes | null> {
+    const b = this.e.bots.find((x) => x.id === botId);
+    return b ? { diarioUsd: b.topeDiarioUsd, mensualUsd: b.topeMensualUsd } : null;
   }
 
   async fichas(): Promise<FichaMotor[]> {
@@ -170,6 +175,8 @@ export class RepositorioDemo implements Repositorio {
       const f = fichaMotor(eleccion.principal);
       if (!f || !f.activo) throw new ErrorDatos('motor', `Motor desconocido o apagado: ${eleccion.principal}`);
       if (eleccion.respaldo && !fichaMotor(eleccion.respaldo)?.activo) throw new ErrorDatos('motor', `Motor desconocido o apagado: ${eleccion.respaldo}`);
+      const sirve = (id: string) => !!fichaMotor(id)?.funciones.includes(funcion as FuncionMotor);
+      if (!sirve(eleccion.principal) || (eleccion.respaldo && !sirve(eleccion.respaldo))) throw new ErrorDatos('motor_funcion', `El motor no sirve para la función ${funcion}.`);
       if (eleccion.respaldo === eleccion.principal) throw new ErrorDatos('respaldo_igual', 'El respaldo tiene que ser otro motor.');
       const m = actuales.find((x) => x.funcion === funcion);
       if (!m) throw new ErrorDatos('funcion', `Función desconocida: ${funcion}`);

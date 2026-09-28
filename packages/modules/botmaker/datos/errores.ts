@@ -16,6 +16,7 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (/archivado/.test(m)) return new ErrorDatos('archivado', m);
   if (/respaldo tiene que ser otro/.test(m)) return new ErrorDatos('respaldo_igual', m);
   if (/Motor desconocido/.test(m)) return new ErrorDatos('motor', m);
+  if (/no sirve para la función/.test(m)) return new ErrorDatos('motor_funcion', m);
   if (/No existe el bot/.test(m) || c === 'P0002') return new ErrorDatos('no_existe', m);
   if (/no es integrante/.test(m)) return new ErrorDatos('no_integrante', m);
   if (/Administrador en todos sus productos/.test(m)) return new ErrorDatos('admin_campana', m);

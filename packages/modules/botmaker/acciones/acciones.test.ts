@@ -4,7 +4,7 @@ import { nucleoMemoria, reiniciarNucleoMemoria } from '@campaignsuite/platform/m
 import { RepositorioDemo } from '../datos/demo/repositorio-demo';
 import { CapaMotores } from '../motores/capa';
 import { AdaptadorSimulado } from '../motores/simulado';
-import { rolEfectivo } from './comun';
+import { rolEfectivo, rutaVolver } from './comun';
 import {
   ejecutarArchivarBot, ejecutarCrearBot, ejecutarGuardarBot, ejecutarGuardarDatosPersonales, ejecutarGuardarMotores, ejecutarProbarMotor, type ContextoNucleo,
 } from './ejecutar-bots';
@@ -123,5 +123,13 @@ describe('equipo y roles', () => {
     expect((await ejecutarRolEquipo(como('p-joaquin'), nucleoMemoria(), fd({ personaId: 'p-joaquin', rol: 'lector' }))).codigo).toBe('admin_campana');
     expect((await ejecutarRolEquipo(como('p-joaquin'), nucleoMemoria(), fd({ personaId: 'p-mariana', rol: 'revisor' }))).codigo).toBe('rol');
     expect((await ejecutarRolEquipo(como('p-joaquin'), nucleoMemoria(), fd({ personaId: 'nadie', rol: 'lector' }))).codigo).toBe('no_integrante');
+  });
+});
+
+describe('ruta de vuelta', () => {
+  it('solo rutas internas', () => {
+    const v = (x: string) => rutaVolver(fd({ volver: x }));
+    expect(v('/otro-camino/pa-2029/bots?ok=1#datos')).toBe('/otro-camino/pa-2029/bots?ok=1#datos');
+    for (const mala of ['//evil.com', '/\\evil.com', '/\tevil.com', 'https://evil.com', 'evil', '/a\u0000b']) expect(v(mala)).toBe('/');
   });
 });

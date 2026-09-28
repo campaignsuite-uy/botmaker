@@ -251,12 +251,20 @@ async function main() {
       ['{"interpretar": {"principal": "gpt-9"}}', /Motor desconocido/],
       ['{"interpretar": {"principal": "gpt-oss-120b", "respaldo": "gpt-oss-120b"}}', /otro motor/],
       ['{"volar": {"principal": "gpt-oss-120b"}}', /Función desconocida/],
+      ['{"copiloto": {"principal": "ministral-8b"}}', /no sirve para la función/],
     ] as const) {
       const x = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, $2::jsonb, null)`, [botA, mal])));
       afirmar(x && patron.test(x), `${mal}: ${x}`);
     }
     const x = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, '{}'::jsonb, '{"diario": 50, "mensual": 10}'::jsonb)`, [botA])));
     afirmar(x, 'Aceptó un tope diario mayor que el mensual');
+    for (const t of ['{"diario": "NaN", "mensual": "NaN"}', '{"diario": 1, "mensual": 5000000}']) {
+      const y = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, '{}'::jsonb, $2::jsonb)`, [botA, t])));
+      afirmar(y, `Aceptó los topes ${t}`);
+    }
+    const det = await uno<{ detail: Record<string, unknown> }>(db, `select detail from core.audit_log where action = 'bots.motores_cambiados' order by id desc limit 1`);
+    const d = det?.detail as { interpretar?: { principal?: string; respaldo?: string } } | undefined;
+    afirmar(Object.keys(d ?? {}).join() === 'interpretar' && d?.interpretar?.principal === 'claude-haiku-4.5' && d.interpretar.respaldo === 'gpt-oss-120b' && Object.keys(d.interpretar).length === 2, `La actividad guarda lo validado: ${JSON.stringify(det)}`);
     const act = await filas<{ action: string }>(db, `select action from core.audit_log where product_id = 'botmaker' and action in ('bots.motores_cambiados', 'bots.topes_cambiados')`);
     afirmar(act.length === 2, `Actividad: ${JSON.stringify(act)}`);
   });
@@ -274,7 +282,9 @@ async function main() {
     const g = await uno<{ cost_usd: string; calls: number; organization_id: string }>(db, `select cost_usd, calls, organization_id from bots.spend_daily where bot_id = $1 and use = 'en_vivo'`, [botA]);
     afirmar(Number(g?.cost_usd) === 0.03 && g?.calls === 2 && g.organization_id === ORG_A, JSON.stringify(g));
     const e2 = await error(() => comoServicio(db, (tx) => tx.query(`update bots.engine_calls set cost_usd = 0 where bot_id = $1`, [botA])));
-    afirmar(e2 && /solo admite agregar/.test(e2), `Se pudo cambiar una llamada: ${e2}`);
+    afirmar(e2 && /permission denied|solo admite agregar/.test(e2), `Se pudo cambiar una llamada: ${e2}`);
+    const e3 = await error(() => comoServicio(db, (tx) => tx.query(`delete from bots.engine_calls where bot_id = $1`, [botA])));
+    afirmar(e3 && /permission denied/.test(e3), `Se pudo borrar una llamada: ${e3}`);
     for (const [p, n] of [[P.dueno, 2], [P.adminCamp, 2], [P.editor, 0], [P.agente, 0], [P.lector, 0], [P.ajeno, 0]] as const) {
       const x = await comoPersona(db, p, (tx) => cuenta(tx, `select count(*) as n from bots.engine_calls where bot_id = $1`, [botA]));
       afirmar(x === n, `${p} ve ${x} llamadas (esperaba ${n})`);
@@ -303,7 +313,7 @@ async function main() {
     const e2 = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.guardar_bot($1, '{"nombre":"x"}'::jsonb)`, [botA])));
     afirmar(e2 && /archivado/.test(e2), `Dio: ${e2}`);
     const acciones = (await filas<{ action: string }>(db, `select action from core.audit_log where product_id = 'botmaker' order by id`)).map((x) => x.action);
-    for (const a of ['bots.crear', 'bots.motores_cambiados', 'bots.topes_cambiados', 'bots.rol_asignado', 'bots.archivar']) afirmar(acciones.includes(a), `Falta ${a} en la actividad`);
+    for (const a of ['bots.crear', 'bots.motores_cambiados', 'bots.topes_cambiados', 'bots.datos_personales_cambiados', 'bots.rol_asignado', 'bots.archivar']) afirmar(acciones.includes(a), `Falta ${a} en la actividad`);
   });
   await prueba('la actividad la leen el Dueño y el Administrador de la organización, no el editor', async () => {
     const d = await comoPersona(db, P.dueno, (tx) => cuenta(tx, `select count(*) as n from core.audit_log where product_id = 'botmaker' and organization_id = $1`, [ORG_A]));
@@ -318,6 +328,13 @@ async function main() {
     afirmar(n === 1 && c === 1, `Ve ${n} bots y ${c} llamadas`);
     const e = await error(() => comoPersona(db, P.observador, (tx) => tx.query(`select bots.guardar_bot($1, '{"nombre":"x"}'::jsonb)`, [botDemo])));
     afirmar(e && /no permite/.test(e), `Dio: ${e}`);
+  });
+  await prueba('borrar una campaña con bots y llamadas borra todo en cascada', async () => {
+    const botB = await comoPersona(db, P.ajeno, (tx) => crearBot(tx, CAMP_B, 'Bot de B'));
+    await comoServicio(db, (tx) => tx.query(`insert into bots.engine_calls (campaign_id, bot_id, use, function, engine_id, ok, cost_usd) values ($1, $2, 'pruebas', 'interpretar', 'simulado', true, 0)`, [CAMP_B, botB]));
+    await db.query(`delete from core.campaigns where id = $1`, [CAMP_B]);
+    const quedan = await cuenta(db, `select (select count(*) from bots.bots where campaign_id = $1) + (select count(*) from bots.engine_calls where campaign_id = $1) + (select count(*) from bots.spend_daily where campaign_id = $1) as n`, [CAMP_B]);
+    afirmar(quedan === 0, `Quedaron ${quedan} filas de la campaña borrada`);
   });
 
   console.log('\nRepositorio de Supabase (cliente simulado)');
@@ -363,6 +380,12 @@ async function main() {
     const ll = await dueno.llamadas(CAMP_A, { botId: b!.id });
     afirmar(ll.length === 1 && ll[0]!.costoUsd === 0.5 && ll[0]!.personaId === P.editor, JSON.stringify(ll));
     afirmar((await dueno.gastoPorDia(CAMP_A, hoy)).some((g) => g.botId === b!.id && g.costoUsd === 0.5), 'gastoPorDia');
+  });
+  await prueba('topes del bot con la clave de servicio (la capa los lee también sin sesión)', async () => {
+    const [b] = await repoDe(P.lector).bots(CAMP_A);
+    const t = await repoDe(P.lector).topesBot(b!.id);
+    afirmar(t && Number.isFinite(t.diarioUsd) && Number.isFinite(t.mensualUsd), JSON.stringify(t));
+    afirmar((await repoDe(P.lector).topesBot(U(998))) === null, 'Un bot que no existe devolvió topes');
   });
   await prueba('fichas y motores por defecto', async () => {
     const r = repoDe(P.lector);

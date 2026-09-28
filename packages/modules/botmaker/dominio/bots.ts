@@ -30,7 +30,7 @@ export const esquemaCambiosBot = z.object({
 
 export const esquemaTopes = z.object({
   diarioUsd: z.number({ error: 'tope' }).min(0, 'tope').max(100000, 'tope'),
-  mensualUsd: z.number({ error: 'tope' }).min(0, 'tope').max(1000000, 'tope'),
+  mensualUsd: z.number({ error: 'tope' }).min(0, 'tope').max(999999, 'tope'),
 }).refine((t) => t.diarioUsd <= t.mensualUsd, 'tope_diario_mayor');
 
 export const esquemaDatosPersonales = z.object({

@@ -183,9 +183,11 @@ export class AdaptadorOpenRouter implements Adaptador {
     return /response_format|json_schema|structured|no endpoints found|parameter|temperature/i.test(JSON.stringify(r.cuerpo?.error ?? ''));
   }
 
+  /** El error del proveedor, corto y sin citas largas: por si algún proveedor repite parte del pedido en su mensaje. */
   private mensajeError(r: RespuestaHttp): string {
     const e = r.cuerpo?.error;
-    return `HTTP ${r.status}: ${String(e?.message ?? 'sin detalle').slice(0, 200)}`;
+    const m = String(e?.message ?? 'sin detalle').replace(/(["'`«]).{20,}?\1/g, '[…]').slice(0, 160);
+    return `HTTP ${r.status}: ${m}`;
   }
 }
 

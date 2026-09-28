@@ -34,6 +34,9 @@ export interface Repositorio {
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;
 
+  /** Los topes de gasto de un bot, sin la sesión de la persona (la capa de motores los necesita también en vivo). */
+  topesBot(botId: string): Promise<Topes | null>;
+
   fichas(): Promise<FichaMotor[]>;
   motoresPorDefecto(): Promise<MotorFuncion[]>;
   motoresDeBot(botId: string): Promise<MotorFuncion[]>;

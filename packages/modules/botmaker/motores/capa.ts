@@ -53,7 +53,7 @@ export interface ResultadoCapa<F extends FuncionMotor> {
   simulado: boolean;
 }
 
-export type RepositorioCapa = Pick<Repositorio, 'bot' | 'fichas' | 'motoresDeBot' | 'gastoBot' | 'registrarLlamada'>;
+export type RepositorioCapa = Pick<Repositorio, 'topesBot' | 'fichas' | 'motoresDeBot' | 'gastoBot' | 'registrarLlamada'>;
 
 export interface OpcionesCapa {
   repo: RepositorioCapa;
@@ -128,18 +128,18 @@ export class CapaMotores {
       if (!elegidos.length) return vacio('sin_motor');
     }
 
-    // Topes del bot: solo en vivo (lo demás lo acota el tope de su clave en OpenRouter).
+    // Topes del bot: solo en vivo (lo demás lo acota el tope de su clave en OpenRouter). Si no se pueden leer, no se
+    // llama a nadie: un tope que no se controla es un tope que no existe.
     if (p.uso === 'en_vivo') {
-      const bot = await this.o.repo.bot(p.bot.id);
-      if (bot) {
-        const hoy = diaUtc(this.ahora());
-        const [dia, mes] = await Promise.all([
-          this.o.repo.gastoBot(p.bot.id, hoy, 'en_vivo'),
-          this.o.repo.gastoBot(p.bot.id, inicioMesUtc(this.ahora()), 'en_vivo'),
-        ]);
-        if (dia >= bot.topeDiarioUsd) return vacio('tope_diario');
-        if (mes >= bot.topeMensualUsd) return vacio('tope_mensual');
-      }
+      const topes = await this.o.repo.topesBot(p.bot.id).catch(() => null);
+      if (!topes || !Number.isFinite(topes.diarioUsd) || !Number.isFinite(topes.mensualUsd)) return vacio('sin_motor');
+      const hoy = diaUtc(this.ahora());
+      const [dia, mes] = await Promise.all([
+        this.o.repo.gastoBot(p.bot.id, hoy, 'en_vivo'),
+        this.o.repo.gastoBot(p.bot.id, inicioMesUtc(this.ahora()), 'en_vivo'),
+      ]);
+      if (dia >= topes.diarioUsd) return vacio('tope_diario');
+      if (mes >= topes.mensualUsd) return vacio('tope_mensual');
     }
 
     const entrada = marcar(p);

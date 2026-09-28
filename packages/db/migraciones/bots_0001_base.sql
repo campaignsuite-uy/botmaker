@@ -95,10 +95,17 @@ create or replace function bots.campanas_donde_puede(accion text) returns setof 
 language plpgsql stable security definer set search_path = '' as $$
 begin
   perform bots.rol_permite(null, accion);  -- valida el nombre de la acción
+  -- Se parte de las organizaciones de la persona (miembro activo o, en las demos, Administrador de CampaignSuite): sin
+  -- eso no tiene rol en ninguna campaña, y así no se recorren las campañas de toda la plataforma.
   return query
     select s.id
     from bots.campaign_settings s
-    where bots.rol_permite(bots.rol_efectivo(s.id, auth.uid()), accion);
+    where s.organization_id in (
+        select m.organization_id from core.organization_members m where m.profile_id = auth.uid() and m.status = 'activo'
+        union
+        select o.id from core.organizations o where o.is_demo and core.es_admin_producto()
+      )
+      and bots.rol_permite(bots.rol_efectivo(s.id, auth.uid()), accion);
 end $$;
 
 -- Exige la acción o corta con el mensaje de la pantalla. errcode 42501 = sin permiso.
@@ -139,6 +146,7 @@ create table bots.campaign_settings (
   unique (id, organization_id),
   foreign key (id, organization_id) references core.campaigns (id, organization_id) on delete cascade
 );
+create index campaign_settings_organizacion on bots.campaign_settings (organization_id);
 comment on table bots.campaign_settings is 'Lo de BotMaker en cada campaña (id = core.campaigns.id). Existe desde que el producto se habilita en la campaña.';
 
 create or replace function bots.completar_organizacion_ajustes() returns trigger
@@ -275,8 +283,8 @@ create table bots.bots (
   ai_notice_text       text not null default '' check (length(ai_notice_text) <= 300),
   personalization      boolean not null default false,
   retention_days       integer not null default 90 check (retention_days between 1 and 365),
-  daily_cap_usd        numeric(12, 6) not null default 5 check (daily_cap_usd >= 0),
-  monthly_cap_usd      numeric(12, 6) not null default 100 check (monthly_cap_usd >= 0),
+  daily_cap_usd        numeric(12, 6) not null default 5 check (daily_cap_usd <> 'NaN' and daily_cap_usd between 0 and 100000),
+  monthly_cap_usd      numeric(12, 6) not null default 100 check (monthly_cap_usd <> 'NaN' and monthly_cap_usd between 0 and 999999),
   request_key          uuid unique,
   created_by           uuid references core.profiles (id) on delete set null,
   created_at           timestamptz not null default now(),
@@ -349,7 +357,9 @@ create index engine_calls_campana on bots.engine_calls (campaign_id, created_at 
 
 create trigger engine_calls_organizacion before insert on bots.engine_calls
   for each row execute function core.completar_organizacion_campana();
-create trigger engine_calls_solo_agregar before update or delete on bots.engine_calls
+-- Nadie la cambia. Los borrados no se traban con un disparador: los hace solo la cascada de un bot, una campaña o una
+-- organización que se borra (la clave de servicio no tiene delete; ver Permisos, al final).
+create trigger engine_calls_solo_agregar before update on bots.engine_calls
   for each row execute function bots.solo_agregar();
 
 create table bots.spend_daily (
@@ -430,7 +440,16 @@ begin
     auth.uid(),
     false
   )
+  on conflict (request_key) do nothing
   returning id, organization_id into nuevo, org;
+  if nuevo is null then
+    -- Otro envío con la misma clave llegó primero: se devuelve ese bot (si es de esta campaña).
+    select b.id into existente from bots.bots b where b.request_key = clave and b.campaign_id = campana;
+    if existente is null then
+      raise exception 'La clave del formulario es de otra campaña.' using errcode = '23505';
+    end if;
+    return existente;
+  end if;
   insert into bots.bot_engines (campaign_id, bot_id, function, primary_engine_id, fallback_engine_id, timeout_ms, updated_by)
   select campana, nuevo, d.function, d.primary_engine_id, d.fallback_engine_id, d.timeout_ms, auth.uid()
   from bots.engine_defaults d;
@@ -469,6 +488,9 @@ declare
   m jsonb;
   principal text;
   respaldo text;
+  hecho jsonb := '{}';
+  diario numeric;
+  mensual numeric;
 begin
   select * into b from bots.bots x where x.id = bot;
   perform bots.exigir(b.campaign_id, 'elegir_motores');
@@ -487,21 +509,25 @@ begin
     if respaldo is not null and not exists (select 1 from bots.engines e where e.id = respaldo and e.active) then
       raise exception 'Motor desconocido o apagado: %', respaldo using errcode = '22023';
     end if;
+    if not exists (select 1 from bots.engines e where e.id = principal and f = any (e.functions))
+       or (respaldo is not null and not exists (select 1 from bots.engines e where e.id = respaldo and f = any (e.functions))) then
+      raise exception 'El motor no sirve para la función %.', f using errcode = '22023';
+    end if;
     if respaldo = principal then
       raise exception 'El respaldo tiene que ser otro motor.' using errcode = '23514';
     end if;
     update bots.bot_engines set primary_engine_id = principal, fallback_engine_id = respaldo, updated_by = auth.uid(), updated_at = now()
     where bot_id = bot and function = f;
+    hecho := hecho || jsonb_build_object(f, jsonb_build_object('principal', principal, 'respaldo', respaldo));
   end loop;
   if topes is not null and topes <> '{}'::jsonb then
-    update bots.bots set
-      daily_cap_usd = coalesce((topes ->> 'diario')::numeric, daily_cap_usd),
-      monthly_cap_usd = coalesce((topes ->> 'mensual')::numeric, monthly_cap_usd)
-    where id = bot;
-    perform bots.anotar(b.organization_id, 'bots.topes_cambiados', b.name, topes);
+    diario := coalesce((topes ->> 'diario')::numeric, b.daily_cap_usd);
+    mensual := coalesce((topes ->> 'mensual')::numeric, b.monthly_cap_usd);
+    update bots.bots set daily_cap_usd = diario, monthly_cap_usd = mensual where id = bot;
+    perform bots.anotar(b.organization_id, 'bots.topes_cambiados', b.name, jsonb_build_object('diario', diario, 'mensual', mensual));
   end if;
-  if motores is not null and motores <> '{}'::jsonb then
-    perform bots.anotar(b.organization_id, 'bots.motores_cambiados', b.name, motores);
+  if hecho <> '{}'::jsonb then
+    perform bots.anotar(b.organization_id, 'bots.motores_cambiados', b.name, hecho);
   end if;
 end $$;
 
@@ -520,6 +546,8 @@ begin
     personalization = coalesce(personalizacion, personalization),
     retention_days = coalesce(dias, retention_days)
   where id = bot;
+  perform bots.anotar(b.organization_id, 'bots.datos_personales_cambiados', b.name,
+    jsonb_build_object('personalizacion', coalesce(personalizacion, b.personalization), 'dias', coalesce(dias, b.retention_days)));
 end $$;
 
 -- Archivar un bot (administrador): deja de aparecer en la lista y no se puede cambiar. Sus datos quedan.
@@ -582,6 +610,7 @@ create policy "gasto: lo ve quien ve los costos" on bots.spend_daily for select 
 grant select on all tables in schema bots to authenticated;
 grant all on all tables in schema bots to service_role;
 grant usage, select on all sequences in schema bots to service_role;
+revoke update, delete, truncate on bots.engine_calls from service_role;
 revoke execute on all functions in schema bots from public;
 grant execute on function bots.matriz_permisos() to authenticated, service_role;
 grant execute on function bots.rol_permite(text, text) to authenticated, service_role;

@@ -38,10 +38,14 @@ export function texto(fd: FormData, clave: string): string {
   return String(fd.get(clave) ?? '').trim();
 }
 
-/** Ruta a la que se vuelve después de la acción. Solo rutas internas. */
+/**
+ * Ruta a la que se vuelve después de la acción. Solo rutas internas: empieza con una sola barra, sin barras invertidas ni
+ * caracteres de control (los navegadores leen "/\\sitio" o "/<tab>/sitio" como otro sitio).
+ */
 export function rutaVolver(fd: FormData): string {
   const v = texto(fd, 'volver');
-  return v.startsWith('/') && !v.startsWith('//') ? v : '/';
+  const interna = /^\/(?![\/\\])/.test(v) && !/[\\\u0000-\u001f\u007f]/.test(v);
+  return interna ? v : '/';
 }
 
 /** Número escrito por una persona: acepta coma o punto decimal y espacios ("1.234,5" → 1234.5). */
