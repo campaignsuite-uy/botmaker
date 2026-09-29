@@ -7,6 +7,7 @@
  * (packages/db/migraciones/bots_0006_canal_web.sql).
  */
 import type { Decision, Evento, Sesion } from './motor';
+import type { EstadoEnvio } from './whatsapp';
 import { mercado } from './mercados';
 import type { Trato } from './tipos';
 
@@ -73,6 +74,8 @@ export interface Conversacion {
   verificada: boolean;
   /** Cantidad de mensajes: cada turno guarda con el que vio, así dos turnos a la vez no se pisan. */
   seq: number;
+  /** WhatsApp: hasta cuándo se le puede escribir sin plantilla (24 horas desde su último mensaje). */
+  ventanaHasta?: string | null;
   iniciadaEn: string;
   actualizadaEn: string;
 }
@@ -99,6 +102,8 @@ export interface Mensaje {
   /** Entra en la revisión por muestreo (respuestas con base). */
   muestra: boolean;
   creadoEn: string;
+  /** WhatsApp: cómo va el envío de este mensaje (null o ausente en la web). */
+  envio?: EstadoEnvio | null;
 }
 
 export interface Condiciones {

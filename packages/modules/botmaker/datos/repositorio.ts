@@ -13,6 +13,7 @@ import type { Borrador, Cambio, CambioResumen, EventoPublicacion, NuevoCambio, V
 import type { Corrida, ResultadoCaso, ResumenCorrida } from '../dominio/corridas';
 import type { Alerta, Canal, Condiciones, Contacto, Conversacion, EstadoConversacion, EventoAnalitica, Mensaje, ModoCondiciones, PedidoDatos } from '../dominio/conversaciones';
 import type { Decision, Sesion } from '../dominio/motor';
+import type { EntranteWhatsapp, EstadoCanal, EstadoEnvio, MensajeWhatsapp } from '../dominio/whatsapp';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -98,6 +99,20 @@ export interface Repositorio {
   /** Publica una versión nueva de las condiciones (configurar_canales). Devuelve su número. */
   publicarCondiciones(botId: string, texto: string, por: string): Promise<number>;
 
+  // ── WhatsApp (etapa 7) ────────────────────────────────────────────────────────────────────────
+
+  /** El canal de WhatsApp del bot con su salud, o null si nunca se conectó (ver). */
+  canalWhatsapp(botId: string): Promise<CanalWhatsapp | null>;
+  /**
+   * Conecta (o reconecta) el número: la clave de 360dialog va a Vault y la base guarda solo la referencia; del secreto
+   * del webhook, solo su hash (configurar_canales). Queda prendido y cierra la alerta de canal desconectado.
+   */
+  conectarWhatsapp(botId: string, d: ConexionWhatsapp, por: string): Promise<string>;
+  /** Prender o apagar el canal sin tocar la clave (configurar_canales). */
+  prenderWhatsapp(botId: string, activo: boolean, por: string): Promise<void>;
+  /** Escribir con una plantilla aprobada (la única forma con la ventana de 24 horas cerrada). Devuelve el número del mensaje. */
+  responderConPlantilla(conversacionId: string, p: PlantillaEnviada, por: string): Promise<number>;
+
   // ── Bandeja (etapa 6) ─────────────────────────────────────────────────────────────────────────
 
   conversaciones(campanaId: string, filtro?: FiltroConversaciones): Promise<FilaConversacion[]>;
@@ -171,7 +186,8 @@ export interface ConversacionCompleta {
 }
 
 export interface TurnoDevuelto {
-  mensajes: { texto: string; cajaId: string | null; datos: Mensaje['datos'] }[];
+  /** envios: lo mismo en mensajes de WhatsApp, si la conversación es por WhatsApp. */
+  mensajes: { texto: string; cajaId: string | null; datos: Mensaje['datos']; envios?: MensajeWhatsapp[] }[];
   sesion: Sesion;
   decision: Decision;
   cajaActual: string | null;
@@ -219,7 +235,8 @@ export interface BotPublico {
 export interface TurnoGuardado {
   /** Lo que mandó la persona (null en el inicio de la conversación). */
   entrante: { tipo: Mensaje['tipo']; texto: string; datos: Mensaje['datos']; idCanal: string | null } | null;
-  salientes: { autor: 'bot' | 'sistema'; texto: string; cajaId: string | null; datos: Mensaje['datos'] }[];
+  /** envios: el mismo mensaje en el formato de WhatsApp (solo en WhatsApp): se encolan para mandarse. */
+  salientes: { autor: 'bot' | 'sistema'; texto: string; cajaId: string | null; datos: Mensaje['datos']; envios?: MensajeWhatsapp[] }[];
   decision: Decision | null;
   sesion: Sesion;
   estado: EstadoConversacion;
@@ -232,6 +249,8 @@ export interface TurnoGuardado {
   /** El primer mensaje del bot es una respuesta con base que entra en la revisión por muestreo. */
   muestra: boolean;
   ahora: string;
+  /** WhatsApp: la ventana de 24 horas que abre el mensaje de la persona. */
+  ventanaHasta?: string | null;
 }
 
 /** La app pública también llama a los motores (en vivo): necesita lo mismo que la capa, sin sesión de persona. */
@@ -255,6 +274,118 @@ export interface RepositorioPublico extends RepositorioCapaPublica {
   /** Guarda un turno si la conversación sigue en `seqEsperada` (si no, ErrorDatos 'conversacion_cambio'). Devuelve los mensajes nuevos. */
   guardarTurno(conversacionId: string, seqEsperada: number, t: TurnoGuardado): Promise<Mensaje[]>;
   aceptarCondiciones(contactoId: string, numero: number, ahora: Date): Promise<void>;
+}
+
+// ── WhatsApp (etapa 7) ──────────────────────────────────────────────────────────────────────────
+
+export interface ConexionWhatsapp {
+  /** La clave de 360dialog: va directo a Vault, nunca vuelve al navegador ni queda en una tabla. */
+  clave: string;
+  /** El número como lo ve la gente (solo para mostrar). */
+  numero: string | null;
+  /** SHA-256 del secreto que 360dialog manda en cada aviso (el secreto no se guarda). */
+  secretoHash: string;
+  webhookUrl: string;
+}
+
+export interface PlantillaEnviada {
+  nombre: string;
+  idioma: string;
+  parametros: string[];
+  /** El texto completo, para la conversación. */
+  texto: string;
+}
+
+export interface SaludCanal {
+  /** Los últimos días que se suman (UTC, hoy incluido). */
+  dias: number;
+  recibidos: number;
+  repetidos: number;
+  enviados: number;
+  entregados: number;
+  leidos: number;
+  fallidos: number;
+  /** Cuánto tardó el aviso de 360dialog en recibir respuesta (lo que exige que sea menos de 5 s; la meta, 0,5 s). */
+  demoraMaxMs: number;
+  demoraMediaMs: number | null;
+  /** Mensajes esperando para salir. */
+  pendientes: number;
+}
+
+export interface CanalWhatsapp {
+  id: string;
+  botId: string;
+  estado: EstadoCanal;
+  numero: string | null;
+  webhookUrl: string | null;
+  conectadoEn: string | null;
+  ultimoRecibido: string | null;
+  ultimoError: string | null;
+  ultimoErrorEn: string | null;
+  salud: SaludCanal;
+  /** Mensajes que salieron este mes (UTC): lo que Meta cobra pasadas las 1.000 gratis. */
+  respuestasMes: number;
+}
+
+/** Lo que necesita el aviso (webhook) de un canal: se busca por el id público del bot. */
+export interface CanalWhatsappPublico {
+  id: string;
+  botId: string;
+  idPublico: string;
+  estado: EstadoCanal;
+  secretoHash: string | null;
+}
+
+/** Un aviso de 360dialog ya leído: un mensaje de la persona o un estado de un mensaje que salió. */
+export type EntradaWebhook =
+  | { clave: string; tipo: 'mensaje'; hora: string; mensaje: EntranteWhatsapp }
+  | { clave: string; tipo: 'estado'; hora: string; idProveedor: string; estado: EstadoEnvio; error: string | null };
+
+export interface EnvioPendiente {
+  id: string;
+  canalId: string;
+  conversacionId: string;
+  n: number;
+  parte: number;
+  /** El número de la persona (solo dígitos). null si se borraron sus datos. */
+  direccion: string | null;
+  mensaje: MensajeWhatsapp;
+  intentos: number;
+}
+
+export type ResultadoEnvio =
+  | { tipo: 'enviado'; idProveedor: string }
+  | { tipo: 'reintentar'; error: string; en: string }
+  | { tipo: 'fallido'; error: string };
+
+/**
+ * WhatsApp sin sesión de persona (el aviso de 360dialog, el envío y las tareas). En Supabase, la clave de servicio y
+ * solo funciones bots.publico_* y bots.servicio_*.
+ */
+export interface RepositorioWhatsapp {
+  canalWhatsappPublico(idPublico: string): Promise<CanalWhatsappPublico | null>;
+  /**
+   * Guarda lo que avisó 360dialog para procesarlo aparte: lo repetido (un reintento) se descarta. Suma a la salud del
+   * canal los recibidos, los repetidos y la demora del aviso.
+   */
+  recibirEntradas(canalId: string, entradas: readonly EntradaWebhook[], p: { ahora: Date; demoraMs: number; numero: string | null }): Promise<{ nuevas: number; repetidas: number }>;
+  /** Lo recibido y todavía no procesado, en orden de llegada. */
+  entradasPendientes(canalId: string, limite: number): Promise<EntradaWebhook[]>;
+  /** Procesada: se borra lo que tenía de la persona y queda la clave para descartar reintentos. */
+  entradaProcesada(canalId: string, clave: string): Promise<void>;
+  /** El número de la persona, para contestarle. */
+  guardarDireccion(contactoId: string, direccion: string): Promise<void>;
+  /** Toma los envíos pendientes (los marca como en curso) para mandarlos. */
+  tomarEnvios(f: { canalId?: string; conversacionId?: string }, ahora: Date, limite: number): Promise<EnvioPendiente[]>;
+  resultadoEnvio(envioId: string, r: ResultadoEnvio, ahora: Date): Promise<void>;
+  /** Un estado que avisó Meta (enviado, entregado, leído, fallido) de un mensaje que salió. */
+  aplicarEstado(canalId: string, idProveedor: string, estado: EstadoEnvio, error: string | null, ahora: Date): Promise<void>;
+  /** La clave de 360dialog del canal, leída de Vault. SOLO SERVIDOR. */
+  claveWhatsapp(canalId: string): Promise<string | null>;
+  /** La clave dejó de valer: el canal queda desconectado y se abre la alerta. */
+  canalDesconectado(canalId: string, error: string, ahora: Date): Promise<void>;
+  /** Los canales con algo pendiente (entradas sin procesar o envíos para reintentar), para la tarea de fondo. */
+  canalesConPendientes(ahora: Date): Promise<string[]>;
 }
 
 /** Tareas de fondo (sin persona): las llama un cron con clave o pg_cron. */
