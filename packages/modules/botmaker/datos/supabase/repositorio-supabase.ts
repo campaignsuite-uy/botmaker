@@ -10,7 +10,9 @@
  * Requiere que `bots` esté en Project Settings → Data API → Exposed schemas del proyecto de Supabase.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { Definicion } from '../../dominio/definicion';
 import type { FichaMotor } from '../../dominio/motores';
+import type { Borrador, Cambio, CambioResumen, NuevoCambio, Version } from '../../dominio/versiones';
 import type {
   Bot, CambiosBot, EleccionMotores, FuncionMotor, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../../dominio/tipos';
@@ -133,9 +135,10 @@ export class RepositorioSupabase implements Repositorio {
 
   // ── Escritura: siempre por las funciones de la base ───────────────────────────────────────────
 
-  async crearBot(campanaId: string, d: NuevoBot, clave: string, _por: string): Promise<string> {
+  async crearBot(campanaId: string, d: NuevoBot, clave: string, _por: string, definicion?: Definicion): Promise<string> {
     const b = await this.bots_();
-    const id = datos(await b.rpc('crear_bot', { campana: campanaId, datos: { nombre: d.nombre, caso: d.caso, mercado: d.mercado, trato: d.trato }, clave }), 'crear el bot');
+    const campos = { nombre: d.nombre, caso: d.caso, mercado: d.mercado, trato: d.trato, ...(definicion ? { definicion } : {}) };
+    const id = datos(await b.rpc('crear_bot', { campana: campanaId, datos: campos, clave }), 'crear el bot');
     return String(id);
   }
 
@@ -166,6 +169,46 @@ export class RepositorioSupabase implements Repositorio {
   async asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, _por: string): Promise<void> {
     const b = await this.bots_();
     datos(await b.rpc('asignar_rol', { campana: campanaId, persona: personaId, rol: rol ?? '' }), 'cambiar el rol');
+  }
+
+  // ── Versiones y borrador ──────────────────────────────────────────────────────────────────────
+
+  async versiones(botId: string): Promise<Version[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('versions').select(M.COLUMNAS_VERSION).eq('bot_id', botId).order('number', { ascending: false }), 'leer las versiones') as M.FilaVersion[];
+    return filas.map(M.aVersion);
+  }
+
+  async borrador(botId: string): Promise<Borrador | null> {
+    const b = await this.bots_();
+    const f = datos(await b.from('versions').select(`${M.COLUMNAS_VERSION}, definition`).eq('bot_id', botId).eq('status', 'borrador').maybeSingle(), 'leer el borrador') as M.FilaVersion | null;
+    return f ? { ...M.aVersion(f), definicion: f.definition } : null;
+  }
+
+  async crearBorrador(botId: string, definicion: Definicion | null, _por: string): Promise<string> {
+    const b = await this.bots_();
+    return String(datos(await b.rpc('crear_borrador', { bot: botId, definicion }), 'crear el borrador'));
+  }
+
+  async guardarCambio(versionId: string, seqEsperada: number, cambio: NuevoCambio, definicion: Definicion, _por: string): Promise<number> {
+    const b = await this.bots_();
+    const r = await b.rpc('guardar_cambio', {
+      version: versionId, seq_esperada: seqEsperada, origen: cambio.origen, operaciones: cambio.operaciones, inversa: cambio.inversa,
+      resumen: cambio.resumen, objetivo: cambio.objetivo, definicion,
+    });
+    return Number(datos(r, 'guardar el cambio'));
+  }
+
+  async cambios(versionId: string): Promise<CambioResumen[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('version_changes').select(M.COLUMNAS_CAMBIO).eq('version_id', versionId).order('seq'), 'leer los cambios') as M.FilaCambio[];
+    return filas.map(M.aCambioResumen);
+  }
+
+  async cambio(versionId: string, seq: number): Promise<Cambio | null> {
+    const b = await this.bots_();
+    const f = datos(await b.from('version_changes').select(`${M.COLUMNAS_CAMBIO}, operations, inverse`).eq('version_id', versionId).eq('seq', seq).maybeSingle(), 'leer el cambio') as M.FilaCambio | null;
+    return f ? M.aCambio(f) : null;
   }
 
   async registrarLlamada(l: NuevaLlamada): Promise<void> {

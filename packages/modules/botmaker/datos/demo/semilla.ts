@@ -4,7 +4,9 @@
  * barra de arriba lo dice: "Datos de prueba". Siempre las mismas: salen de un generador con semilla fija.
  */
 import { MOTORES_POR_DEFECTO, fichaMotor, costoEstimado } from '../../dominio/motores';
+import { plantillaPolitica } from '../../dominio/plantilla-politica';
 import type { Bot, FuncionMotor, LlamadaMotor, MotorFuncion, UsoMotor } from '../../dominio/tipos';
+import type { Version } from '../../dominio/versiones';
 
 export const CAMPANA_DEMO = 'c-pa-2029';
 export const ORGANIZACION_DEMO = 'org-moca';
@@ -21,7 +23,10 @@ function generador(semilla: number) {
   };
 }
 
-export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, MotorFuncion[]>; llamadas: LlamadaMotor[] } {
+/** La candidata de la demo es inventada: los textos del bot la nombran, y no se pone a hablar a nadie real. */
+export const CANDIDATA_DEMO = 'Ana Lucía Ríos';
+
+export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, MotorFuncion[]>; llamadas: LlamadaMotor[]; versiones: (Version & { definicion: unknown })[] } {
   const hace = (dias: number, horas = 0) => new Date(ahora.getTime() - dias * 864e5 - horas * 36e5).toISOString();
   const base = {
     campanaId: CAMPANA_DEMO, organizacionId: ORGANIZACION_DEMO, estado: 'borrador' as const, versionPublicadaId: null,
@@ -81,5 +86,14 @@ export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, Mo
       }
     }
   }
-  return { bots, motores, llamadas };
+  // Cada bot arranca con su borrador (v1) armado con la plantilla política.
+  const versiones = bots.map((b, i) => ({
+    id: `ver-demo-${i + 1}`, botId: b.id, campanaId: b.campanaId, numero: 1, estado: 'borrador' as const, basadaEn: null, seq: 0,
+    creadaPor: b.creadoPor, creadaEn: b.creadoEn, actualizadaEn: b.actualizadoEn,
+    definicion: plantillaPolitica({
+      candidato: CANDIDATA_DEMO, partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'], trato: b.trato, mercado: b.mercado,
+      consultas: { canal: 'correo', valor: 'consultas@ejemplo.org' }, aportes: { canal: 'web', valor: 'ejemplo.org/aportes' },
+    }),
+  }));
+  return { bots, motores, llamadas, versiones };
 }

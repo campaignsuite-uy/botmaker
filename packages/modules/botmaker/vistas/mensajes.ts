@@ -3,7 +3,8 @@
  * acciones vuelven con un código; el texto se arma acá, así la dirección nunca lleva texto armado por alguien.
  */
 const OK: Record<string, string> = {
-  bot_creado: 'Listo: el bot quedó creado en borrador, con los motores por defecto.',
+  bot_creado: 'Listo: el bot quedó creado en borrador, con la plantilla y los motores por defecto.',
+  borrador_creado: 'Listo: el borrador quedó armado. Ya se puede editar.',
   bot_guardado: 'Listo: se guardaron los datos del bot.',
   motores_guardados: 'Listo: se guardaron los motores y los topes de gasto.',
   datos_personales_guardados: 'Listo: se guardaron la personalización y los días de guardado.',
@@ -24,6 +25,18 @@ const ERROR: Record<string, string> = {
   mercado: 'Elegí un mercado de la lista.',
   trato: 'Elegí el trato: usted o tú.',
   aviso_largo: 'El aviso de IA puede tener hasta 300 caracteres.',
+  candidato_vacio: 'Poné el nombre del candidato o de quien representa el bot.',
+  candidato_largo: 'El nombre del candidato puede tener hasta 80 caracteres.',
+  partido_largo: 'El nombre del partido puede tener hasta 80 caracteres.',
+  sin_borrador: 'Este bot todavía no tiene borrador. Armalo primero.',
+  sin_version: 'El bot no tiene una versión de la que partir: armá el borrador con la plantilla.',
+  no_borrador: 'Esa versión ya no es un borrador: no se puede cambiar.',
+  borrador_cambio: 'Otra persona cambió el borrador mientras lo editabas. Recargá para ver lo último.',
+  borrador_invalido: 'El borrador guardado tiene un problema y no se puede editar así. Avisale al equipo de BotMaker.',
+  operacion_invalida: 'Ese cambio no es válido.',
+  definicion_invalida: 'Ese cambio dejaría el bot con un error, así que no se aplicó.',
+  nada_que_deshacer: 'No hay nada para deshacer.',
+  nada_que_rehacer: 'No hay nada para rehacer.',
   tope: 'Los topes tienen que ser montos en dólares, de 0 en adelante.',
   tope_diario_mayor: 'El tope diario no puede ser mayor que el mensual.',
   dias: 'Los días de guardado van de 1 a 365.',

@@ -444,3 +444,39 @@ export function aplicarOperaciones(def: Definicion, ops: unknown[], o: OpcionesO
   }
   return { definicion: d, inversas, resumenes };
 }
+
+/** La operación que lleva de `despues` a `antes` (un `restaurar` con solo las partes que cambiaron). */
+export function inversaEntre(antes: Definicion, despues: Definicion): Operacion {
+  return { tipo: 'restaurar', partes: partesParaVolver(antes, despues) };
+}
+
+export interface ResultadoCambio {
+  definicion: Definicion;
+  /** Una sola inversa para todo el cambio: deshacer vuelve atrás todas sus operaciones juntas. */
+  inversa: Operacion;
+  /** Las operaciones ya validadas (con sus valores por defecto), tal como se guardan en el historial. */
+  operaciones: Operacion[];
+  resumen: string;
+  creados: string[];
+}
+
+/**
+ * Un cambio del borrador: una o varias operaciones que se guardan y se deshacen juntas (el editor manda una; el YAML y
+ * el copiloto, varias). Si una falla, no se aplica ninguna.
+ */
+export function aplicarCambio(def: Definicion, ops: unknown[], o: OpcionesOperacion = {}): ResultadoCambio {
+  if (!ops.length) throw new ErrorOperacion('operacion_invalida', 'El cambio no tiene operaciones.');
+  let d = def;
+  const operaciones: Operacion[] = [];
+  const resumenes: string[] = [];
+  const creados: string[] = [];
+  for (const x of ops) {
+    const r = aplicarOperacion(d, x, o);
+    operaciones.push(esquemaOperacion.parse(x));
+    d = r.definicion;
+    resumenes.push(r.resumen);
+    if (r.creado) creados.push(r.creado);
+  }
+  const resumen = resumenes.length === 1 ? resumenes[0]! : `${resumenes.length} cambios: ${resumenes.join('; ')}`;
+  return { definicion: d, inversa: inversaEntre(def, d), operaciones, resumen: resumen.length > 500 ? `${resumen.slice(0, 497)}...` : resumen, creados };
+}

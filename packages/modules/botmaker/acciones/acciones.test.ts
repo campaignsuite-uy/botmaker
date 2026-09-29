@@ -19,7 +19,7 @@ const fd = (x: Record<string, string>) => {
 
 let repo: RepositorioDemo;
 const como = (personaId: string): ContextoNucleo => ({ repo, rol: rolEfectivo(nucleoMemoria(), personaId, CAMPANA), personaId, campanaId: CAMPANA, campana: { nombre: 'Generales 2029' } });
-const nuevo = (extra: Record<string, string> = {}) => fd({ nombre: 'Bot nuevo', caso: 'electoral', mercado: 'PA', trato: 'usted', clave: randomUUID(), ...extra });
+const nuevo = (extra: Record<string, string> = {}) => fd({ nombre: 'Bot nuevo', caso: 'electoral', mercado: 'PA', trato: 'usted', candidato: 'Candidata', partido: '', clave: randomUUID(), ...extra });
 
 beforeEach(() => {
   reiniciarNucleoMemoria();

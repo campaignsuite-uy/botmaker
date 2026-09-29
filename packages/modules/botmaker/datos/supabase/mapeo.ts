@@ -3,6 +3,8 @@
  * numeric llega como texto o número según el cliente: se pasa siempre por Number().
  */
 import type { FichaMotor, Permiso } from '../../dominio/motores';
+import type { Cambio, CambioResumen, EstadoVersion, OrigenCambio, Version } from '../../dominio/versiones';
+import type { Operacion } from '../../dominio/operaciones';
 import { FUNCIONES, type Bot, type CasoUso, type EstadoBot, type FuncionMotor, type GastoDia, type LlamadaMotor, type MotorFuncion, type NuevaLlamada, type Trato, type UsoMotor } from '../../dominio/tipos';
 
 export const COLUMNAS_BOT = 'id, organization_id, campaign_id, name, public_id, use_case, market, status, published_version_id, treatment, ai_notice_text, personalization, retention_days, daily_cap_usd, monthly_cap_usd, created_by, created_at, updated_at, archived_at';
@@ -107,3 +109,41 @@ export const haciaLlamada = (l: NuevaLlamada) => ({
   tokens_out: l.tokensSalida, tokens_cached: l.tokensCache, tokens_reasoning: l.tokensRazonamiento, cost_usd: l.costoUsd,
   generation_id: l.idGeneracion, profile_id: l.personaId, ...(l.fecha ? { created_at: l.fecha } : {}),
 });
+
+export const COLUMNAS_VERSION = 'id, campaign_id, bot_id, number, status, based_on_id, seq, created_by, created_at, updated_at';
+
+export interface FilaVersion {
+  id: string; campaign_id: string; bot_id: string; number: number; status: EstadoVersion; based_on_id: string | null; seq: number;
+  created_by: string | null; created_at: string; updated_at: string; definition?: unknown;
+}
+
+export const aVersion = (f: FilaVersion): Version => ({
+  id: f.id,
+  botId: f.bot_id,
+  campanaId: f.campaign_id,
+  numero: Number(f.number),
+  estado: f.status,
+  basadaEn: f.based_on_id,
+  seq: Number(f.seq),
+  creadaPor: f.created_by,
+  creadaEn: new Date(f.created_at).toISOString(),
+  actualizadaEn: new Date(f.updated_at).toISOString(),
+});
+
+export const COLUMNAS_CAMBIO = 'seq, origin, summary, target_seq, profile_id, created_at';
+
+export interface FilaCambio {
+  seq: number; origin: OrigenCambio; summary: string; target_seq: number | null; profile_id: string | null; created_at: string;
+  operations?: Operacion[]; inverse?: Operacion;
+}
+
+export const aCambioResumen = (f: FilaCambio): CambioResumen => ({
+  seq: Number(f.seq),
+  origen: f.origin,
+  resumen: f.summary,
+  objetivo: f.target_seq === null ? null : Number(f.target_seq),
+  personaId: f.profile_id,
+  fecha: new Date(f.created_at).toISOString(),
+});
+
+export const aCambio = (f: FilaCambio): Cambio => ({ ...aCambioResumen(f), operaciones: f.operations ?? [], inversa: f.inverse! });

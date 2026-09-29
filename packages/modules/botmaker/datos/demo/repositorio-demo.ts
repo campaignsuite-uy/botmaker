@@ -9,6 +9,8 @@
 import { nucleoMemoria, operacionesCampanaMemoria } from '@campaignsuite/platform/memoria';
 import { rolEnCampana } from '@campaignsuite/platform';
 import { esquemaCambiosBot, esquemaDatosPersonales, esquemaNuevoBot, esquemaTopes } from '../../dominio/bots';
+import type { Definicion } from '../../dominio/definicion';
+import { ORIGENES_CAMBIO, type Borrador, type Cambio, type CambioResumen, type NuevoCambio, type Version } from '../../dominio/versiones';
 import { FICHAS_MOTORES, MOTORES_POR_DEFECTO, fichaMotor, type FichaMotor } from '../../dominio/motores';
 import { exigir, type Accion } from '../../dominio/permisos';
 import type {
@@ -19,13 +21,18 @@ import { ErrorDatos } from '../errores';
 import type { FiltroLlamadas, Repositorio } from '../repositorio';
 import { semillaDemo } from './semilla';
 
+type VersionDemo = Version & { definicion: unknown };
+
 interface EstadoDemo {
   bots: Bot[];
   motores: Map<string, MotorFuncion[]>;
   llamadas: LlamadaMotor[];
+  versiones: VersionDemo[];
+  cambios: Map<string, Cambio[]>;
   claves: Map<string, string>;
   siguienteBot: number;
   siguienteLlamada: number;
+  siguienteVersion: number;
 }
 
 const ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -34,14 +41,17 @@ export class RepositorioDemo implements Repositorio {
   private e: EstadoDemo;
 
   constructor(opciones: { ahora?: Date; vacio?: boolean } = {}) {
-    const s = opciones.vacio ? { bots: [], motores: new Map(), llamadas: [] } : semillaDemo(opciones.ahora ?? new Date());
+    const s = opciones.vacio ? { bots: [], motores: new Map(), llamadas: [], versiones: [] } : semillaDemo(opciones.ahora ?? new Date());
     this.e = {
       bots: s.bots,
       motores: s.motores,
       llamadas: s.llamadas,
+      versiones: s.versiones,
+      cambios: new Map(),
       claves: new Map(),
       siguienteBot: s.bots.length + 1,
       siguienteLlamada: s.llamadas.length + 1,
+      siguienteVersion: s.versiones.length + 1,
     };
   }
 
@@ -130,7 +140,7 @@ export class RepositorioDemo implements Repositorio {
 
   // ── Escritura ─────────────────────────────────────────────────────────────────────────────────
 
-  async crearBot(campanaId: string, datos: NuevoBot, clave: string, por: string): Promise<string> {
+  async crearBot(campanaId: string, datos: NuevoBot, clave: string, por: string, definicion?: Definicion): Promise<string> {
     this.exigir(campanaId, por, 'editar_borrador');
     const ya = clave ? this.e.claves.get(clave) : undefined;
     if (ya) {
@@ -148,6 +158,7 @@ export class RepositorioDemo implements Repositorio {
       topeDiarioUsd: 5, topeMensualUsd: 100, creadoPor: por, creadoEn: ahora, actualizadoEn: ahora, archivadoEn: null,
     });
     this.e.motores.set(id, MOTORES_POR_DEFECTO.map((m) => ({ ...m })));
+    if (definicion) this.agregarVersion(this.e.bots.at(-1)!, definicion, null, por);
     if (clave) this.e.claves.set(clave, id);
     return id;
   }
@@ -220,6 +231,81 @@ export class RepositorioDemo implements Repositorio {
 
   async registrarLlamada(l: NuevaLlamada): Promise<void> {
     this.e.llamadas.push({ ...l, id: this.e.siguienteLlamada++, fecha: l.fecha ?? new Date().toISOString() });
+  }
+
+  // ── Versiones y borrador ──────────────────────────────────────────────────────────────────────
+
+  async versiones(botId: string): Promise<Version[]> {
+    return this.e.versiones
+      .filter((v) => v.botId === botId)
+      .sort((a, b) => b.numero - a.numero)
+      .map(({ definicion: _, ...v }) => ({ ...v }));
+  }
+
+  async borrador(botId: string): Promise<Borrador | null> {
+    const v = this.e.versiones.find((x) => x.botId === botId && x.estado === 'borrador');
+    return v ? { ...v, definicion: structuredClone(v.definicion) } : null;
+  }
+
+  async crearBorrador(botId: string, definicion: Definicion | null, por: string): Promise<string> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'editar_borrador');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    const ya = this.e.versiones.find((x) => x.botId === botId && x.estado === 'borrador');
+    if (ya) return ya.id;
+    let base: VersionDemo | undefined;
+    if (!definicion) {
+      base = this.e.versiones.find((x) => x.id === b.versionPublicadaId)
+        ?? this.e.versiones.filter((x) => x.botId === botId).sort((x, y) => y.numero - x.numero)[0];
+      if (!base) throw new ErrorDatos('sin_version', 'El bot no tiene una versión de la que partir.');
+    }
+    return this.agregarVersion(b, definicion ?? base!.definicion, base?.id ?? null, por).id;
+  }
+
+  async guardarCambio(versionId: string, seqEsperada: number, cambio: NuevoCambio, definicion: Definicion, por: string): Promise<number> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    if (!v) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(v.botId);
+    this.exigir(b.campanaId, por, 'editar_borrador');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    if (v.estado !== 'borrador') throw new ErrorDatos('no_borrador', 'Esta versión ya no es un borrador.');
+    // Los mismos controles que las restricciones de bots.versions y bots.version_changes.
+    const conObjetivo = cambio.origen === 'deshacer' || cambio.origen === 'rehacer';
+    const resumen = cambio.resumen.trim().slice(0, 500);
+    if (
+      (definicion as { formato?: unknown } | null)?.formato !== 1 || !ORIGENES_CAMBIO.includes(cambio.origen) || !resumen
+      || conObjetivo !== (cambio.objetivo !== null) || (cambio.objetivo !== null && (cambio.objetivo < 1 || cambio.objetivo > v.seq))
+    ) {
+      throw new ErrorDatos('datos', 'El cambio no es válido.');
+    }
+    if (v.seq !== seqEsperada) throw new ErrorDatos('borrador_cambio', 'El borrador cambió mientras lo editabas.');
+    v.seq += 1;
+    v.definicion = structuredClone(definicion);
+    v.actualizadaEn = new Date().toISOString();
+    const lista = this.e.cambios.get(versionId) ?? [];
+    lista.push({ ...structuredClone(cambio), resumen, seq: v.seq, personaId: por, fecha: v.actualizadaEn });
+    this.e.cambios.set(versionId, lista);
+    return v.seq;
+  }
+
+  async cambios(versionId: string): Promise<CambioResumen[]> {
+    return (this.e.cambios.get(versionId) ?? []).map((c) => ({ seq: c.seq, origen: c.origen, resumen: c.resumen, objetivo: c.objetivo, personaId: c.personaId, fecha: c.fecha }));
+  }
+
+  async cambio(versionId: string, seq: number): Promise<Cambio | null> {
+    const c = (this.e.cambios.get(versionId) ?? []).find((x) => x.seq === seq);
+    return c ? structuredClone(c) : null;
+  }
+
+  private agregarVersion(b: Bot, definicion: unknown, basadaEn: string | null, por: string): VersionDemo {
+    const ahora = new Date().toISOString();
+    const numero = Math.max(0, ...this.e.versiones.filter((x) => x.botId === b.id).map((x) => x.numero)) + 1;
+    const v: VersionDemo = {
+      id: `ver-${this.e.siguienteVersion++}`, botId: b.id, campanaId: b.campanaId, numero, estado: 'borrador', basadaEn, seq: 0,
+      creadaPor: por, creadaEn: ahora, actualizadaEn: ahora, definicion: structuredClone(definicion),
+    };
+    this.e.versiones.push(v);
+    return v;
   }
 
   private nuevoIdPublico(): string {

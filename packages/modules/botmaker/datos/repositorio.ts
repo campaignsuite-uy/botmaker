@@ -7,7 +7,9 @@
  * Las escrituras reciben quién las hace (`por`): la demo exige con eso la misma matriz que la base; con Supabase lo
  * pone la sesión y `por` solo se usa para comparar.
  */
+import type { Definicion } from '../dominio/definicion';
 import type { FichaMotor } from '../dominio/motores';
+import type { Borrador, Cambio, CambioResumen, NuevoCambio, Version } from '../dominio/versiones';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -24,12 +26,36 @@ export interface Repositorio {
   bots(campanaId: string, opciones?: { archivados?: boolean }): Promise<Bot[]>;
   bot(botId: string): Promise<Bot | null>;
 
-  /** Crea un bot en borrador con los motores por defecto. Con la misma `clave` devuelve el que ya creó. */
-  crearBot(campanaId: string, datos: NuevoBot, clave: string, por: string): Promise<string>;
+  /**
+   * Crea un bot en borrador con los motores por defecto y, si viene `definicion`, su versión 1 en borrador (la
+   * plantilla), todo junto. Con la misma `clave` devuelve el que ya creó.
+   */
+  crearBot(campanaId: string, datos: NuevoBot, clave: string, por: string, definicion?: Definicion): Promise<string>;
   guardarBot(botId: string, cambios: CambiosBot, por: string): Promise<void>;
   guardarMotores(botId: string, motores: EleccionMotores, topes: Topes | null, por: string): Promise<void>;
   guardarDatosPersonales(botId: string, personalizacion: boolean, diasGuardado: number, por: string): Promise<void>;
   archivarBot(botId: string, por: string): Promise<void>;
+
+  // ── Versiones y borrador (bots.versions y bots.version_changes) ─────────────────────────────
+
+  /** Las versiones del bot, de la más nueva a la más vieja, sin la definición. */
+  versiones(botId: string): Promise<Version[]>;
+  /** El borrador del bot con su definición (a lo sumo uno), o null. */
+  borrador(botId: string): Promise<Borrador | null>;
+  /**
+   * El borrador del bot: si ya hay uno, devuelve ese. Si no, lo crea con `definicion` o, con null, copiando la versión
+   * publicada o la última (sin ninguna, ErrorDatos 'sin_version').
+   */
+  crearBorrador(botId: string, definicion: Definicion | null, por: string): Promise<string>;
+  /**
+   * Guarda un cambio del borrador y la definición que quedó, si el borrador sigue en `seqEsperada`; si otra persona lo
+   * cambió en el medio, ErrorDatos 'borrador_cambio'. Devuelve el seq nuevo.
+   */
+  guardarCambio(versionId: string, seqEsperada: number, cambio: NuevoCambio, definicion: Definicion, por: string): Promise<number>;
+  /** El historial de una versión, del más viejo al más nuevo, sin operaciones ni inversas. */
+  cambios(versionId: string): Promise<CambioResumen[]>;
+  /** Un cambio completo, con sus operaciones y su inversa. */
+  cambio(versionId: string, seq: number): Promise<Cambio | null>;
 
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;

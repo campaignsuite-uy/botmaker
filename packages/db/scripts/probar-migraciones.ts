@@ -20,6 +20,10 @@ import { ACCIONES, MATRIZ } from '../../modules/botmaker/dominio/permisos.ts';
 import { FICHAS_MOTORES, MOTORES_POR_DEFECTO } from '../../modules/botmaker/dominio/motores.ts';
 import { RepositorioSupabase } from '../../modules/botmaker/datos/supabase/repositorio-supabase.ts';
 import { ErrorDatos } from '../../modules/botmaker/datos/errores.ts';
+import { plantillaPolitica } from '../../modules/botmaker/dominio/plantilla-politica.ts';
+import { esquemaDefinicion } from '../../modules/botmaker/dominio/definicion.ts';
+import { aplicarCambio } from '../../modules/botmaker/dominio/operaciones.ts';
+import { pilasDeshacer } from '../../modules/botmaker/dominio/versiones.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -50,6 +54,8 @@ async function error(fn: () => Promise<unknown>): Promise<string | null> {
   }
 }
 
+/** JSON con las claves ordenadas: para comparar lo que vuelve de un jsonb. */
+const canonico = (x: unknown): string => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v));
 const filas = async <T = Record<string, unknown>>(tx: Transaction | PGlite, sql: string, params: unknown[] = []) => (await tx.query<T>(sql, params)).rows;
 const uno = async <T = Record<string, unknown>>(tx: Transaction | PGlite, sql: string, params: unknown[] = []) => (await filas<T>(tx, sql, params))[0];
 const cuenta = async (tx: Transaction | PGlite, sql: string, params: unknown[] = []) => Number((await uno<{ n: number }>(tx, sql, params))!.n);
@@ -427,18 +433,169 @@ async function main() {
     await repoDe(P.dueno).asignarRol(CAMP_A, P.sinAcceso, null, P.dueno);
   });
 
+  console.log('\nVersiones y borrador');
+  const plantilla = plantillaPolitica({ candidato: 'Candidata', trato: 'usted', mercado: 'PA' });
+  const crearConPlantilla = (tx: Transaction, nombre: string) =>
+    uno<{ id: string }>(tx, `select bots.crear_bot($1, $2::jsonb, null) as id`, [CAMP_A, JSON.stringify({ nombre, caso: 'electoral', mercado: 'PA', trato: 'usted', definicion: plantilla })]).then((r) => r!.id);
+  const guardar = (tx: Transaction, version: string, seq: number, extra: { origen?: string; objetivo?: number | null; definicion?: unknown } = {}) =>
+    uno<{ s: number }>(tx, `select bots.guardar_cambio($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb) as s`, [
+      version, seq, extra.origen ?? 'editor', JSON.stringify([{ tipo: 'editar_caja', caja: 'n_menu', cambios: { nombre: 'x' } }]),
+      JSON.stringify({ tipo: 'restaurar', partes: {} }), 'Editó la caja 1.2', extra.objetivo ?? null, JSON.stringify(extra.definicion ?? plantilla),
+    ]).then((r) => r!.s);
+  let botV = '';
+  let verV = '';
+  await prueba('crear un bot con la plantilla crea su versión 1 en borrador, en la misma transacción', async () => {
+    botV = await comoPersona(db, P.editor, (tx) => crearConPlantilla(tx, 'Con plantilla'));
+    const v = await uno<{ id: string; number: number; status: string; seq: number; organization_id: string; created_by: string }>(db, `select id, number, status, seq, organization_id, created_by from bots.versions where bot_id = $1`, [botV]);
+    afirmar(v?.number === 1 && v.status === 'borrador' && v.seq === 0 && v.organization_id === ORG_A && v.created_by === P.editor, JSON.stringify(v));
+    verV = v.id;
+    const sin = await comoPersona(db, P.editor, (tx) => crearBot(tx, CAMP_A, 'Sin plantilla'));
+    afirmar(await cuenta(db, `select count(*) as n from bots.versions where bot_id = $1`, [sin]) === 0, 'Sin definición no crea versión');
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.crear_bot($1, $2::jsonb, null)`, [CAMP_A, JSON.stringify({ nombre: 'Mala', caso: 'electoral', mercado: 'PA', definicion: { flujos: [] } })])));
+    afirmar(e && /check/.test(e), `Una definición sin formato 1 no entra: ${e}`);
+    afirmar(await cuenta(db, `select count(*) as n from bots.bots where name = 'Mala'`) === 0, 'El bot de la definición mala quedó creado');
+  });
+  await prueba('crear borrador: devuelve el que hay; sin versiones y sin definición, error claro; solo editor y administrador', async () => {
+    const mismo = await comoPersona(db, P.adminCamp, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, null) as id`, [botV]));
+    afirmar(mismo?.id === verV, `Creó otro borrador: ${JSON.stringify(mismo)}`);
+    const sin = await comoPersona(db, P.editor, (tx) => crearBot(tx, CAMP_A, 'Sin versiones'));
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.crear_borrador($1, null)`, [sin])));
+    afirmar(e && /versión de la que partir/.test(e), `Dio: ${e}`);
+    for (const p of [P.agente, P.lector, P.sinAcceso, P.ajeno]) {
+      const x = await error(() => comoPersona(db, p, (tx) => tx.query(`select bots.crear_borrador($1, $2::jsonb)`, [sin, JSON.stringify(plantilla)])));
+      afirmar(x && /no permite/.test(x), `${p} pudo crear un borrador: ${x}`);
+    }
+    const nuevo = await comoPersona(db, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, $2::jsonb) as id`, [sin, JSON.stringify(plantilla)]));
+    const v = await uno<{ number: number; based_on_id: string | null }>(db, `select number, based_on_id from bots.versions where id = $1`, [nuevo!.id]);
+    afirmar(v?.number === 1 && v.based_on_id === null, JSON.stringify(v));
+    afirmar(await cuenta(db, `select count(*) as n from core.audit_log where action = 'bots.borrador_creado'`) === 1, 'Crear el borrador no quedó en la actividad');
+  });
+  await prueba('guardar un cambio: sube el seq y queda en el historial; con un seq viejo corta con 40001', async () => {
+    const s1 = await comoPersona(db, P.editor, (tx) => guardar(tx, verV, 0));
+    const s2 = await comoPersona(db, P.adminCamp, (tx) => guardar(tx, verV, 1));
+    afirmar(s1 === 1 && s2 === 2, `seq ${s1}, ${s2}`);
+    const e = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 1)));
+    afirmar(e && /borrador cambió/.test(e), `Dio: ${e}`);
+    const code = await comoPersona(db, P.editor, (tx) => tx.query(`select bots.guardar_cambio($1, 0, 'editor', '[]', '{}', 'x', null, $2::jsonb)`, [verV, JSON.stringify(plantilla)]).then(() => '', (x: { code?: string }) => x.code ?? ''));
+    afirmar(code === '40001', `Código ${code}`);
+    const h = await filas<{ seq: number; profile_id: string; organization_id: string }>(db, `select seq, profile_id, organization_id from bots.version_changes where version_id = $1 order by seq`, [verV]);
+    afirmar(h.length === 2 && h[0]!.profile_id === P.editor && h[1]!.profile_id === P.adminCamp && h[0]!.organization_id === ORG_A, JSON.stringify(h));
+    afirmar(await cuenta(db, `select seq as n from bots.versions where id = $1`, [verV]) === 2, 'El seq de la versión no quedó en 2');
+  });
+  await prueba('guardar un cambio: agente, lector, sin acceso y ajeno no; deshacer sin objetivo o una definición sin formato, no', async () => {
+    for (const p of [P.agente, P.lector, P.sinAcceso, P.ajeno]) {
+      const x = await error(() => comoPersona(db, p, (tx) => guardar(tx, verV, 2)));
+      afirmar(x && /no permite/.test(x), `${p} pudo: ${x}`);
+    }
+    const x = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 2, { origen: 'deshacer' })));
+    afirmar(x && /check/.test(x), `Deshacer sin objetivo: ${x}`);
+    const y = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 2, { origen: 'deshacer', objetivo: 5 })));
+    afirmar(y && /check/.test(y), `Deshacer un cambio futuro: ${y}`);
+    const z = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 2, { definicion: { formato: 2 } })));
+    afirmar(z && /check/.test(z), `Formato 2: ${z}`);
+    const w = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 2, { origen: 'magia' })));
+    afirmar(w && /check/.test(w), `Origen desconocido: ${w}`);
+    afirmar(await cuenta(db, `select seq as n from bots.versions where id = $1`, [verV]) === 2, 'Un intento rechazado cambió el seq');
+    const ok = await comoPersona(db, P.editor, (tx) => guardar(tx, verV, 2, { origen: 'deshacer', objetivo: 2 }));
+    afirmar(ok === 3, `Deshacer válido: ${ok}`);
+  });
+  await prueba('el historial solo se agrega: ni la persona ni el servidor lo cambian', async () => {
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`insert into bots.version_changes (campaign_id, version_id, seq, origin, operations, inverse, summary) values ($1, $2, 99, 'editor', '[]', '{}', 'x')`, [CAMP_A, verV]), { deshacer: true }));
+    afirmar(e && /permission denied/.test(e), `La persona pudo escribir el historial: ${e}`);
+    const e2 = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`update bots.versions set seq = 0 where id = $1`, [verV]), { deshacer: true }));
+    afirmar(e2 && /permission denied/.test(e2), `La persona pudo cambiar la versión: ${e2}`);
+    const e3 = await error(() => comoServicio(db, (tx) => tx.query(`update bots.version_changes set summary = 'otro' where version_id = $1`, [verV])));
+    afirmar(e3 && /permission denied|solo admite agregar/.test(e3), `El servidor pudo cambiar el historial: ${e3}`);
+  });
+  await prueba('leer versiones e historial: los roles de la campaña sí; sin acceso y ajeno no', async () => {
+    for (const p of [P.dueno, P.adminCamp, P.editor, P.agente, P.lector]) {
+      const n = await comoPersona(db, p, (tx) => cuenta(tx, `select count(*) as n from bots.version_changes where version_id = $1`, [verV]));
+      const v = await comoPersona(db, p, (tx) => cuenta(tx, `select count(*) as n from bots.versions where id = $1`, [verV]));
+      afirmar(n === 3 && v === 1, `${p} ve ${v} versiones y ${n} cambios`);
+    }
+    for (const p of [P.sinAcceso, P.ajeno]) {
+      const n = await comoPersona(db, p, (tx) => cuenta(tx, `select (select count(*) from bots.version_changes where version_id = $1) + (select count(*) from bots.versions where id = $1) as n`, [verV]));
+      afirmar(n === 0, `${p} ve ${n}`);
+    }
+  });
+  await prueba('una versión que ya no es borrador no se cambia; el borrador nuevo la copia como v2', async () => {
+    await comoServicio(db, (tx) => tx.query(`update bots.versions set status = 'publicada' where id = $1`, [verV]));
+    await comoServicio(db, (tx) => tx.query(`update bots.bots set published_version_id = $1 where id = $2`, [verV, botV]));
+    const e = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verV, 3)));
+    afirmar(e && /ya no es un borrador/.test(e), `Dio: ${e}`);
+    const nuevo = await comoPersona(db, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, null) as id`, [botV]));
+    const v = await uno<{ number: number; based_on_id: string; status: string; seq: number; iguales: boolean }>(db,
+      `select n.number, n.based_on_id, n.status, n.seq, n.definition = p.definition as iguales from bots.versions n, bots.versions p where n.id = $1 and p.id = $2`, [nuevo!.id, verV]);
+    afirmar(v?.number === 2 && v.based_on_id === verV && v.status === 'borrador' && v.seq === 0 && v.iguales, JSON.stringify(v));
+    const dos = await error(() => comoServicio(db, (tx) => tx.query(`insert into bots.versions (campaign_id, bot_id, number, definition) values ($1, $2, 3, '{"formato": 1}')`, [CAMP_A, botV])));
+    afirmar(dos && /duplicate key|unique/.test(dos), `Dos borradores del mismo bot: ${dos}`);
+  });
+  await prueba('un bot archivado no cambia su borrador', async () => {
+    const id = await comoPersona(db, P.editor, (tx) => crearConPlantilla(tx, 'Para archivar'));
+    const ver = (await uno<{ id: string }>(db, `select id from bots.versions where bot_id = $1`, [id]))!.id;
+    await comoPersona(db, P.dueno, (tx) => tx.query(`select bots.archivar($1)`, [id]));
+    const e = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, ver, 0)));
+    afirmar(e && /archivado/.test(e), `Dio: ${e}`);
+  });
+  await prueba('repositorio de Supabase: borrador, cambios, deshacer y errores con código', async () => {
+    const r = repoDe(P.editor);
+    const id = await r.crearBot(CAMP_A, { nombre: 'Repo con plantilla', caso: 'electoral', mercado: 'PA', trato: 'usted' }, U(902), P.editor, plantilla);
+    const b = await r.borrador(id);
+    // jsonb ordena las claves a su manera: el servidor vuelve a pasar la definición por zod, que las deja en su orden.
+    afirmar(b?.numero === 1 && b.seq === 0 && JSON.stringify(esquemaDefinicion.parse(b.definicion)) === JSON.stringify(plantilla), JSON.stringify({ ...b, definicion: '…' }));
+    const c = aplicarCambio(plantilla, [{ tipo: 'editar_caja', caja: 'n_menu', cambios: { nombre: 'Menú' } }]);
+    const s = await r.guardarCambio(b.id, 0, { origen: 'editor', operaciones: c.operaciones, inversa: c.inversa, resumen: c.resumen, objetivo: null }, c.definicion, P.editor);
+    afirmar(s === 1, `seq ${s}`);
+    try {
+      await r.guardarCambio(b.id, 0, { origen: 'editor', operaciones: c.operaciones, inversa: c.inversa, resumen: c.resumen, objetivo: null }, c.definicion, P.editor);
+      throw new Error('Guardó con un seq viejo');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'borrador_cambio', `Dio: ${(e as Error).message}`);
+    }
+    const h = await repoDe(P.lector).cambios(b.id);
+    afirmar(h.length === 1 && h[0]!.resumen === 'Editó la caja 1.2' && h[0]!.personaId === P.editor && !('inversa' in h[0]!), JSON.stringify(h));
+    const completo = await r.cambio(b.id, 1);
+    afirmar(canonico(completo?.inversa) === canonico(c.inversa) && completo?.operaciones.length === 1, JSON.stringify(completo));
+    afirmar(pilasDeshacer(h).deshacer?.desde === 1, 'Pilas');
+    afirmar((await r.versiones(id)).map((v) => `${v.numero}:${v.estado}:${v.seq}`).join() === '1:borrador:1', 'Versiones');
+    afirmar(await r.crearBorrador(id, null, P.editor) === b.id, 'crearBorrador devolvió otro');
+    try {
+      await repoDe(P.agente).guardarCambio(b.id, 1, { origen: 'editor', operaciones: c.operaciones, inversa: c.inversa, resumen: c.resumen, objetivo: null }, c.definicion, P.agente);
+      throw new Error('El agente pudo guardar');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    const sin = await r.crearBot(CAMP_A, { nombre: 'Repo sin plantilla', caso: 'electoral', mercado: 'PA', trato: 'usted' }, U(903), P.editor);
+    afirmar((await r.borrador(sin)) === null, 'Un bot sin plantilla tiene borrador');
+    try {
+      await r.crearBorrador(sin, null, P.editor);
+      throw new Error('Creó un borrador de la nada');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_version', `Dio: ${(e as Error).message}`);
+    }
+  });
+  await prueba('borrar un bot borra sus versiones y su historial', async () => {
+    await db.query(`delete from bots.bots where id = $1`, [botV]);
+    afirmar(await cuenta(db, `select (select count(*) from bots.versions where bot_id = $1) + (select count(*) from bots.version_changes where version_id = $2) as n`, [botV, verV]) === 0, 'Quedaron versiones');
+  });
+
   console.log('\nMigración 0002 sobre una base con bots de la 0001');
   await prueba('los bots que ya existían conservan sus motores; los nuevos nacen con los elegidos', async () => {
     const db3 = await baseConMigraciones('bots_0002_motores_elegidos.sql');
     await cargarDatos(db3);
     const viejo = await comoPersona(db3, P.editor, (tx) => crearBot(tx, CAMP_A, 'Bot de antes'));
     await db3.exec(readFileSync(new URL('../migraciones/bots_0002_motores_elegidos.sql', import.meta.url), 'utf8'));
+    await db3.exec(readFileSync(new URL('../migraciones/bots_0003_versiones.sql', import.meta.url), 'utf8'));
     const m = await uno<{ primary_engine_id: string; fallback_engine_id: string; double_read: boolean }>(db3, `select primary_engine_id, fallback_engine_id, double_read from bots.bot_engines where bot_id = $1 and function = 'interpretar'`, [viejo]);
     afirmar(m?.primary_engine_id === 'gpt-oss-120b' && m.fallback_engine_id === 'claude-haiku-4.5' && m.double_read === false, `El bot viejo cambió: ${JSON.stringify(m)}`);
     const nuevo = await comoPersona(db3, P.editor, (tx) => crearBot(tx, CAMP_A, 'Bot de después'));
     const n = await uno<{ primary_engine_id: string; double_read: boolean }>(db3, `select primary_engine_id, double_read from bots.bot_engines where bot_id = $1 and function = 'interpretar'`, [nuevo]);
     afirmar(n?.primary_engine_id === 'gemini-3.1-flash-lite' && n.double_read === true, `El bot nuevo: ${JSON.stringify(n)}`);
     afirmar(await cuenta(db3, `select count(*) as n from bots.engines where active`) === FICHAS_MOTORES.filter((f) => f.activo).length, 'Motores activos');
+    // Con la 0003: el bot de antes no tiene versiones y su borrador se arma con la plantilla.
+    afirmar(await cuenta(db3, `select count(*) as n from bots.versions where bot_id = $1`, [viejo]) === 0, 'El bot de antes tiene versiones');
+    const ver = await comoPersona(db3, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, $2::jsonb) as id`, [viejo, JSON.stringify(plantillaPolitica({ candidato: 'X', trato: 'usted', mercado: 'PA' }))]));
+    afirmar(!!ver?.id, 'No se armó el borrador del bot de antes');
   });
 
   console.log('\nSemilla de desarrollo');

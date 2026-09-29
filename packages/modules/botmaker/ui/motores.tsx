@@ -7,7 +7,7 @@ export function PantallaMotores({ v }: { v: VistaMotores }) {
     <>
       <Encabezado ceja="BotMaker" titulo="Motores" enfasis="de IA" bajada="Qué modelo puede hacer cada función, qué condiciones pone su empresa y cuánto cuesta. El motor de cada bot se elige en sus ajustes." />
       {v.simulado ? <div className="aviso" role="status">Esta instalación usa el motor simulado: las respuestas salen por reglas y no cuestan nada.</div> : null}
-      <Caja titulo="Motores por defecto de los bots nuevos" nota="provisorios hasta cerrar la prueba de motores">
+      <Caja titulo="Motores por defecto de los bots nuevos" nota="elegidos con la prueba de motores del 28/9/2026">
         <div className="tabla-envoltura">
           <table className="tabla">
             <caption className="oculto-visual">Motores por defecto</caption>

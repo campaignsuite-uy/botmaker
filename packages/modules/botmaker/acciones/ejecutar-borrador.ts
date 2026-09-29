@@ -1,0 +1,147 @@
+/**
+ * Núcleo de las acciones sobre el borrador de un bot, sin Next: armarlo, aplicarle un cambio, deshacer y rehacer.
+ * Como las demás: recibe el rol que resolvió el servidor, vuelve a exigir la acción, valida y llama al repositorio (que
+ * en Supabase lo exige otra vez en la base). No es un archivo 'use server'.
+ *
+ * Un cambio se aplica sobre la definición guardada (dominio/operaciones.ts valida que el bot quede bien) y se guarda
+ * con el seq que se leyó. Si otra persona guardó en el medio, se vuelve a leer y se aplica otra vez sobre lo último
+ * (las operaciones dicen qué hacer, no cómo quedó todo). Deshacer y rehacer no se reintentan: si el borrador cambió, lo
+ * que había para deshacer puede ser otra cosa.
+ */
+import { ErrorDatos } from '../datos/errores';
+import type { Repositorio } from '../datos/repositorio';
+import { validarDefinicion, type Definicion, type Problema } from '../dominio/definicion';
+import { aplicarCambio, aplicarOperacion, ErrorOperacion } from '../dominio/operaciones';
+import { puede } from '../dominio/permisos';
+import { plantillaPolitica } from '../dominio/plantilla-politica';
+import type { Bot } from '../dominio/tipos';
+import { pilasDeshacer, type Borrador, type OrigenCambio } from '../dominio/versiones';
+import type { ContextoNucleo, Salida } from './ejecutar-bots';
+
+/** Cómo queda el borrador después de una acción: lo que necesita la pantalla del editor. */
+export interface EstadoBorrador {
+  versionId: string;
+  numero: number;
+  seq: number;
+  definicion: Definicion;
+  /** El nombre del cambio que desharía el botón (null: no hay). */
+  deshacer: string | null;
+  rehacer: string | null;
+}
+
+export type ResultadoBorrador =
+  | ({ ok: true; resumen: string; creados: string[]; otroCambio: boolean } & EstadoBorrador)
+  | { ok: false; codigo: string; mensaje?: string; problemas?: Problema[] };
+
+const falla = (codigo: string, mensaje?: string, problemas?: Problema[]): ResultadoBorrador => ({
+  ok: false, codigo, ...(mensaje ? { mensaje } : {}), ...(problemas?.length ? { problemas } : {}),
+});
+
+function deError(e: unknown): ResultadoBorrador {
+  if (e instanceof ErrorOperacion) return falla(e.codigo, e.message, e.problemas);
+  if (e instanceof ErrorDatos) return falla(e.codigo);
+  return falla('no_se_pudo');
+}
+
+async function botEditable(c: ContextoNucleo, botId: string): Promise<Bot | ResultadoBorrador> {
+  if (!puede(c.rol, 'editar_borrador')) return falla('sin_permiso');
+  const b = await c.repo.bot(botId);
+  if (!b || b.campanaId !== c.campanaId) return falla('no_existe');
+  if (b.estado === 'archivado') return falla('archivado');
+  return b;
+}
+
+/** El borrador guardado, con su definición validada. */
+export async function leerBorrador(repo: Repositorio, botId: string): Promise<{ borrador: Borrador; definicion: Definicion } | { codigo: string; problemas?: Problema[] }> {
+  const borrador = await repo.borrador(botId);
+  if (!borrador) return { codigo: 'sin_borrador' };
+  const v = validarDefinicion(borrador.definicion);
+  if (!v.ok) return { codigo: 'borrador_invalido', problemas: v.problemas };
+  return { borrador, definicion: v.definicion };
+}
+
+/** Las pilas de deshacer y rehacer del borrador, con el nombre de lo que haría cada botón. */
+export async function pilasDelBorrador(repo: Repositorio, versionId: string) {
+  return pilasDeshacer(await repo.cambios(versionId));
+}
+
+async function estado(repo: Repositorio, borrador: Borrador, seq: number, definicion: Definicion): Promise<EstadoBorrador> {
+  const p = await pilasDelBorrador(repo, borrador.id);
+  return { versionId: borrador.id, numero: borrador.numero, seq, definicion, deshacer: p.deshacer?.resumen ?? null, rehacer: p.rehacer?.resumen ?? null };
+}
+
+export interface EntradaCambio {
+  botId: string;
+  /** El seq del borrador que vio la persona (para avisarle si se aplicó sobre algo más nuevo). */
+  seq: number;
+  operaciones: unknown[];
+  origen: Extract<OrigenCambio, 'editor' | 'yaml' | 'copiloto'>;
+}
+
+/** Aplica y guarda un cambio del borrador (una o varias operaciones que se deshacen juntas). */
+export async function ejecutarCambio(c: ContextoNucleo, e: EntradaCambio, opciones: { azar?: () => number } = {}): Promise<ResultadoBorrador> {
+  const b = await botEditable(c, e.botId);
+  if ('ok' in b) return b;
+  if (!Array.isArray(e.operaciones) || !e.operaciones.length) return falla('operacion_invalida');
+  for (let intento = 1; ; intento++) {
+    const l = await leerBorrador(c.repo, b.id);
+    if ('codigo' in l) return falla(l.codigo, undefined, l.problemas);
+    try {
+      const r = aplicarCambio(l.definicion, e.operaciones, opciones);
+      const seq = await c.repo.guardarCambio(
+        l.borrador.id, l.borrador.seq, { origen: e.origen, operaciones: r.operaciones, inversa: r.inversa, resumen: r.resumen, objetivo: null }, r.definicion, c.personaId,
+      );
+      return { ok: true, resumen: r.resumen, creados: r.creados, otroCambio: l.borrador.seq !== e.seq, ...(await estado(c.repo, l.borrador, seq, r.definicion)) };
+    } catch (x) {
+      if (x instanceof ErrorDatos && x.codigo === 'borrador_cambio' && intento < 3) continue;
+      return deError(x);
+    }
+  }
+}
+
+/** Deshace el último cambio hecho (o rehace el último deshecho), si el borrador sigue en el seq que vio la persona. */
+export async function ejecutarDeshacer(c: ContextoNucleo, e: { botId: string; seq: number; rehacer?: boolean }): Promise<ResultadoBorrador> {
+  const b = await botEditable(c, e.botId);
+  if ('ok' in b) return b;
+  const l = await leerBorrador(c.repo, b.id);
+  if ('codigo' in l) return falla(l.codigo, undefined, l.problemas);
+  if (l.borrador.seq !== e.seq) return falla('borrador_cambio');
+  const pilas = await pilasDelBorrador(c.repo, l.borrador.id);
+  const paso = e.rehacer ? pilas.rehacer : pilas.deshacer;
+  if (!paso) return falla(e.rehacer ? 'nada_que_rehacer' : 'nada_que_deshacer');
+  try {
+    const desde = await c.repo.cambio(l.borrador.id, paso.desde);
+    if (!desde) return falla('no_se_pudo');
+    const r = aplicarOperacion(l.definicion, desde.inversa);
+    const origen = e.rehacer ? 'rehacer' : 'deshacer';
+    const resumen = `${e.rehacer ? 'Rehízo' : 'Deshizo'}: ${paso.resumen}`;
+    const seq = await c.repo.guardarCambio(l.borrador.id, l.borrador.seq, { origen, operaciones: [desde.inversa], inversa: r.inversa, resumen, objetivo: paso.objetivo }, r.definicion, c.personaId);
+    return { ok: true, resumen, creados: [], otroCambio: false, ...(await estado(c.repo, l.borrador, seq, r.definicion)) };
+  } catch (x) {
+    return deError(x);
+  }
+}
+
+/**
+ * Arma el borrador de un bot que no tiene: copia la versión publicada (o la última) o, si el bot no tiene ninguna
+ * (los creados antes de las versiones), lo arma con la plantilla política y el candidato del formulario.
+ */
+export async function ejecutarCrearBorrador(c: ContextoNucleo, e: { botId: string; candidato: string; partido: string }): Promise<Salida> {
+  const b = await botEditable(c, e.botId);
+  if ('ok' in b) return { tipo: 'error', codigo: b.ok ? 'no_se_pudo' : b.codigo };
+  try {
+    if ((await c.repo.versiones(b.id)).length) {
+      await c.repo.crearBorrador(b.id, null, c.personaId);
+      return { tipo: 'ok', codigo: 'borrador_creado' };
+    }
+    const candidato = e.candidato.trim();
+    if (!candidato) return { tipo: 'error', codigo: 'candidato_vacio' };
+    if (candidato.length > 80) return { tipo: 'error', codigo: 'candidato_largo' };
+    if (e.partido.trim().length > 80) return { tipo: 'error', codigo: 'partido_largo' };
+    const definicion = plantillaPolitica({ candidato, partido: e.partido.trim() || null, trato: b.trato, mercado: b.mercado });
+    await c.repo.crearBorrador(b.id, definicion, c.personaId);
+    return { tipo: 'ok', codigo: 'borrador_creado' };
+  } catch (x) {
+    return { tipo: 'error', codigo: x instanceof ErrorDatos ? x.codigo : 'no_se_pudo' };
+  }
+}

@@ -7,7 +7,7 @@ import { MensajeAccion, Ocultos, SoloLectura } from './piezas';
 export function PantallaNuevoBot({ v }: { v: VistaNuevoBot }) {
   return (
     <>
-      <Encabezado ceja="BotMaker" titulo="Nuevo" enfasis="bot" bajada="El bot nace en borrador, con los motores por defecto. Después se ajusta en su configuración." />
+      <Encabezado ceja="BotMaker" titulo="Nuevo" enfasis="bot" bajada="El bot nace en borrador, con la plantilla política y los motores por defecto. Después se ajusta todo en el editor y en su configuración." />
       <MensajeAccion m={v.mensaje} />
       {v.puedeCrear ? (
         <Caja titulo="Datos del bot">
@@ -16,6 +16,16 @@ export function PantallaNuevoBot({ v }: { v: VistaNuevoBot }) {
             <div className="campo">
               <label htmlFor="nb-nombre">Nombre</label>
               <input id="nb-nombre" name="nombre" className="entrada" required maxLength={v.largoNombre} placeholder="Por ejemplo: Asistente de la campaña" />
+            </div>
+            <div className="grilla-2">
+              <div className="campo">
+                <label htmlFor="nb-candidato">Candidato o dirigente</label>
+                <input id="nb-candidato" name="candidato" className="entrada" required maxLength={v.largoCandidato} placeholder="Nombre y apellido" />
+              </div>
+              <div className="campo">
+                <label htmlFor="nb-partido">Partido (opcional)</label>
+                <input id="nb-partido" name="partido" className="entrada" maxLength={v.largoCandidato} defaultValue={v.partidoInicial} />
+              </div>
             </div>
             <fieldset className="bots-opciones">
               <legend className="campo__etiqueta">Caso</legend>
@@ -41,7 +51,7 @@ export function PantallaNuevoBot({ v }: { v: VistaNuevoBot }) {
               </div>
             </div>
             <div className="texto-chico secundario">
-              Motores por defecto (provisorios hasta cerrar la prueba de motores):
+              Motores por defecto:
               <ul className="bots-lista">{v.motores.map((m) => <li key={m}>{m}</li>)}</ul>
             </div>
             <div className="fila">

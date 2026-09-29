@@ -8,6 +8,7 @@ import { CASOS, TRATOS, type CasoUso, type EstadoBot, type Trato } from './tipos
 
 export const LARGO_NOMBRE = 80;
 export const LARGO_AVISO_IA = 300;
+export const LARGO_CANDIDATO = 80;
 export const DIAS_GUARDADO_POR_DEFECTO = 90;
 
 const nombre = z.string().trim().min(1, 'nombre_vacio').max(LARGO_NOMBRE, 'nombre_largo');
@@ -18,6 +19,15 @@ export const esquemaNuevoBot = z.object({
   caso: z.enum(CASOS, { error: 'caso' }),
   mercado: codigoMercado,
   trato: z.enum(TRATOS, { error: 'trato' }),
+});
+
+/**
+ * El formulario de bot nuevo: los datos del bot y de quién es (candidato o dirigente, y partido). Esos dos no son
+ * columnas del bot: arman la plantilla de la versión 1 (identidad y variables bot.candidato y bot.partido).
+ */
+export const esquemaFormularioNuevoBot = esquemaNuevoBot.extend({
+  candidato: z.string().trim().min(1, 'candidato_vacio').max(LARGO_CANDIDATO, 'candidato_largo'),
+  partido: z.string().trim().max(LARGO_CANDIDATO, 'partido_largo').transform((x) => x || null),
 });
 
 export const esquemaCambiosBot = z.object({

@@ -1,6 +1,9 @@
-/** Nuevo bot: nombre, caso, mercado y trato. La clave del formulario evita crear dos bots con un doble envío. */
+/**
+ * Nuevo bot: nombre, caso, mercado, trato y de quién es (candidato y partido, que arman la plantilla de la versión 1).
+ * La clave del formulario evita crear dos bots con un doble envío.
+ */
 import { randomUUID } from 'node:crypto';
-import { DESCRIPCION_CASO, ETIQUETA_CASO, ETIQUETA_TRATO, LARGO_NOMBRE } from '../dominio/bots';
+import { DESCRIPCION_CASO, ETIQUETA_CASO, ETIQUETA_TRATO, LARGO_CANDIDATO, LARGO_NOMBRE } from '../dominio/bots';
 import { MERCADOS, mercado } from '../dominio/mercados';
 import { ETIQUETA_FUNCION, MOTORES_POR_DEFECTO, fichaMotor } from '../dominio/motores';
 import { puede } from '../dominio/permisos';
@@ -15,6 +18,9 @@ export interface VistaNuevoBot {
   clave: string;
   volver: string;
   largoNombre: number;
+  largoCandidato: number;
+  /** El partido que se sugiere: el nombre de la organización. */
+  partidoInicial: string;
   casos: { valor: string; texto: string; descripcion: string }[];
   mercados: { valor: string; texto: string }[];
   mercadoInicial: string;
@@ -31,6 +37,8 @@ export function vistaNuevoBot(ctx: ContextoPantalla): VistaNuevoBot {
     clave: randomUUID(),
     volver: ruta(ctx, 'nuevo'),
     largoNombre: LARGO_NOMBRE,
+    largoCandidato: LARGO_CANDIDATO,
+    partidoInicial: ctx.organizacion.nombre,
     casos: CASOS.map((c) => ({ valor: c, texto: ETIQUETA_CASO[c], descripcion: DESCRIPCION_CASO[c] })),
     mercados: MERCADOS.map((m) => ({ valor: m.iso, texto: m.nombre })),
     mercadoInicial: mercado(ctx.campana.paisIso)?.iso ?? MERCADOS[0]!.iso,

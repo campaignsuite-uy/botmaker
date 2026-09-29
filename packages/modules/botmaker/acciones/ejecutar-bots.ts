@@ -5,7 +5,8 @@
  */
 import type { Repositorio } from '../datos/repositorio';
 import { ErrorDatos } from '../datos/errores';
-import { codigoError, esquemaCambiosBot, esquemaDatosPersonales, esquemaNuevoBot, esquemaTopes } from '../dominio/bots';
+import { codigoError, esquemaCambiosBot, esquemaDatosPersonales, esquemaFormularioNuevoBot, esquemaTopes } from '../dominio/bots';
+import { plantillaPolitica } from '../dominio/plantilla-politica';
 import { puede, type Accion } from '../dominio/permisos';
 import { FUNCIONES, type Bot, type EleccionMotores, type FuncionMotor, type RolEfectivo } from '../dominio/tipos';
 import type { CapaMotores } from '../motores/capa';
@@ -51,12 +52,17 @@ function exige(c: ContextoNucleo, accion: Accion): Salida | null {
 export async function ejecutarCrearBot(c: ContextoNucleo, fd: FormData): Promise<Salida> {
   const sin = exige(c, 'editar_borrador');
   if (sin) return sin;
-  const v = esquemaNuevoBot.safeParse({ nombre: texto(fd, 'nombre'), caso: texto(fd, 'caso'), mercado: texto(fd, 'mercado'), trato: texto(fd, 'trato') });
+  const v = esquemaFormularioNuevoBot.safeParse({
+    nombre: texto(fd, 'nombre'), caso: texto(fd, 'caso'), mercado: texto(fd, 'mercado'), trato: texto(fd, 'trato'), candidato: texto(fd, 'candidato'), partido: texto(fd, 'partido'),
+  });
   if (!v.success) return mal(codigoError(v.error));
   const clave = texto(fd, 'clave');
   if (!/^[0-9a-f-]{36}$/i.test(clave)) return mal('datos');
+  const { candidato, partido, ...datos } = v.data;
+  // La versión 1 del bot: la plantilla política con el candidato, el trato y los temas del mercado.
+  const definicion = plantillaPolitica({ candidato, partido, trato: datos.trato, mercado: datos.mercado });
   try {
-    const id = await c.repo.crearBot(c.campanaId, v.data, clave, c.personaId);
+    const id = await c.repo.crearBot(c.campanaId, datos, clave, c.personaId, definicion);
     return { tipo: 'ok', codigo: 'bot_creado', botId: id };
   } catch (e) {
     return salidaDeError(e);

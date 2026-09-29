@@ -15,6 +15,9 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (c === '42501' || /no permite esta acción|Solo el Administrador|permission denied|row-level security/i.test(m)) return new ErrorDatos('sin_permiso', m);
   if (/archivado/.test(m)) return new ErrorDatos('archivado', m);
   if (/respaldo tiene que ser otro/.test(m)) return new ErrorDatos('respaldo_igual', m);
+  if (c === '40001' || /borrador cambió/.test(m)) return new ErrorDatos('borrador_cambio', m);
+  if (/ya no es un borrador/.test(m)) return new ErrorDatos('no_borrador', m);
+  if (/versión de la que partir/.test(m)) return new ErrorDatos('sin_version', m);
   if (/doble lectura/.test(m)) return new ErrorDatos('doble_lectura', m);
   if (/Motor desconocido/.test(m)) return new ErrorDatos('motor', m);
   if (/no sirve para la función/.test(m)) return new ErrorDatos('motor_funcion', m);
