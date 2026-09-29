@@ -16,6 +16,8 @@
  *           desde la bandeja, un reintento descartado, la ventana de 24 horas y las plantillas (crear, aprobar, mandar),
  *           una clave que deja de valer (canal desconectado y alerta) y reconectar. La base de contactos: lo que
  *           consultó cada uno, filtrar por eso, la ficha, la descarga en CSV y quién ve el número.
+ *  Etapa 8: la analítica (conversaciones, cómo terminaron, consultas, temas, embudo y costo) y los números sobre el
+ *           diagrama.
  *
  * Necesita el build (pnpm build). Levanta `next start` en un puerto propio y lo apaga al terminar.
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
@@ -459,6 +461,29 @@ try {
   await lectorBandeja.goto(`${CAMPANA}/contactos`);
   prueba('el lector no entra a la base de contactos', !lectorBandeja.url().includes('/contactos'));
   prueba('base de contactos sin errores en la página', !admin.errores.length && !ed.errores.length, [...admin.errores, ...ed.errores].join(' · '));
+
+  // ── Etapa 8: analítica (8.01) ─────────────────────────────────────────────────────────────────
+  console.log('\nEtapa 8: analítica\n');
+  await admin.goto(`${CAMPANA}/analitica?bot=bot-demo-3`);
+  const ana = await admin.textContent('main');
+  prueba('la analítica del bot publicado: conversaciones, cómo terminaron, consultas, temas, embudo y costo', ana.includes('Conversaciones') && ana.includes('Cómo terminaron')
+    && ana.includes('Qué consultan') && ana.includes('Embudo por flujo') && ana.includes('Menú principal') && ana.includes('Costo en vivo'), ana.slice(0, 300));
+  await admin.locator('.bots-ranking a:has-text("Propuesta")').first().click();
+  await admin.waitForURL(/\/contactos\?.*consulta=intencion%3Apropuesta/);
+  prueba('tocar una consulta lleva a la base de contactos con quienes la hicieron', (await admin.textContent('main')).includes('consultaron por «Propuesta»') || (await admin.textContent('main')).includes('consultó por «Propuesta»'));
+  await admin.goto(`${CAMPANA}/analitica?bot=todos&periodo=7`);
+  prueba('con todos los bots y 7 días: sin embudo, con el aviso de elegir un bot', (await admin.textContent('main')).includes('Elegí un bot para ver los recorridos'));
+  await admin.goto(`${CAMPANA}/bot-demo-3/flujos?numeros=si`);
+  if (await admin.locator('button:has-text("Armar el borrador")').count()) await admin.click('button:has-text("Armar el borrador")');
+  await admin.waitForSelector('.ed-nodo');
+  if (await admin.locator('button:has-text("Números (30 días)")').count()) await admin.click('button:has-text("Números (30 días)")');
+  await admin.waitForSelector('.ed-num');
+  prueba('los números sobre el diagrama: visitas por caja y porcentaje de cada opción', await admin.locator('.ed-num').count() > 3 && await admin.locator('.ed-num--opcion').count() > 0);
+  const lectorAna = await como(navegador, 'p-equipo');
+  await lectorAna.goto(`${CAMPANA}/analitica?bot=bot-demo-3`);
+  const anaLector = await lectorAna.textContent('main');
+  prueba('el lector ve la analítica sin el costo', anaLector.includes('Qué consultan') && !anaLector.includes('Costo en vivo'));
+  prueba('analítica sin errores en la página', !admin.errores.length && !lectorAna.errores.length, [...admin.errores, ...lectorAna.errores].join(' · '));
 
   // ── La app pública aparte (apps/bots-publico), con su propia demo ─────────────────────────────
   if (!process.env.URL) {

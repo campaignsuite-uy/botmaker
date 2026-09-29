@@ -12,12 +12,14 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Base de contactos (7.06):** hecha, con la pantalla Contactos, la ficha de cada contacto y la descarga en CSV.
   - Migración `bots_0009_contactos.sql`.
   - Pruebas: 270 unitarias, 74 de base, 192 de pantallas, 370 de celular y 85 del recorrido.
+- **Analítica (8.01):** hecha, con la pantalla Analítica y los números sobre el diagrama.
+  - Migración `bots_0010_analitica.sql`.
+  - Pruebas: 281 unitarias, 78 de base, 202 de pantallas, 385 de celular y 91 del recorrido.
 - **Lo que sigue, en orden:**
-  1. Analítica (8.01).
-  2. Sentry (8.03).
-  3. Respuestas grabadas (1.07).
-  4. Semilla de demo para Supabase.
-  5. Manual (8.06).
+  1. Sentry (8.03).
+  2. Respuestas grabadas (1.07).
+  3. Semilla de demo para Supabase.
+  4. Manual (8.06).
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
@@ -174,7 +176,19 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 
 ## Etapa 8, lo que se hace sin cuentas
 
-### 8.01 Analítica
+### 8.01 Analítica (hecha)
+
+Como se diseñó, con estos detalles de cómo quedó:
+
+- La pantalla arranca con el bot publicado si hay uno solo; con varios, con todos. Recorridos y embudo, solo con un bot
+  elegido (las cajas de dos bots de la misma plantilla se llaman igual).
+- Períodos: hoy, 7, 30 o 90 días, o fechas elegidas (días en UTC, el último incluido).
+- Resuelta: respuesta con base completa sin derivar, atendida por alguien del equipo o un «gracias» después de haber
+  consultado algo (la regla de cortesía después de una interpretación, una opción o una respuesta).
+- La tarea suma de a tramos y deja para la próxima vuelta los eventos del último minuto.
+- Números sobre el diagrama: botón «Números (30 días)» en el editor; se abre ya prendido desde Analítica.
+
+Lo diseñado:
 
 - **Eventos**: ya se guardan en `bots.events`, sin textos. Falta agregarlos y mostrarlos.
 - **Agregados**:

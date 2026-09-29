@@ -15,6 +15,7 @@ import { revisarBot, type Hallazgo } from '../../dominio/validador';
 import { aplicarCambioBorrador, deshacerCambioBorrador } from '../../acciones/borrador';
 import type { ResultadoBorrador } from '../../acciones/ejecutar-borrador';
 import type { EstadoEditor } from '../../vistas/editor';
+import type { NumerosDiagrama } from '../../vistas/analitica';
 import { textoError } from '../../vistas/mensajes';
 import { ANCHO_NODO, diagramaDeFlujo, operacionesCajaNueva, operacionesFlujoNuevo, salidaDeIndice, salidasConectables, type NodoDiagrama } from './modelo';
 import { Inspector } from './inspector';
@@ -51,6 +52,7 @@ function Editor({ e }: { e: EstadoEditor }) {
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ocupado, iniciar] = useTransition();
   const [verRevision, setVerRevision] = useState(false);
+  const [verNumeros, setVerNumeros] = useState(e.numerosVisibles);
   const [probadas, setProbadas] = useState<Set<string> | undefined>(undefined);
   const [recorrido, setRecorrido] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -143,7 +145,7 @@ function Editor({ e }: { e: EstadoEditor }) {
         def={def} flujoId={flujo.id} setFlujoId={(id) => { setFlujoId(id); setSeleccion(null); }} editable={e.editable} ocupado={ocupado}
         pilas={pilas} deshacer={deshacer} enviar={enviar} seleccion={seleccion} setSeleccion={setSeleccion} buscador={buscador} irA={irA}
         errores={revision.errores.length} avisos={avisosTotales} sinProbar={sinProbar} verRevision={verRevision} setVerRevision={setVerRevision}
-        hrefSimulador={e.hrefSimulador}
+        hrefSimulador={e.hrefSimulador} numeros={e.numeros ? { visibles: verNumeros, cambiar: () => setVerNumeros(!verNumeros), periodo: e.numeros.periodo } : null}
       />
       {aviso ? (
         <div className={`ed-aviso ed-aviso--${aviso.tipo}`} role={aviso.tipo === 'error' ? 'alert' : 'status'}>
@@ -155,7 +157,7 @@ function Editor({ e }: { e: EstadoEditor }) {
       ) : null}
       {verRevision ? <PanelRevision errores={revision.errores} avisos={revision.avisos} motores={e.avisosMotores} irA={(id) => { irA(id); setVerRevision(false); }} /> : null}
       <div className={`ed-cuerpo${seleccion ? ' ed-cuerpo--con-inspector' : ''}`}>
-        <Diagrama def={def} flujoId={flujo.id} seleccion={seleccion} setSeleccion={setSeleccion} porCaja={revision.porCaja} recorrido={recorrido} editable={e.editable && !ocupado} enviar={enviar} irFlujo={setFlujoId} />
+        <Diagrama def={def} flujoId={flujo.id} seleccion={seleccion} setSeleccion={setSeleccion} porCaja={revision.porCaja} recorrido={recorrido} editable={e.editable && !ocupado} enviar={enviar} irFlujo={setFlujoId} numeros={verNumeros ? e.numeros : null} />
         {seleccion && ubicar(def, seleccion) ? (
           <Inspector
             key={`${seleccion}:${seq}`} def={def} cajaId={seleccion} editable={e.editable} ocupado={ocupado}
@@ -179,6 +181,7 @@ function BarraEditor(p: {
   enviar: (ops: Record<string, unknown>[], siOk?: (r: Extract<ResultadoBorrador, { ok: true }>) => void) => Promise<boolean>;
   seleccion: string | null; setSeleccion: (id: string | null) => void; buscador: React.RefObject<HTMLInputElement | null>; irA: (id: string) => void;
   errores: number; avisos: number; sinProbar: number; verRevision: boolean; setVerRevision: (x: boolean) => void; hrefSimulador: string;
+  numeros: { visibles: boolean; cambiar: () => void; periodo: string } | null;
 }) {
   const [busqueda, setBusqueda] = useState('');
   const [noEsta, setNoEsta] = useState(false);
@@ -239,7 +242,12 @@ function BarraEditor(p: {
         <button type="button" className={`ed-revision${p.errores ? ' ed-revision--error' : p.avisos ? ' ed-revision--aviso' : ''}`} aria-expanded={p.verRevision} onClick={() => p.setVerRevision(!p.verRevision)}>
           {p.errores === 1 ? '1 error' : `${p.errores} errores`} · {p.avisos === 1 ? '1 aviso' : `${p.avisos} avisos`}{p.sinProbar ? ` · ${p.sinProbar} sin probar` : ''}
         </button>
-        <a className="boton boton--sec boton--chico" href={p.hrefSimulador}>Probar en el simulador</a>
+        {p.numeros ? (
+          <button type="button" className={`boton boton--sec boton--chico${p.numeros.visibles ? ' ed-numeros--activo' : ''}`} aria-pressed={p.numeros.visibles} onClick={p.numeros.cambiar} title={`Conversaciones de verdad, del ${p.numeros.periodo} (UTC)`}>
+            {p.numeros.visibles ? 'Ocultar los números' : 'Números (30 días)'}
+          </button>
+        ) : null}
+                <a className="boton boton--sec boton--chico" href={p.hrefSimulador}>Probar en el simulador</a>
       </div>
       {panel === 'caja' ? (
         <div className="ed-panel" role="group" aria-label="Agregar una caja">
@@ -337,7 +345,7 @@ function PanelRevision(p: { errores: Hallazgo[]; avisos: Hallazgo[]; motores: st
 
 // ── Diagrama ────────────────────────────────────────────────────────────────────────────────────
 
-type DatosNodo = { n: NodoDiagrama; hallazgos: Hallazgo[]; irFlujo: (id: string) => void; recorrido: boolean };
+type DatosNodo = { n: NodoDiagrama; hallazgos: Hallazgo[]; irFlujo: (id: string) => void; recorrido: boolean; numeros: NumerosDiagrama['porCaja'][string] | null };
 
 const NodoCaja = memo(function NodoCaja({ data, selected }: NodeProps<Node<DatosNodo>>) {
   const { n, hallazgos } = data;
@@ -354,13 +362,14 @@ const NodoCaja = memo(function NodoCaja({ data, selected }: NodeProps<Node<Datos
         {!n.inicioBot && n.inicioFlujo ? <span className="ed-marca ed-marca--suave" title="Primera caja del flujo">1.ª</span> : null}
         {errores ? <span className="ed-cuenta ed-cuenta--error" title={`${errores} error(es)`}>{errores}</span> : null}
         {avisos ? <span className="ed-cuenta ed-cuenta--aviso" title={`${avisos} aviso(s)`}>{avisos}</span> : null}
+        {data.numeros ? <span className="ed-num" title={data.numeros.titulo}>{data.numeros.visitas}{data.numeros.abandono ? ` · deja ${data.numeros.abandono}` : ''}</span> : null}
       </div>
       {n.nombre ? <div className="ed-nodo__nombre">{n.nombre}</div> : null}
       <div className="ed-nodo__resumen">{n.resumen}</div>
       <ul className="ed-nodo__salidas">
         {n.salidas.map((s) => (
           <li key={s.id} className="ed-salida">
-            <span className="ed-salida__etiqueta">{s.letra ? <strong>{s.letra}</strong> : null} {s.letra ? s.etiqueta : <em>{s.etiqueta}</em>}</span>
+            <span className="ed-salida__etiqueta">{s.letra ? <strong>{s.letra}</strong> : null} {s.letra ? s.etiqueta : <em>{s.etiqueta}</em>}{s.letra && data.numeros?.opciones[s.letra] ? <span className="ed-num ed-num--opcion"> {data.numeros.opciones[s.letra]}</span> : null}</span>
             {s.otroFlujo ? (
               <button type="button" className="ed-salida__destino ed-enlace nodrag" onClick={(ev) => { ev.stopPropagation(); data.irFlujo(s.otroFlujo!); }}>→ {s.destinoTexto}</button>
             ) : (
@@ -379,13 +388,14 @@ const TIPOS_NODO = { caja: NodoCaja };
 function Diagrama(p: {
   def: Definicion; flujoId: string; seleccion: string | null; setSeleccion: (id: string | null) => void; porCaja: Map<string, Hallazgo[]>;
   recorrido: Set<string>; editable: boolean; enviar: (ops: Record<string, unknown>[]) => Promise<boolean>; irFlujo: (id: string) => void;
+  numeros: NumerosDiagrama | null;
 }) {
   const { fitView, setCenter, getNode } = useReactFlow();
   const d = useMemo(() => diagramaDeFlujo(p.def, p.flujoId), [p.def, p.flujoId]);
   const nodes: Node<DatosNodo>[] = useMemo(() => d.nodos.map((n) => ({
     id: n.id, type: 'caja', position: { x: n.x, y: n.y }, width: ANCHO_NODO, height: n.alto, selected: n.id === p.seleccion,
-    data: { n, hallazgos: p.porCaja.get(n.id) ?? [], irFlujo: p.irFlujo, recorrido: p.recorrido.has(n.id) },
-  })), [d, p.seleccion, p.porCaja, p.irFlujo, p.recorrido]);
+    data: { n, hallazgos: p.porCaja.get(n.id) ?? [], irFlujo: p.irFlujo, recorrido: p.recorrido.has(n.id), numeros: p.numeros?.porCaja[n.id] ?? null },
+  })), [d, p.seleccion, p.porCaja, p.irFlujo, p.recorrido, p.numeros]);
   const edges: Edge[] = useMemo(() => d.aristas.map((a) => {
     const marcada = a.desde === p.seleccion || a.hasta === p.seleccion;
     return {

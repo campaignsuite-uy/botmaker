@@ -200,9 +200,10 @@ export async function ejecutarPausar(c: ContextoNucleo, e: { botId: string; paus
 
 // ── Tareas de fondo ─────────────────────────────────────────────────────────────────────────────
 
-/** Lo que corre el cron: abre y cierra alertas, y vacía los textos vencidos. */
+/** Lo que corre el cron: abre y cierra alertas, vacía los textos vencidos y suma lo nuevo a la analítica. */
 export async function ejecutarTareas(repo: RepositorioTareas, ahora: Date) {
   const alertas = await repo.revisarAlertas(ahora);
   const borrados = await repo.borrarVencidos(ahora);
-  return { alertas, borrados };
+  const analitica = await repo.agregarAnalitica(ahora);
+  return { alertas, borrados, analitica };
 }

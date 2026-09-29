@@ -34,6 +34,7 @@ import { Simulador360 } from '../../modules/botmaker/canal-whatsapp/simulado.ts'
 import { sha256 } from '../../modules/botmaker/canal-whatsapp/webhook.ts';
 import { leerPlantilla } from '../../modules/botmaker/dominio/whatsapp.ts';
 import { consultasDeEventos, type ConsultaContacto } from '../../modules/botmaker/dominio/contactos.ts';
+import { agregarPorHora, cierreDeConversacion, ordenFilasHora, type FilaHora } from '../../modules/botmaker/dominio/analitica.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -1167,6 +1168,92 @@ async function main() {
     const f = await repoDe(P.agente).fichaContacto(ctLucia, P.agente);
     afirmar(f?.contacto.borradoEn && f.consultas.length === 0 && f.contacto.nombre === null, JSON.stringify(f));
     afirmar(await cuenta(db, `select count(*) as n from bots.events e join bots.sessions s on s.id = e.session_id where s.contact_id = $1`, [ctLucia]) > 0, 'Se borraron los eventos');
+  });
+
+  console.log('\nAnalítica (bots_0010)');
+  const FUTURO = new Date('2028-01-01T00:00:00Z');
+  const todosLosEventos = async () => (await filas<{ botId: string; canal: 'web'; versionId: string | null; fecha: string; nombre: string; cajaId: string | null; datos: Record<string, unknown> }>(db,
+    `select e.bot_id as "botId", e.channel_kind as canal, e.version_id as "versionId", e.occurred_at as fecha, e.name as nombre, e.box_id as "cajaId", e.data as datos from bots.events e order by e.id`))
+    .map((e) => ({ ...e, fecha: new Date(e.fecha).toISOString() }));
+  const sumasDeLaBase = async () => (await filas<{ botId: string; canal: 'web'; versionId: string | null; hora: string; metrica: FilaHora['metrica']; caja: string; clave: string; n: number }>(db,
+    `select bot_id as "botId", channel_kind as canal, version_id as "versionId", hour as hora, metric as metrica, box_id as caja, key as clave, n from bots.stats_hourly`))
+    .map((f) => ({ ...f, hora: new Date(f.hora).toISOString() })).sort(ordenFilasHora);
+  let sesionAn = '';
+  const evAn = (nombre: string, caja: string | null, datos: unknown, hora: string) =>
+    db.query(`insert into bots.events (campaign_id, bot_id, channel_kind, session_id, name, box_id, data, occurred_at) values ($1, $2, 'web', $3, $4, $5, $6::jsonb, $7)`, [CAMP_A, botP, sesionAn, nombre, caja, JSON.stringify(datos), hora]);
+  await prueba('las sumas por hora: el SQL da lo mismo que el código sobre todos los eventos de la base', async () => {
+    sesionAn = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('analitica-1'), canal: 'web', verificadoAhora: true, ahora: new Date('2026-10-05T14:00:00Z') })).conversacion.id;
+    const casos: [string, string | null, unknown][] = [
+      ['sesion_iniciada', null, {}], ['caja_mostrada', 'n_bienvenida', {}], ['caja_mostrada', 'n_menu', {}], ['caja_mostrada', '', {}], ['opcion_elegida', 'n_menu', { letra: 'A' }],
+      ['opcion_elegida', null, { aclaracion: 'propuesta' }], ['opcion_elegida', 'n_menu', { letra: 7 }], ['texto_recibido', null, { largo: 20 }], ['interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'agua' }],
+      ['interpretado', null, { intencion: '', tema: ['x'] }], ['regla', null, { regla: 'adjunto', intencion: 'no_entendible' }], ['regla', null, { regla: 'x' }],
+      ['respondido_con_base', 'n_consulta', { completa: true }], ['respondido_con_base', 'n_consulta', { completa: 'true' }], ['derivada', 'n_derivar', { motivo: 'x' }],
+      ['sin_motor', 'n_interpretar', {}], ['aclaracion', 'n_interpretar', {}], ['dato_guardado', 'n_sumate', {}], ['dato_invalido', 'n_zona', {}], ['solo_menus', null, {}],
+      ['baja', 'n_baja', {}], ['tramite_electoral', 'n_consulta', {}], ['condiciones_aceptadas', null, {}], ['estado_mensaje', null, { estado: 'leido' }], ['valoracion', null, {}],
+    ];
+    let k = 0;
+    for (const [n, c, d] of casos) await evAn(n, c, d, new Date(Date.parse('2026-10-05T14:00:00Z') + (k++) * 150_000).toISOString());
+    const r = await pub.agregarAnalitica(FUTURO);
+    afirmar(r.eventos === await cuenta(db, `select count(*) as n from bots.events`), JSON.stringify(r));
+    const codigo = agregarPorHora(await todosLosEventos());
+    const base = await sumasDeLaBase();
+    afirmar(JSON.stringify(base) === JSON.stringify(codigo), `SQL: ${JSON.stringify(base.slice(0, 5))}…\nTS:  ${JSON.stringify(codigo.slice(0, 5))}… (${base.length} y ${codigo.length} filas)`);
+    afirmar(base.some((f) => f.metrica === 'respuesta' && f.clave === 'sin_dato') && base.some((f) => f.metrica === 'tema' && f.clave === 'agua'), 'faltan métricas');
+    const otra = await pub.agregarAnalitica(FUTURO);
+    afirmar(otra.eventos === 0 && JSON.stringify(await sumasDeLaBase()) === JSON.stringify(base), 'Una segunda corrida volvió a sumar');
+  });
+  await prueba('los eventos nuevos se suman de a tramos y los del último minuto esperan a la próxima corrida', async () => {
+    const ahora = new Date('2026-10-06T10:00:00Z');
+    await evAn('caja_mostrada', 'n_masayuda', {}, '2026-10-06T09:50:00Z');
+    await evAn('caja_mostrada', 'n_cierre', {}, '2026-10-06T09:59:30Z');
+    await evAn('caja_mostrada', 'n_menu', {}, '2026-10-06T09:40:00Z');
+    const a = await pub.agregarAnalitica(ahora);
+    afirmar(a.eventos === 1, `primera: ${JSON.stringify(a)}`);
+    const b = await pub.agregarAnalitica(new Date('2026-10-06T10:02:00Z'));
+    afirmar(b.eventos === 2, `segunda: ${JSON.stringify(b)}`);
+    afirmar(JSON.stringify(await sumasDeLaBase()) === JSON.stringify(agregarPorHora(await todosLosEventos())), 'No da lo mismo después de sumar de a tramos');
+  });
+  await prueba('cómo terminó cada conversación: el SQL da lo mismo que el código; si siguió, se vuelve a calcular', async () => {
+    await evAn('regla', null, { regla: 'cortesia', intencion: 'cortesia' }, '2026-10-06T09:59:40Z');
+    // Los eventos de arriba entraron directo a la tabla: la conversación se movió (como con un turno de verdad).
+    await db.query(`update bots.sessions set updated_at = '2026-10-06T09:59:40Z' where id = $1`, [sesionAn]);
+    await pub.agregarAnalitica(FUTURO);
+    const sesiones = await filas<{ id: string; atendida: boolean }>(db, `select id, last_team_at is not null as atendida from bots.sessions`);
+    const cierres = await filas<{ session_id: string; result: string; last_box: string; path: string }>(db, `select session_id, result, last_box, path from bots.session_outcomes`);
+    afirmar(cierres.length === sesiones.length, `${cierres.length} cierres de ${sesiones.length} conversaciones`);
+    for (const s of sesiones) {
+      const evs = await filas<{ nombre: string; cajaId: string | null; datos: Record<string, unknown> }>(db, `select name as nombre, box_id as "cajaId", data as datos from bots.events where session_id = $1 order by id`, [s.id]);
+      const c = cierreDeConversacion(evs, s.atendida);
+      const b = cierres.find((x) => x.session_id === s.id)!;
+      afirmar(b.result === c.resultado && b.last_box === c.ultimaCaja && b.path === c.recorrido, `sesión ${s.id}: SQL ${JSON.stringify(b)} · TS ${JSON.stringify(c)}`);
+    }
+    const an = cierres.find((x) => x.session_id === sesionAn)!;
+    afirmar(an.result === 'derivada' && an.path === 'n_bienvenida>n_menu>n_masayuda>n_cierre', JSON.stringify(an));
+    await db.query(`update bots.sessions set last_team_at = '2026-10-07T12:00:00Z' where id = $1`, [sesionAn]);
+    const r = await pub.agregarAnalitica(FUTURO);
+    afirmar(r.conversaciones === 1 && (await uno<{ result: string }>(db, `select result from bots.session_outcomes where session_id = $1`, [sesionAn]))?.result === 'resuelta', JSON.stringify(r));
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.tarea_agregar_analitica(now())`)));
+    afirmar(e && /permission denied/.test(e), `Una persona corrió la tarea: ${e}`);
+  });
+  await prueba('la pantalla lee lo sumado: la ve quien entra al producto; el costo, solo quien ve costos', async () => {
+    const filtro = { desde: '2026-01-01T00:00:00Z', hasta: FUTURO.toISOString() };
+    const lector = await repoDe(P.lector).analitica(CAMP_A, filtro, P.lector);
+    const total = await cuenta(db, `select coalesce(sum(n), 0) as n from bots.stats_hourly where campaign_id = $1`, [CAMP_A]);
+    afirmar(lector.metricas.reduce((s, x) => s + x.n, 0) === total && lector.costos === null && lector.actualizadaEn, `lector: ${lector.metricas.length} métricas, costos ${JSON.stringify(lector.costos)}`);
+    afirmar(lector.conversaciones.reduce((s, x) => s + x.n, 0) === await cuenta(db, `select count(*) as n from bots.session_outcomes where campaign_id = $1`, [CAMP_A]), 'cierres');
+    afirmar(lector.porDia.find((d) => d.dia === '2026-10-05')?.n === 1, JSON.stringify(lector.porDia));
+    const admin = await repoDe(P.adminCamp).analitica(CAMP_A, { ...filtro, botId: botP, canal: 'web' }, P.adminCamp);
+    afirmar(Array.isArray(admin.costos) && admin.metricas.every((x) => x.n > 0), JSON.stringify(admin.costos));
+    const soloOctubre = await repoDe(P.adminCamp).analitica(CAMP_A, { desde: '2026-10-06T00:00:00Z', hasta: '2026-10-07T00:00:00Z' }, P.adminCamp);
+    afirmar(soloOctubre.metricas.filter((x) => x.metrica === 'caja').reduce((s, x) => s + x.n, 0) === 3, JSON.stringify(soloOctubre.metricas));
+    afirmar((await repoDe(P.adminCamp).analitica(CAMP_A, { ...filtro, botId: 'no-es-un-id' }, P.adminCamp)).metricas.length === 0, 'Un bot que no existe filtró algo');
+    try {
+      await repoDe(P.ajeno).analitica(CAMP_A, filtro, P.ajeno);
+      throw new Error('El ajeno leyó la analítica');
+    } catch (x) {
+      afirmar(x instanceof ErrorDatos && x.codigo === 'sin_permiso', `Dio: ${(x as Error).message}`);
+    }
+    afirmar(await comoPersona(db, P.lector, (tx) => cuenta(tx, `select count(*) as n from bots.stats_hourly`)) > 0 && await comoPersona(db, P.ajeno, (tx) => cuenta(tx, `select count(*) as n from bots.stats_hourly`)) === 0, 'reglas por fila');
   });
 
   console.log('\nMigración 0002 sobre una base con bots de la 0001');

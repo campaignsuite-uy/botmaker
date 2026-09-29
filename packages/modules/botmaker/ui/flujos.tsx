@@ -20,7 +20,7 @@ export function PantallaFlujos({ v }: { v: VistaEditor }) {
       ) : null}
       {!v.editor && !v.problemas ? (
         v.armar ? (
-          <Caja titulo="Este bot todavía no tiene flujos">
+          <Caja titulo={v.armar.conVersiones ? 'No hay un borrador abierto' : 'Este bot todavía no tiene flujos'}>
             <form action={crearBorrador} className="pila bots-form">
               <Ocultos campanaId={v.campanaId} volver={v.volver} extra={{ botId: v.armar.botId }} />
               {v.armar.conVersiones ? (

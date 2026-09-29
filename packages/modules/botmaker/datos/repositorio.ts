@@ -15,6 +15,7 @@ import type { Alerta, Canal, Condiciones, Contacto, Conversacion, EstadoConversa
 import type { Decision, Sesion } from '../dominio/motor';
 import type { EntranteWhatsapp, EstadoCanal, EstadoEnvio, MensajeWhatsapp, Plantilla } from '../dominio/whatsapp';
 import type { ConsultaContacto, TipoConsulta } from '../dominio/contactos';
+import type { DatosAnalitica, FiltroAnalitica } from '../dominio/analitica';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -156,6 +157,14 @@ export interface Repositorio {
   exportarBaseContactos(campanaId: string, filtro: Omit<FiltroContactos, 'limite' | 'desde'>, por: string): Promise<FilaBaseContacto[]>;
   /** Las descargas de la base, la más nueva primero (gestionar_datos_contactos). */
   exportacionesBase(campanaId: string, por: string): Promise<ExportacionBase[]>;
+
+  // ── Analítica (8.01) ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * La analítica de la campaña en un período (ver): métricas sumadas, conversaciones por día y cómo terminaron las
+   * conversaciones. El costo en vivo, solo para quien ve costos. En Supabase sale de lo que sumó la tarea de fondo.
+   */
+  analitica(campanaId: string, filtro: FiltroAnalitica, por: string): Promise<DatosAnalitica>;
 
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;
@@ -479,4 +488,6 @@ export interface RepositorioTareas {
   revisarAlertas(ahora: Date): Promise<{ abiertas: number; cerradas: number }>;
   /** Vacía el texto de los mensajes vencidos según los días de guardado de cada bot. Devuelve cuántos. */
   borrarVencidos(ahora: Date): Promise<number>;
+  /** Suma los eventos nuevos a la analítica y calcula cómo terminaron las conversaciones que terminaron (8.01). */
+  agregarAnalitica(ahora: Date): Promise<{ eventos: number; conversaciones: number }>;
 }

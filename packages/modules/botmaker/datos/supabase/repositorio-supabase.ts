@@ -25,6 +25,7 @@ import type {
   TurnoDevuelto,
 } from '../repositorio';
 import type { Plantilla } from '../../dominio/whatsapp';
+import type { DatosAnalitica, FiltroAnalitica } from '../../dominio/analitica';
 import * as M from './mapeo';
 
 export interface ClientesSupabase {
@@ -453,7 +454,16 @@ export class RepositorioSupabase implements Repositorio {
     return datos(await b.rpc('exportaciones_base', { campana: campanaId }), 'leer las descargas de la base') as ExportacionBase[];
   }
 
-  async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {
+  // ── Analítica (8.01) ──────────────────────────────────────────────────────────────────────────
+
+  async analitica(campanaId: string, filtro: FiltroAnalitica, _por: string): Promise<DatosAnalitica> {
+    const b = await this.bots_();
+    const d = datos(await b.rpc('analitica', { campana: campanaId, filtro }), 'leer la analítica') as DatosAnalitica;
+    // Las sumas llegan como numeric (texto en JSON) si superan el entero: se pasan a número.
+    return { ...d, costos: d.costos?.map((x) => ({ ...x, usd: Number(x.usd), llamadas: Number(x.llamadas) })) ?? null };
+  }
+
+    async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {
     const b = await this.bots_();
     const filas = datos(await b.from('data_requests').select('id, campaign_id, contact_id, kind, note, handled_by, handled_at').eq('campaign_id', campanaId).order('handled_at', { ascending: false }).limit(200), 'leer los pedidos') as
       { id: string; campaign_id: string; contact_id: string; kind: PedidoDatos['tipo']; note: string; handled_by: string | null; handled_at: string }[];

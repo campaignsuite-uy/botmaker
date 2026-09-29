@@ -153,4 +153,8 @@ export class RepositorioPublicoSupabase implements RepositorioPublico, Repositor
   async borrarVencidos(ahora: Date): Promise<number> {
     return Number(datos(await this.b.rpc('tarea_borrar_vencidos', { ahora: ahora.toISOString() }), 'borrar lo vencido'));
   }
+
+  async agregarAnalitica(ahora: Date): Promise<{ eventos: number; conversaciones: number }> {
+    return datos(await this.b.rpc('tarea_agregar_analitica', { ahora: ahora.toISOString() }), 'sumar la analítica') as { eventos: number; conversaciones: number };
+  }
 }

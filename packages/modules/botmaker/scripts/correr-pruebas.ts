@@ -37,6 +37,8 @@ import { ejecutarAvanzarCorrida, ejecutarIniciarCorrida } from '../acciones/ejec
 import { ejecutarPedirPublicacion } from '../acciones/ejecutar-publicacion';
 import { PantallaBandeja, PantallaConversacion, PantallaDatosContactos, PantallaRevision } from '../ui/bandeja';
 import { vistaBandeja, vistaConversacion, vistaDatosContactos, vistaRevision } from '../vistas/bandeja';
+import { PantallaAnalitica } from '../ui/analitica';
+import { vistaAnalitica } from '../vistas/analitica';
 import { PantallaContactos, PantallaFichaContacto } from '../ui/contactos';
 import { vistaContactos, vistaFichaContacto } from '../vistas/contactos';
 import { PantallaCanales } from '../ui/canales';
@@ -109,6 +111,7 @@ async function main() {
       const marco = html(createElement(Marco, { ctx: c, datos: await datosMarco(repo, c), children: createElement('p', null, 'contenido') }));
       prueba('marco: menú de BotMaker y costos solo si los ve', tiene(marco, 'BotMaker') && tiene(marco, '/bots/costos') === e.costos);
       prueba('marco: «Contactos» para quien lee conversaciones', tiene(marco, '/bots/contactos') === puede(c.rol, 'leer_conversaciones'));
+      prueba('marco: «Analítica» para todos', tiene(marco, '/bots/analitica'));
 
       const lista = html(createElement(PantallaBots, { v: await vistaBots(repo, c) }));
       prueba('bots: la lista con los dos bots', tiene(lista, 'Asistente de la campaña') && tiene(lista, 'Consultas del partido'));
@@ -209,7 +212,12 @@ async function main() {
         prueba(`datos de contactos: buscar, exportar${demo ? '' : ' y borrar'}`, tiene(datos, 'Marcos') && tiene(datos, 'Exportar (JSON)') && tiene(datos, 'Borrar los datos</button>') === !demo);
       }
 
-      const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
+      // Etapa 8 (8.01): la analítica del bot publicado; el costo, solo quien ve costos.
+      const analitica = html(createElement(PantallaAnalitica, { v: await vistaAnalitica(repo, c) }));
+      prueba(`analítica: conversaciones, consultas, temas y embudo; ${e.costos ? 'con el costo' : 'sin el costo'}`,
+        tiene(analitica, 'Cómo terminaron') && tiene(analitica, 'Qué consultan') && tiene(analitica, '>Propuesta<') && tiene(analitica, 'Embudo por flujo')
+        && tiene(analitica, 'Menú principal') && tiene(analitica, 'Costo en vivo') === e.costos && !tiene(analitica, '>Cortesía<'));
+            const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));
 
       if (e.costos) {
