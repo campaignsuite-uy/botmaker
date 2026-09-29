@@ -7,7 +7,7 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 - Plan técnico por etapas: https://claude.ai/code/artifact/9c123447-2d67-4d1a-a326-c041133168b3
 - Tablero de tareas por etapa: https://claude.ai/artifact/Gtpq4nERweRQssNV6WiC1X
 - Resultado de la prueba de motores: https://claude.ai/code/artifact/12653699-1f3d-4a3c-8985-6ea5b9aa281d
-- Pruebas de aceptación de las etapas 2 a 7: https://claude.ai/code/artifact/eb2284e1-de5d-41af-be0b-1c99d8c072f2
+- Pruebas de aceptación de las etapas 2 a 8: https://claude.ai/code/artifact/eb2284e1-de5d-41af-be0b-1c99d8c072f2
 - Guía de desarrollo: `docs/guia-desarrollo.md`. Puesta en marcha: `docs/puesta-en-marcha.md`.
 - Hoja de ruta de las etapas 7 y 8 hasta Supabase (dónde quedó y qué sigue): `docs/plan-etapas-7-y-8.md`.
 
