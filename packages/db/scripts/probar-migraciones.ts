@@ -29,6 +29,10 @@ import { RepositorioPublicoSupabase } from '../../modules/botmaker/datos/supabas
 import { atenderMensaje } from '../../modules/botmaker/canal-web/nucleo.ts';
 import { CapaMotores } from '../../modules/botmaker/motores/capa.ts';
 import { AdaptadorSimulado } from '../../modules/botmaker/motores/simulado.ts';
+import { enviarPendientes, recibirWebhook, sincronizarPlantillas, type EntornoWhatsapp } from '../../modules/botmaker/canal-whatsapp/nucleo.ts';
+import { Simulador360 } from '../../modules/botmaker/canal-whatsapp/simulado.ts';
+import { sha256 } from '../../modules/botmaker/canal-whatsapp/webhook.ts';
+import { leerPlantilla } from '../../modules/botmaker/dominio/whatsapp.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -891,6 +895,161 @@ async function main() {
   await prueba('borrar un bot borra sus versiones y su historial', async () => {
     await db.query(`delete from bots.bots where id = $1`, [botV]);
     afirmar(await cuenta(db, `select (select count(*) from bots.versions where bot_id = $1) + (select count(*) from bots.version_changes where version_id = $2) as n`, [botV, verV]) === 0, 'Quedaron versiones');
+  });
+
+  console.log('\nWhatsApp (bots_0008)');
+  const CLAVE_WA = 'clave-de-prueba-360dialog-0001';
+  const SECRETO_WA = 'secreto-del-aviso-de-prueba';
+  const urlAviso = `/api/whatsapp/${idPublico}`;
+  const sim = new Simulador360();
+  const entornoWa: EntornoWhatsapp = {
+    ahora: () => new Date(), hash: hmac, cliente: sim, urlPublica: 'https://bots.ejemplo.org',
+    capa: new CapaMotores({ repo: pub, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true }),
+  };
+  sim.entregar = async (url, encabezados, cuerpo) => {
+    const r = await recibirWebhook(pub, entornoWa, url.split('/').pop()!, new Headers(encabezados), cuerpo, Date.now());
+    if (r.procesar) await r.procesar();
+    return r.status;
+  };
+  let canalWa = '';
+  const TEL = '50760009999';
+  const convWa = async () => (await uno<{ id: string }>(db, `select s.id from bots.sessions s join bots.contacts c on c.id = s.contact_id where c.phone = $1 order by s.started_at desc limit 1`, [TEL]))!.id;
+  await prueba('conectar: solo el administrador; la clave queda en Vault y la base guarda la referencia y el hash del secreto', async () => {
+    const datosCanal = { clave: CLAVE_WA, numero: '+507 6000-0000', secretoHash: sha256(SECRETO_WA), webhookUrl: urlAviso };
+    try {
+      await repoDe(P.editor).conectarWhatsapp(botP, datosCanal, P.editor);
+      throw new Error('El editor conectó WhatsApp');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    canalWa = await repoDe(P.adminCamp).conectarWhatsapp(botP, datosCanal, P.adminCamp);
+    await sim.configurarWebhook(CLAVE_WA, urlAviso, { 'x-botmaker-secreto': SECRETO_WA });
+    const ch = await uno<{ vault_secret_id: string; webhook_secret_hash: string; status: string }>(db, `select vault_secret_id, webhook_secret_hash, status from bots.channels where id = $1`, [canalWa]);
+    afirmar(ch?.vault_secret_id && ch.webhook_secret_hash === sha256(SECRETO_WA) && ch.status === 'activo', JSON.stringify(ch));
+    afirmar(await cuenta(db, `select count(*) as n from bots.channels where config::text like '%${CLAVE_WA}%' or webhook_url like '%${CLAVE_WA}%'`) === 0, 'La clave quedó en una tabla');
+    afirmar(await cuenta(db, `select count(*) as n from vault.secrets where secret = $1`, [CLAVE_WA]) === 1, 'La clave no está en Vault');
+    afirmar(await pub.claveWhatsapp(canalWa) === CLAVE_WA, 'El servidor no lee la clave');
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.servicio_clave_whatsapp($1)`, [canalWa])));
+    afirmar(e && /permission denied/.test(e), `Una persona leyó la clave: ${e}`);
+    const e2 = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select vault_secret_id from bots.channels`)));
+    afirmar(e2 && /permission denied/.test(e2), `Una persona leyó la referencia a Vault: ${e2}`);
+    afirmar(await comoPersona(db, P.lector, (tx) => cuenta(tx, `select count(*) as n from bots.channels where kind = 'whatsapp' and status = 'activo'`)) === 1, 'El lector no ve el canal');
+    // Reconectar reemplaza la clave en Vault (no crea otra).
+    await repoDe(P.adminCamp).conectarWhatsapp(botP, datosCanal, P.adminCamp);
+    afirmar(await cuenta(db, `select count(*) as n from vault.secrets`) === 1, 'Reconectar duplicó la clave');
+    afirmar(await cuenta(db, `select count(*) as n from core.audit_log where action = 'bots.conectar_whatsapp' and detail::text not like '%${CLAVE_WA}%'`) === 2, 'actividad sin la clave');
+  });
+  await prueba('el aviso: lo repetido se descarta; lo pendiente se toma una vez y vuelve a los 2 minutos si se cortó', async () => {
+    const t0 = new Date('2026-10-01T12:00:00Z');
+    const entrada = (clave: string) => ({ clave, tipo: 'estado' as const, hora: t0.toISOString(), idProveedor: 'wamid.no-existe', estado: 'entregado' as const, error: null });
+    const r = await pub.recibirEntradas(canalWa, [entrada('e:x:1'), entrada('e:x:2')], { ahora: t0, demoraMs: 40, numero: null });
+    const r2 = await pub.recibirEntradas(canalWa, [entrada('e:x:1')], { ahora: t0, demoraMs: 60, numero: null });
+    afirmar(r.nuevas === 2 && r.repetidas === 0 && r2.nuevas === 0 && r2.repetidas === 1, JSON.stringify([r, r2]));
+    const a = await pub.entradasPendientes(canalWa, 10, t0);
+    const b = await pub.entradasPendientes(canalWa, 10, new Date(t0.getTime() + 60_000));
+    const c = await pub.entradasPendientes(canalWa, 10, new Date(t0.getTime() + 3 * 60_000));
+    afirmar(a.length === 2 && b.length === 0 && c.length === 2, `${a.length} ${b.length} ${c.length}`);
+    for (const x of c) await pub.entradaProcesada(canalWa, x.clave);
+    afirmar(await cuenta(db, `select count(*) as n from bots.channel_inbox where channel_id = $1 and payload is not null`, [canalWa]) === 0, 'Quedó lo recibido');
+    afirmar((await pub.canalesConPendientes(new Date(t0.getTime() + 3 * 60_000))).length === 0, 'Quedaron pendientes');
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select * from bots.channel_inbox`)));
+    afirmar(e && /permission denied/.test(e) || (await comoPersona(db, P.dueno, (tx) => cuenta(tx, `select count(*) as n from bots.channel_inbox`))) === 0, `La cola a la vista: ${e}`);
+  });
+  await prueba('de punta a punta: una persona escribe por WhatsApp, el bot contesta por 360dialog y los estados llegan a la base', async () => {
+    afirmar(await sim.escribir(CLAVE_WA, TEL, 'Pedro', { tipo: 'texto', texto: 'Hola' }) === 200, 'aviso');
+    await sim.esperar();
+    const recibidos = sim.conversacion(CLAVE_WA, TEL).filter((m) => m.sentido === 'para');
+    afirmar(recibidos.length >= 2, `recibió ${recibidos.length}`);
+    await sim.esperar();
+    const id = await convWa();
+    const s = await uno<{ channel_kind: string; window_expires_at: string; phone: string; profile_name: string }>(db, `select s.channel_kind, s.window_expires_at, c.phone, c.profile_name from bots.sessions s join bots.contacts c on c.id = s.contact_id where s.id = $1`, [id]);
+    afirmar(s?.channel_kind === 'whatsapp' && s.phone === TEL && s.profile_name === 'Pedro' && new Date(s.window_expires_at).getTime() > Date.now() + 23 * 36e5, JSON.stringify(s));
+    const estados = (await filas<{ status: string }>(db, `select status from bots.outbound where session_id = $1`, [id])).map((x) => x.status);
+    afirmar(estados.length === recibidos.length && estados.every((x) => x === 'leido'), estados.join());
+    const c = await repoDe(P.agente).conversacion(id);
+    afirmar(c?.mensajes.filter((m) => m.autor !== 'contacto').every((m) => m.envio === 'leido') && c.contacto.telefono === TEL, JSON.stringify(c?.mensajes.map((m) => m.envio)));
+    afirmar(await cuenta(db, `select count(*) as n from bots.events where session_id = $1 and name = 'estado_mensaje'`, [id]) === recibidos.length * 2, 'eventos de estado');
+    const salud = (await repoDe(P.lector).canalWhatsapp(botP))!;
+    afirmar(salud.salud.recibidos === 1 && salud.salud.enviados === recibidos.length && salud.salud.leidos === recibidos.length && salud.salud.repetidos === 1 && salud.respuestasMes === recibidos.length, JSON.stringify(salud));
+    // Un reintento de 360dialog no se duplica.
+    const antes = await cuenta(db, `select count(*) as n from bots.messages where session_id = $1`, [id]);
+    await sim.reintentarUltimo(CLAVE_WA, TEL);
+    await sim.esperar();
+    afirmar(await cuenta(db, `select count(*) as n from bots.messages where session_id = $1`, [id]) === antes, 'El reintento duplicó');
+  });
+  await prueba('el número lo ve quien atiende (administrador y agente); el editor y el lector no', async () => {
+    const id = await convWa();
+    afirmar((await repoDe(P.agente).conversacion(id))?.contacto.telefono === TEL, 'agente');
+    const ed = await repoDe(P.editor).conversacion(id);
+    afirmar(ed && !ed.contacto.telefono && ed.contacto.nombrePerfil === 'Pedro', `editor: ${JSON.stringify(ed?.contacto)}`);
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select phone from bots.contacts`)));
+    afirmar(e && /permission denied/.test(e), `Una persona leyó el número de la tabla: ${e}`);
+    afirmar((await repoDe(P.adminCamp).buscarContactos(CAMP_A, '0009999', P.adminCamp)).length === 1, 'buscar por número');
+  });
+  await prueba('la ventana: con ella abierta el agente responde por WhatsApp; cerrada, solo una plantilla aprobada', async () => {
+    const id = await convWa();
+    const ag = repoDe(P.agente);
+    await ag.tomarConversacion(id, P.agente);
+    const n = await ag.responderConversacion(id, 'Hola, soy del equipo.', P.agente);
+    await enviarPendientes(pub, entornoWa, { conversacionId: id });
+    afirmar((await uno<{ status: string }>(db, `select status from bots.outbound where session_id = $1 and n = $2`, [id, n]))?.status === 'enviado', 'No salió la respuesta');
+    await db.query(`update bots.sessions set window_expires_at = now() - interval '1 minute' where id = $1`, [id]);
+    try {
+      await ag.responderConversacion(id, 'Hola', P.agente);
+      throw new Error('Respondió con la ventana cerrada');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'ventana_cerrada', `Dio: ${(e as Error).message}`);
+    }
+    // Las plantillas se crean en la cuenta (360dialog simulado): una aprobada y una todavía en revisión.
+    await sim.crearPlantilla(CLAVE_WA, { nombre: 'retomar', categoria: 'utility', idioma: 'es', texto: 'Hola {{1}}, ¿seguimos con {{2}}?', ejemplos: { 1: 'Rosa', 2: 'la consulta' } });
+    sim.decidirYa(CLAVE_WA);
+    await sim.crearPlantilla(CLAVE_WA, { nombre: 'nueva', categoria: 'utility', idioma: 'es', texto: 'Hola, te escribimos de la campaña.', ejemplos: {} });
+    afirmar(await sincronizarPlantillas(pub, entornoWa, canalWa), 'No leyó las plantillas');
+    afirmar(leerPlantilla({ name: 'x', language: 'es', status: 'APPROVED', components: [{ type: 'BODY', text: 'Hola' }] })?.usable, 'leerPlantilla');
+    afirmar((await repoDe(P.lector).plantillas(botP)).map((p) => `${p.nombre}:${p.estado}:${p.usable}`).join() === 'retomar:aprobada:true,nueva:en_revision:false', 'plantillas');
+    try {
+      await ag.responderConPlantilla(id, { nombre: 'nueva', idioma: 'es', formato: 'posicional', variables: [], valores: {}, texto: 'Hola' }, P.agente);
+      throw new Error('Mandó una plantilla sin aprobar');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'plantilla_no_usable', `Dio: ${(e as Error).message}`);
+    }
+    const m = await ag.responderConPlantilla(id, { nombre: 'retomar', idioma: 'es', formato: 'posicional', variables: ['1', '2'], valores: { 1: 'Pedro', 2: 'la reunión' }, texto: 'Hola Pedro, ¿seguimos con la reunión?' }, P.agente);
+    const o = await uno<{ payload: { template: { name: string; components: { parameters: { text: string }[] }[] } } }>(db, `select payload from bots.outbound where session_id = $1 and n = $2`, [id, m]);
+    afirmar(o?.payload.template.name === 'retomar' && o.payload.template.components[0]!.parameters.map((x) => x.text).join() === 'Pedro,la reunión', JSON.stringify(o));
+    await enviarPendientes(pub, entornoWa, { conversacionId: id });
+    await sim.esperar();
+    afirmar(sim.conversacion(CLAVE_WA, TEL).at(-1)?.mensaje.type === 'template', 'No llegó la plantilla');
+    // Devolver al bot con la ventana cerrada: lo que diría el bot queda sin enviar.
+    await ag.devolverConversacion(id, { mensajes: [{ texto: '¿Algo más?', cajaId: 'n_masayuda', datos: null, envios: [{ type: 'text', text: { body: '¿Algo más?' } }] }], sesion: { espera: null, variables: {}, estado: 'bot', turnos: [], iniciada: true }, decision: { recorrido: ['n_masayuda'], costoUsd: 0 }, cajaActual: 'n_masayuda', eventos: [] }, P.agente);
+    afirmar((await ag.conversacion(id))?.mensajes.at(-1)?.envio === 'fallido', 'Devolver con la ventana cerrada');
+  });
+  await prueba('una clave que dejó de valer: canal desconectado y alerta; reconectar la cierra', async () => {
+    sim.revocar(CLAVE_WA, true);
+    await sim.escribir(CLAVE_WA, TEL, null, { tipo: 'texto', texto: 'Hola de nuevo' });
+    await sim.esperar();
+    const canal = (await repoDe(P.adminCamp).canalWhatsapp(botP))!;
+    afirmar(canal.estado === 'desconectado' && canal.ultimoError && canal.salud.fallidos > 0, JSON.stringify(canal));
+    afirmar((await repoDe(P.agente).alertas(CAMP_A, { abiertas: true })).some((a) => a.tipo === 'canal_desconectado'), 'alerta');
+    afirmar(await pub.claveWhatsapp(canalWa) === null, 'Da la clave de un canal desconectado');
+    afirmar((await pub.revisarAlertas(new Date())).cerradas === 0, 'La tarea cerró la alerta');
+    try {
+      await repoDe(P.adminCamp).prenderWhatsapp(botP, true, P.adminCamp);
+      throw new Error('Prendió un canal desconectado');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'canal_desconectado', `Dio: ${(e as Error).message}`);
+    }
+    sim.revocar(CLAVE_WA, false);
+    await repoDe(P.adminCamp).conectarWhatsapp(botP, { clave: CLAVE_WA, numero: null, secretoHash: sha256(SECRETO_WA), webhookUrl: urlAviso }, P.adminCamp);
+    afirmar(!(await repoDe(P.agente).alertas(CAMP_A, { abiertas: true })).some((a) => a.tipo === 'canal_desconectado'), 'La alerta sigue abierta');
+  });
+  await prueba('base de contactos: el vencimiento no borra el número ni el nombre; borrar a pedido sí', async () => {
+    await pub.borrarVencidos(new Date('2027-06-01T00:00:00Z'));
+    const c = await uno<{ id: string; phone: string; profile_name: string }>(db, `select id, phone, profile_name from bots.contacts where phone = $1`, [TEL]);
+    afirmar(c?.phone === TEL && c.profile_name === 'Pedro', JSON.stringify(c));
+    afirmar(await cuenta(db, `select count(*) as n from bots.outbound o join bots.sessions s on s.id = o.session_id join bots.contacts c on c.id = s.contact_id where c.phone = $1 and o.payload ->> 'type' <> 'borrado'`, [TEL]) === 0, 'Quedó texto en lo que salió');
+    await repoDe(P.adminCamp).borrarContacto(c.id, 'Lo pidió', P.adminCamp);
+    const d = await uno<{ phone: string | null; profile_name: string | null }>(db, `select phone, profile_name from bots.contacts where id = $1`, [c.id]);
+    afirmar(d && d.phone === null && d.profile_name === null, JSON.stringify(d));
   });
 
   console.log('\nMigración 0002 sobre una base con bots de la 0001');

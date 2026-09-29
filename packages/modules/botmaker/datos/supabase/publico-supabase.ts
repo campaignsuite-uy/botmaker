@@ -9,7 +9,10 @@ import type { Canal, Contacto, Conversacion, Mensaje } from '../../dominio/conve
 import type { FichaMotor } from '../../dominio/motores';
 import type { MotorFuncion, NuevaLlamada, Topes, UsoMotor } from '../../dominio/tipos';
 import { ErrorDatos, errorDeBase } from '../errores';
-import type { BotPublico, RepositorioPublico, RepositorioTareas, TurnoGuardado } from '../repositorio';
+import type {
+  BotPublico, CanalWhatsappPublico, EntradaWebhook, EnvioPendiente, RepositorioPublico, RepositorioTareas, RepositorioWhatsapp, ResultadoEnvio, TurnoGuardado,
+} from '../repositorio';
+import type { EstadoEnvio, Plantilla } from '../../dominio/whatsapp';
 import { RepositorioSupabase } from './repositorio-supabase';
 
 type Resultado<T> = { data: T; error: { message: string; code?: string } | null };
@@ -19,7 +22,7 @@ function datos<T>(r: Resultado<T>, que: string): T {
   return r.data;
 }
 
-export class RepositorioPublicoSupabase implements RepositorioPublico, RepositorioTareas {
+export class RepositorioPublicoSupabase implements RepositorioPublico, RepositorioTareas, RepositorioWhatsapp {
   private readonly capa: RepositorioSupabase;
 
   constructor(private readonly servicio: SupabaseClient) {
@@ -80,6 +83,67 @@ export class RepositorioPublicoSupabase implements RepositorioPublico, Repositor
 
   async aceptarCondiciones(contactoId: string, numero: number, ahora: Date): Promise<void> {
     datos(await this.b.rpc('publico_aceptar_condiciones', { contacto: contactoId, numero, ahora: ahora.toISOString() }), 'aceptar las condiciones');
+  }
+
+  // ── WhatsApp (bots_0008) ──────────────────────────────────────────────────────────────────────
+
+  async canalWhatsappPublico(idPublico: string): Promise<CanalWhatsappPublico | null> {
+    return datos(await this.b.rpc('publico_canal_whatsapp', { id_publico: idPublico }), 'leer el canal') as CanalWhatsappPublico | null;
+  }
+
+  async canalWhatsappPorId(canalId: string): Promise<CanalWhatsappPublico | null> {
+    return datos(await this.b.rpc('publico_canal_whatsapp_por_id', { canal: canalId }), 'leer el canal') as CanalWhatsappPublico | null;
+  }
+
+  async recibirEntradas(canalId: string, entradas: readonly EntradaWebhook[], p: { ahora: Date; demoraMs: number; numero: string | null }): Promise<{ nuevas: number; repetidas: number }> {
+    const r = datos(await this.b.rpc('publico_recibir', { canal: canalId, entradas, ahora: p.ahora.toISOString(), demora_ms: Math.round(p.demoraMs), numero: p.numero ?? '' }), 'guardar el aviso') as { nuevas: number; repetidas: number };
+    return { nuevas: Number(r.nuevas), repetidas: Number(r.repetidas) };
+  }
+
+  async entradasPendientes(canalId: string, limite: number, ahora: Date): Promise<EntradaWebhook[]> {
+    return datos(await this.b.rpc('publico_entradas_pendientes', { canal: canalId, limite, ahora: ahora.toISOString() }), 'leer la cola del canal') as EntradaWebhook[];
+  }
+
+  async entradaProcesada(canalId: string, clave: string): Promise<void> {
+    datos(await this.b.rpc('publico_entrada_procesada', { canal: canalId, clave }), 'marcar lo procesado');
+  }
+
+  async guardarTelefono(contactoId: string, telefono: string, nombrePerfil: string | null): Promise<void> {
+    datos(await this.b.rpc('publico_guardar_telefono', { contacto: contactoId, telefono, nombre_perfil: nombrePerfil ?? '' }), 'guardar el número');
+  }
+
+  async tomarEnvios(f: { canalId?: string; conversacionId?: string }, ahora: Date, limite: number): Promise<EnvioPendiente[]> {
+    const r = datos(await this.b.rpc('publico_tomar_envios', { canal: f.canalId ?? null, sesion: f.conversacionId ?? null, ahora: ahora.toISOString(), limite }), 'tomar los envíos') as EnvioPendiente[];
+    return r.map((x) => ({ ...x, n: Number(x.n), parte: Number(x.parte), intentos: Number(x.intentos) }));
+  }
+
+  async resultadoEnvio(envioId: string, r: ResultadoEnvio, ahora: Date): Promise<void> {
+    datos(await this.b.rpc('publico_resultado_envio', { envio: envioId, resultado: r, ahora: ahora.toISOString() }), 'guardar el resultado del envío');
+  }
+
+  async aplicarEstado(canalId: string, idProveedor: string, estado: EstadoEnvio, error: string | null, ahora: Date): Promise<void> {
+    datos(await this.b.rpc('publico_aplicar_estado', { canal: canalId, id_proveedor: idProveedor, estado, error: error ?? '', ahora: ahora.toISOString() }), 'guardar el estado del mensaje');
+  }
+
+  async claveWhatsapp(canalId: string): Promise<string | null> {
+    const r = datos(await this.b.rpc('servicio_clave_whatsapp', { canal: canalId }), 'leer la clave del canal') as string | null;
+    return r || null;
+  }
+
+  async canalDesconectado(canalId: string, error: string, ahora: Date): Promise<void> {
+    datos(await this.b.rpc('publico_canal_desconectado', { canal: canalId, error, ahora: ahora.toISOString() }), 'desconectar el canal');
+  }
+
+  async canalesConPendientes(ahora: Date): Promise<string[]> {
+    return datos(await this.b.rpc('publico_canales_con_pendientes', { ahora: ahora.toISOString() }), 'buscar canales con pendientes') as string[];
+  }
+
+  async canalesParaRevisarPlantillas(ahora: Date): Promise<string[]> {
+    return datos(await this.b.rpc('publico_canales_para_plantillas', { ahora: ahora.toISOString() }), 'buscar canales para revisar plantillas') as string[];
+  }
+
+  async sincronizarPlantillas(canalId: string, plantillas: readonly Plantilla[], ahora: Date): Promise<void> {
+    datos(await this.b.rpc('publico_sincronizar_plantillas', { canal: canalId, plantillas, ahora: ahora.toISOString() }), 'guardar las plantillas');
   }
 
   async revisarAlertas(ahora: Date): Promise<{ abiertas: number; cerradas: number }> {

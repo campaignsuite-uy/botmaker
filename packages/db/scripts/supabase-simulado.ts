@@ -6,6 +6,7 @@
  *  - roles anon, authenticated y service_role (este último saltea RLS, como en Supabase);
  *  - esquema auth con la tabla users y la función auth.uid(), que lee el claim `sub` del JWT desde
  *    current_setting('request.jwt.claim.sub'), igual que PostgREST;
+ *  - esquema vault con create_secret, update_secret y decrypted_secrets, como supabase_vault (sin cifrar: es memoria);
  *  - `comoPersona(...)`: corre consultas como una persona con sesión (rol authenticated + sub);
  *  - `clienteSimulado(...)`: un cliente con la forma de @supabase/supabase-js (el subconjunto que usa el
  *    repositorio de Supabase: schema().from().select/insert/update/upsert/delete, filtros, orden, rango,
@@ -49,6 +50,29 @@ create function auth.uid() returns uuid
 language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
+
+-- Vault de Supabase (supabase_vault), lo mínimo que usa BotMaker: guardar una clave y leerla descifrada. Acá el texto
+-- queda tal cual (en Supabase va cifrado); ninguna persona puede leerlo, igual que allá.
+create schema vault;
+create table vault.secrets (
+  id uuid primary key default gen_random_uuid(),
+  name text unique,
+  description text not null default '',
+  secret text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create function vault.create_secret(new_secret text, new_name text default null, new_description text default '', new_key_id uuid default null) returns uuid
+language sql as $$
+  insert into vault.secrets (secret, name, description) values (new_secret, new_name, coalesce(new_description, '')) returning id
+$$;
+create function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null, new_key_id uuid default null) returns void
+language sql as $$
+  update vault.secrets set secret = coalesce(new_secret, secret), name = coalesce(new_name, name), description = coalesce(new_description, description), updated_at = now()
+  where id = secret_id
+$$;
+create view vault.decrypted_secrets as select id, name, description, secret, secret as decrypted_secret, created_at, updated_at from vault.secrets;
+revoke all on schema vault from public;
 `;
 
 export const DIR_CORE_DEV = new URL('../core-dev/', import.meta.url).pathname;

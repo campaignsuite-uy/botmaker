@@ -7,11 +7,13 @@
  *  - GET  /v1/configs/webhook   → validar la clave (401 si no vale);
  *  - POST /v1/configs/webhook   → la dirección del aviso con un encabezado propio: {"url", "headers"};
  *  - POST /messages             → mandar un mensaje (texto, botones, lista o plantilla);
- *  - GET  /message_templates    → las plantillas de la cuenta, con su estado.
+ *  - GET  /message_templates    → las plantillas de la cuenta, con su estado (360dialog no avisa los cambios);
+ *  - POST /message_templates    → crear una plantilla y mandarla a revisar a Meta;
+ *  - DELETE /message_templates?name=… → borrarla (en todos sus idiomas).
  *
  * El cliente simulado (simulado.ts) tiene la misma forma: la demo y las pruebas no llaman a 360dialog.
  */
-import { leerPlantilla, type MensajeWhatsapp, type Plantilla, type PlantillaMeta } from '../dominio/whatsapp';
+import { estadoPlantillaDeMeta, leerPlantilla, plantillaAMeta, type EstadoPlantilla, type MensajeWhatsapp, type NuevaPlantilla, type Plantilla, type PlantillaMeta } from '../dominio/whatsapp';
 
 export type ResultadoCliente<T> =
   | { ok: true; valor: T }
@@ -26,6 +28,8 @@ export interface Cliente360 {
   /** Manda un mensaje a un número (solo dígitos). Devuelve el id de WhatsApp del mensaje (wamid…). */
   enviar(clave: string, para: string, mensaje: MensajeWhatsapp): Promise<ResultadoCliente<string>>;
   plantillas(clave: string): Promise<ResultadoCliente<Plantilla[]>>;
+  crearPlantilla(clave: string, p: NuevaPlantilla): Promise<ResultadoCliente<{ id: string | null; estado: EstadoPlantilla }>>;
+  borrarPlantilla(clave: string, nombre: string): Promise<ResultadoCliente<true>>;
 }
 
 export const BASE_360 = 'https://waba-v2.360dialog.io';
@@ -40,7 +44,7 @@ function detalleDe(cuerpo: unknown, status: number): string {
   return `HTTP ${status}${codigo}${m ? `: ${String(m).slice(0, 200)}` : ''}`;
 }
 
-async function pedir<T>(clave: string, metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<ResultadoCliente<T>> {
+async function pedir<T>(clave: string, metodo: 'GET' | 'POST' | 'DELETE', ruta: string, cuerpo?: unknown): Promise<ResultadoCliente<T>> {
   let r: Response;
   try {
     r = await fetch(`${BASE_360}${ruta}`, {
@@ -86,6 +90,15 @@ export function cliente360Real(): Cliente360 {
       if (!r.ok) return r;
       const lista = (r.valor?.data ?? r.valor?.waba_templates ?? []).map(leerPlantilla).filter((p): p is Plantilla => !!p);
       return { ok: true, valor: lista.sort((a, b) => Number(b.usable) - Number(a.usable) || a.nombre.localeCompare(b.nombre)) };
+    },
+    async crearPlantilla(clave, p) {
+      const r = await pedir<{ id?: string; status?: string }>(clave, 'POST', '/message_templates', plantillaAMeta(p));
+      if (!r.ok) return r;
+      return { ok: true, valor: { id: r.valor?.id ? String(r.valor.id) : null, estado: estadoPlantillaDeMeta(r.valor?.status ?? 'PENDING') } };
+    },
+    async borrarPlantilla(clave, nombre) {
+      const r = await pedir<unknown>(clave, 'DELETE', `/message_templates?name=${encodeURIComponent(nombre)}`);
+      return r.ok ? { ok: true, valor: true } : r;
     },
   };
 }

@@ -10,6 +10,9 @@ import { sesionNueva } from '../../dominio/motor';
 import { plantillaPolitica } from '../../dominio/plantilla-politica';
 import type { Bot, MotorFuncion } from '../../dominio/tipos';
 import type { Version } from '../../dominio/versiones';
+import { leerPlantilla, ventanaHasta, type Plantilla } from '../../dominio/whatsapp';
+import { CLAVE_DEMO, NUMERO_DEMO, PLANTILLAS_DEMO, SECRETO_DEMO } from '../../canal-whatsapp/demo';
+import { sha256 } from '../../canal-whatsapp/webhook';
 import { CAMPANA_DEMO, CANDIDATA_DEMO, ORGANIZACION_DEMO } from './semilla';
 
 export const BOT_PUBLICADO = 'bot-demo-3';
@@ -31,7 +34,21 @@ Fuentes: material de prueba de la demo
 Propone un programa de primer empleo para jóvenes de 18 a 25 años, con prácticas pagas en empresas y en el Estado.
 Fuentes: material de prueba de la demo`;
 
+/** El canal de WhatsApp del bot publicado de la demo, conectado a la cuenta del 360dialog simulado. */
+export interface CanalWhatsappSemilla {
+  id: string;
+  botId: string;
+  campanaId: string;
+  numero: string;
+  webhookUrl: string;
+  conectadoEn: string;
+  secretoHash: string;
+  clave: string;
+  plantillas: Plantilla[];
+}
+
 interface SemillaCanal {
+  whatsapp: CanalWhatsappSemilla;
   bot: Bot;
   motores: MotorFuncion[];
   version: Version & { definicion: unknown };
@@ -66,6 +83,7 @@ export function semillaCanal(ahora: Date): SemillaCanal {
     contacto('ct-demo-2', 'web', 200),
     contacto('ct-demo-3', 'web', 1500, 'Rosa', { 'contacto.nombre': 'Rosa' }),
     contacto('ct-demo-4', 'landing', 12 * 1440, 'Marcos', { 'contacto.nombre': 'Marcos', 'contacto.zona': 'Arraiján' }),
+    { ...contacto('ct-demo-5', 'whatsapp', 31 * 60), telefono: '50761234567', nombrePerfil: 'Marta G.' },
   ];
 
   const mensajes = new Map<string, Mensaje[]>();
@@ -130,8 +148,29 @@ export function semillaCanal(ahora: Date): SemillaCanal {
     ['bot', 'Gracias a usted. Cuando quiera, me escribe.', { cajaId: 'n_cierre', decision: { recorrido: ['n_cierre'], regla: 'cortesia', costoUsd: 0 } }],
   ]);
 
+  // Por WhatsApp: Andrés le contestó hace 29 horas y ella respondió hace 28. La ventana de 24 horas ya se cerró: para
+  // volver a escribirle, solo una plantilla.
+  conversar('conv-demo-5', contactos[4]!, 30 * 60 + 2, 'en_atencion', [
+    ['sistema', 'Está conversando con un asistente virtual con inteligencia artificial: puede equivocarse.\n\nCondiciones del asistente: /publico/b/p5v9c3h7pa/condiciones'],
+    ['contacto', 'Hola, quería saber si la candidata va a venir a Chilibre'],
+    ['bot', 'No tengo ese dato. Le paso con una persona del equipo: le va a responder por este mismo chat.', {
+      cajaId: 'n_derivar', decision: { recorrido: ['n_interpretar', 'n_consulta', 'n_derivar'], intencion: 'agenda', tema: 'ninguno', motor: 'gemini-3.1-flash-lite', costoUsd: 0.00015 },
+    }],
+    ['agente', 'Hola, Marta: soy Andrés, del equipo. Lo averiguo con la agenda y le escribo.', { personaId: 'p-andres', creadoEn: hace(29 * 60) }],
+    ['contacto', 'Dale, gracias', { creadoEn: hace(28 * 60) }],
+  ], {
+    derivadaEn: hace(30 * 60), motivoDerivacion: 'Consulta de agenda sin dato', cajaDerivacion: 'n_derivar', cajaActual: 'n_derivar', asignadaA: 'p-andres',
+    ultimoDelEquipo: hace(29 * 60), ultimoDelContacto: hace(28 * 60), actualizadaEn: hace(28 * 60), ventanaHasta: ventanaHasta(hace(28 * 60)),
+  });
+  for (const m of mensajes.get('conv-demo-5') ?? []) if (m.autor !== 'contacto') m.envio = 'leido';
+
   const condiciones: Condiciones[] = [{
     botId: bot.id, numero: 1, texto: condicionesPorDefecto({ mercado: 'PA', candidato: CANDIDATA_DEMO, trato: 'usted', dias: 90 }), publicadasEn: hace(12 * 1440), publicadasPor: 'p-joaquin',
   }];
-  return { bot, motores: MOTORES_POR_DEFECTO.map((m) => ({ ...m })), version, contactos, conversaciones, mensajes, condiciones, publicadoDesde: hace(10 * 1440) };
+  const whatsapp: CanalWhatsappSemilla = {
+    id: 'wa-demo-1', botId: bot.id, campanaId: CAMPANA_DEMO, numero: NUMERO_DEMO, webhookUrl: `/publico/api/whatsapp/${ID_PUBLICO_DEMO}`,
+    conectadoEn: hace(3 * 1440), secretoHash: sha256(SECRETO_DEMO), clave: CLAVE_DEMO,
+    plantillas: PLANTILLAS_DEMO.map((p) => leerPlantilla(p)).filter((p): p is Plantilla => !!p),
+  };
+  return { whatsapp, bot, motores: MOTORES_POR_DEFECTO.map((m) => ({ ...m })), version, contactos, conversaciones, mensajes, condiciones, publicadoDesde: hace(10 * 1440) };
 }

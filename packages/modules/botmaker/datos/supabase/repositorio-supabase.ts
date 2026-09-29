@@ -20,8 +20,10 @@ import type {
 import type { Alerta, Condiciones, PedidoDatos } from '../../dominio/conversaciones';
 import { ErrorDatos, errorDeBase } from '../errores';
 import type {
-  CanalWeb, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FilaMuestra, FiltroConversaciones, FiltroLlamadas, Repositorio, TurnoDevuelto,
+  CanalWeb, CanalWhatsapp, ConexionWhatsapp, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FilaMuestra, FiltroConversaciones,
+  FiltroLlamadas, PlantillaEnviada, PlantillaGuardada, Repositorio, TurnoDevuelto,
 } from '../repositorio';
+import type { Plantilla } from '../../dominio/whatsapp';
 import * as M from './mapeo';
 
 export interface ClientesSupabase {
@@ -379,6 +381,53 @@ export class RepositorioSupabase implements Repositorio {
   async borrarContacto(contactoId: string, nota: string, _por: string): Promise<void> {
     const b = await this.bots_();
     datos(await b.rpc('borrar_contacto', { contacto: contactoId, nota }), 'borrar el contacto');
+  }
+
+  // ── WhatsApp (bots_0008) ──────────────────────────────────────────────────────────────────────
+
+  async canalWhatsapp(botId: string): Promise<CanalWhatsapp | null> {
+    const b = await this.bots_();
+    const r = datos(await b.rpc('canal_whatsapp', { bot: botId }), 'leer el canal de WhatsApp') as CanalWhatsapp | null;
+    if (!r) return null;
+    const s = r.salud;
+    return {
+      ...r, respuestasMes: Number(r.respuestasMes),
+      salud: {
+        dias: Number(s.dias), recibidos: Number(s.recibidos), repetidos: Number(s.repetidos), enviados: Number(s.enviados), entregados: Number(s.entregados),
+        leidos: Number(s.leidos), fallidos: Number(s.fallidos), demoraMaxMs: Number(s.demoraMaxMs), demoraMediaMs: s.demoraMediaMs === null ? null : Number(s.demoraMediaMs),
+        pendientes: Number(s.pendientes),
+      },
+    };
+  }
+
+  async conectarWhatsapp(botId: string, d: ConexionWhatsapp, _por: string): Promise<string> {
+    const b = await this.bots_();
+    return String(datos(await b.rpc('conectar_whatsapp', { bot: botId, clave: d.clave, numero: d.numero ?? '', secreto_hash: d.secretoHash, webhook_url: d.webhookUrl }), 'conectar WhatsApp'));
+  }
+
+  async prenderWhatsapp(botId: string, activo: boolean, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('prender_whatsapp', { bot: botId, activo }), activo ? 'prender WhatsApp' : 'apagar WhatsApp');
+  }
+
+  async responderConPlantilla(conversacionId: string, p: PlantillaEnviada, _por: string): Promise<number> {
+    const b = await this.bots_();
+    return Number(datos(await b.rpc('responder_con_plantilla', { sesion: conversacionId, plantilla: p }), 'mandar la plantilla'));
+  }
+
+  async plantillas(botId: string): Promise<PlantillaGuardada[]> {
+    const b = await this.bots_();
+    return datos(await b.rpc('plantillas', { bot: botId }), 'leer las plantillas') as PlantillaGuardada[];
+  }
+
+  async guardarPlantillaCreada(botId: string, p: Plantilla, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('guardar_plantilla_creada', { bot: botId, plantilla: p }), 'guardar la plantilla');
+  }
+
+  async quitarPlantilla(botId: string, nombre: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('quitar_plantilla', { bot: botId, nombre }), 'quitar la plantilla');
   }
 
   async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {

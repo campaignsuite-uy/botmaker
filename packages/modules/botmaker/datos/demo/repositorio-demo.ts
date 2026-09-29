@@ -22,9 +22,13 @@ import type {
 import { PRODUCTO } from '../../dominio/tipos';
 import { ErrorDatos } from '../errores';
 import type {
-  BotPublico, CanalWeb, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FiltroConversaciones, FiltroLlamadas, FilaMuestra,
-  Repositorio, RepositorioPublico, RepositorioTareas, TurnoDevuelto, TurnoGuardado,
+  BotPublico, CanalWeb, CanalWhatsapp, CanalWhatsappPublico, ConexionWhatsapp, ConversacionCompleta, EntradaWebhook, EnvioPendiente, ExportacionContacto,
+  FilaContacto, FilaConversacion, FiltroConversaciones, FiltroLlamadas, FilaMuestra, PlantillaEnviada, PlantillaGuardada, Repositorio, RepositorioPublico,
+  RepositorioTareas, RepositorioWhatsapp, ResultadoEnvio, SaludCanal, TurnoDevuelto, TurnoGuardado,
 } from '../repositorio';
+import {
+  estadoSiguiente, mensajePlantilla, ventanaAbierta, type EstadoCanal, type EstadoEnvio, type MensajeWhatsapp, type Plantilla,
+} from '../../dominio/whatsapp';
 import {
   inicioVentana, LIMITES_WEB, MINUTOS_ALERTA_DERIVADA, type Alerta, type Canal, type Condiciones, type Contacto, type Conversacion, type EventoAnalitica, type Mensaje, type PedidoDatos,
 } from '../../dominio/conversaciones';
@@ -58,11 +62,76 @@ interface EstadoDemo {
   revisiones: Map<string, { veredicto: 'correcta' | 'incorrecta'; convertida: boolean; por: string; fecha: string }>;
   pedidos: PedidoDatos[];
   siguienteId: number;
+  // Etapa 7: WhatsApp.
+  wa: {
+    canales: CanalDemo[];
+    /** Vault simulado: la clave de cada canal, por su referencia. */
+    vault: Map<string, string>;
+    entradas: Map<string, EntradaDemo>;
+    envios: EnvioDemo[];
+    stats: Map<string, StatsDia>;
+    plantillas: PlantillaGuardada[];
+  };
 }
+
+interface CanalDemo {
+  id: string;
+  botId: string;
+  campanaId: string;
+  estado: EstadoCanal;
+  numero: string | null;
+  webhookUrl: string | null;
+  conectadoEn: string | null;
+  secretoHash: string | null;
+  claveRef: string | null;
+  ultimoRecibido: string | null;
+  ultimoError: string | null;
+  ultimoErrorEn: string | null;
+  plantillasRevisadasEn: string | null;
+}
+
+interface EntradaDemo {
+  canalId: string;
+  clave: string;
+  entrada: EntradaWebhook | null;
+  recibidaEn: string;
+  procesadaEn: string | null;
+  tomadaEn: string | null;
+  intentos: number;
+}
+
+interface EnvioDemo {
+  id: string;
+  canalId: string;
+  conversacionId: string;
+  n: number;
+  parte: number;
+  mensaje: MensajeWhatsapp;
+  estado: 'pendiente' | 'enviando' | EstadoEnvio;
+  idProveedor: string | null;
+  intentos: number;
+  proximo: string;
+  error: string | null;
+  creadoEn: string;
+}
+
+interface StatsDia {
+  recibidos: number;
+  repetidos: number;
+  enviados: number;
+  entregados: number;
+  leidos: number;
+  fallidos: number;
+  avisos: number;
+  demoraTotalMs: number;
+  demoraMaxMs: number;
+}
+
+const statsVacias = (): StatsDia => ({ recibidos: 0, repetidos: 0, enviados: 0, entregados: 0, leidos: 0, fallidos: 0, avisos: 0, demoraTotalMs: 0, demoraMaxMs: 0 });
 
 const ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789';
 
-export class RepositorioDemo implements Repositorio, RepositorioPublico, RepositorioTareas {
+export class RepositorioDemo implements Repositorio, RepositorioPublico, RepositorioTareas, RepositorioWhatsapp {
   private e: EstadoDemo;
 
   constructor(opciones: { ahora?: Date; vacio?: boolean } = {}) {
@@ -101,6 +170,18 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       revisiones: new Map(),
       pedidos: [],
       siguienteId: 100,
+      wa: {
+        canales: c ? [{
+          id: c.whatsapp.id, botId: c.whatsapp.botId, campanaId: c.whatsapp.campanaId, estado: 'activo', numero: c.whatsapp.numero, webhookUrl: c.whatsapp.webhookUrl,
+          conectadoEn: c.whatsapp.conectadoEn, secretoHash: c.whatsapp.secretoHash, claveRef: 'vault-demo-1', ultimoRecibido: null, ultimoError: null, ultimoErrorEn: null,
+          plantillasRevisadasEn: null,
+        }] : [],
+        vault: new Map(c ? [['vault-demo-1', c.whatsapp.clave]] : []),
+        entradas: new Map(),
+        envios: [],
+        stats: new Map(),
+        plantillas: c ? c.whatsapp.plantillas.map((pl) => ({ ...pl, canalId: c.whatsapp.id, creadaPor: null, creadaEn: c.whatsapp.conectadoEn, revisadaEn: c.whatsapp.conectadoEn })) : [],
+      },
     };
   }
 
@@ -616,14 +697,18 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       c.ultimoDelContacto = t.ahora;
     }
     let primero = true;
+    const canalWa = c.canal === 'whatsapp' ? this.e.wa.canales.find((x) => x.botId === c.botId) : undefined;
     for (const m of t.salientes) {
       const esBot = m.autor === 'bot';
-      nuevos.push(this.agregarMensaje(c, {
+      const nuevo = this.agregarMensaje(c, {
         autor: m.autor, personaId: null, tipo: 'texto', texto: m.texto, datos: m.datos, cajaId: m.cajaId, decision: esBot && primero ? t.decision : null,
         versionId: t.versionId, idCanal: null, muestra: esBot && primero && t.muestra, creadoEn: t.ahora,
-      }));
+      });
+      if (canalWa && m.envios?.length) this.encolar(canalWa.id, c, nuevo, m.envios, t.ahora);
+      nuevos.push(nuevo);
       if (esBot) primero = false;
     }
+    if (t.ventanaHasta && t.entrante) c.ventanaHasta = t.ventanaHasta;
     c.sesion = structuredClone(t.sesion);
     c.estado = t.estado;
     c.cajaActual = t.cajaActual;
@@ -659,7 +744,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       .filter((c) => {
         if (!buscar) return true;
         const ct = this.e.contactos.find((x) => x.id === c.contactoId);
-        return !!ct && [ct.nombre ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(buscar));
+        return !!ct && [ct.nombre ?? '', ct.nombrePerfil ?? '', ct.telefono ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(buscar));
       })
       .sort((a, b) => b.actualizadaEn.localeCompare(a.actualizadaEn))
       .slice(0, filtro.limite ?? 100)
@@ -678,7 +763,17 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const c = this.e.conversaciones.find((x) => x.id === conversacionId);
     if (!c) return null;
     const ct = this.e.contactos.find((x) => x.id === c.contactoId)!;
-    return { conversacion: structuredClone(c), contacto: structuredClone(ct), mensajes: structuredClone(this.e.mensajes.get(c.id) ?? []) };
+    return { conversacion: structuredClone(c), contacto: structuredClone(ct), mensajes: (this.e.mensajes.get(c.id) ?? []).map((m) => ({ ...structuredClone(m), ...this.estadoEnvioDe(c.id, m) })) };
+  }
+
+  /** Cómo va el envío de un mensaje por WhatsApp: el de la parte más atrasada (fallido gana). */
+  private estadoEnvioDe(conversacionId: string, m: Mensaje): { envio?: EstadoEnvio | null } {
+    const partes = this.e.wa.envios.filter((x) => x.conversacionId === conversacionId && x.n === m.n);
+    if (!partes.length) return m.envio ? { envio: m.envio } : {};
+    const estados = partes.map((x) => (x.estado === 'enviando' ? 'pendiente' : x.estado));
+    if (estados.includes('fallido')) return { envio: 'fallido' };
+    const orden: EstadoEnvio[] = ['pendiente', 'enviado', 'entregado', 'leido'];
+    return { envio: orden[Math.min(...estados.map((x) => orden.indexOf(x)))] ?? 'pendiente' };
   }
 
   private convDelEquipo(conversacionId: string, por: string, accion: Accion = 'responder_conversaciones'): Conversacion {
@@ -711,9 +806,25 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       c.estado = 'en_atencion';
       c.asignadaA = por;
     }
+    const canalWa = this.canalWaDeConversacion(c);
+    if (canalWa && !ventanaAbierta(c.ventanaHasta, new Date(ahora))) throw new ErrorDatos('ventana_cerrada', 'La ventana de 24 horas está cerrada: solo se puede escribir con una plantilla.');
     const m = this.agregarMensaje(c, { autor: 'agente', personaId: por, tipo: 'texto', texto: t, datos: null, cajaId: null, decision: null, versionId: null, idCanal: null, muestra: false, creadoEn: ahora });
+    if (canalWa) this.encolar(canalWa.id, c, m, [{ type: 'text', text: { body: t } }], ahora);
     c.ultimoDelEquipo = ahora;
     return m.n;
+  }
+
+  private canalWaDeConversacion(c: Conversacion): CanalDemo | null {
+    return c.canal === 'whatsapp' ? this.e.wa.canales.find((x) => x.botId === c.botId) ?? null : null;
+  }
+
+  private encolar(canalId: string, c: Conversacion, m: Mensaje, envios: readonly MensajeWhatsapp[], ahora: string, fallido: string | null = null) {
+    envios.forEach((mensaje, parte) => {
+      this.e.wa.envios.push({
+        id: this.nuevoId('env'), canalId, conversacionId: c.id, n: m.n, parte, mensaje: structuredClone(mensaje), estado: fallido ? 'fallido' : 'pendiente',
+        idProveedor: null, intentos: 0, proximo: ahora, error: fallido, creadoEn: ahora,
+      });
+    });
   }
 
   async devolverConversacion(conversacionId: string, turno: TurnoDevuelto, por: string): Promise<void> {
@@ -721,8 +832,11 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (c.estado !== 'derivada' && c.estado !== 'en_atencion') throw new ErrorDatos('no_derivada', 'La conversación no está derivada.');
     const ahora = new Date().toISOString();
     let primero = true;
+    const canalWa = this.canalWaDeConversacion(c);
+    const abierta = ventanaAbierta(c.ventanaHasta, new Date(ahora));
     for (const m of turno.mensajes) {
-      this.agregarMensaje(c, { autor: 'bot', personaId: null, tipo: 'texto', texto: m.texto, datos: m.datos, cajaId: m.cajaId, decision: primero ? turno.decision : null, versionId: c.versionId, idCanal: null, muestra: false, creadoEn: ahora });
+      const nuevo = this.agregarMensaje(c, { autor: 'bot', personaId: null, tipo: 'texto', texto: m.texto, datos: m.datos, cajaId: m.cajaId, decision: primero ? turno.decision : null, versionId: c.versionId, idCanal: null, muestra: false, creadoEn: ahora });
+      if (canalWa && m.envios?.length) this.encolar(canalWa.id, c, nuevo, m.envios, ahora, abierta ? null : 'La ventana de 24 horas estaba cerrada: no se mandó.');
       primero = false;
     }
     c.estado = 'bot';
@@ -769,7 +883,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       if (a.cerradaEn) continue;
       const k = a.tipo === 'tope_alcanzado' ? `${a.tipo}|${a.ref}|${a.botId}` : `${a.tipo}|${a.ref}`;
       if (debe.has(k)) debe.delete(k);
-      else if (a.tipo !== 'canal_desconectado') {
+      else if (a.tipo !== 'canal_desconectado' || this.e.wa.canales.find((x) => x.id === a.ref)?.estado !== 'desconectado') {
         a.cerradaEn = iso;
         cerradas++;
       }
@@ -812,7 +926,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (q.length < 2) return [];
     return this.e.contactos
       .filter((ct) => ct.campanaId === campanaId && !ct.borradoEn)
-      .filter((ct) => ct.id === texto.trim() || [ct.nombre ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(q))
+      .filter((ct) => ct.id === texto.trim() || [ct.nombre ?? '', ct.nombrePerfil ?? '', ct.telefono ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(q))
         || this.e.conversaciones.some((c) => c.contactoId === ct.id && (this.e.mensajes.get(c.id) ?? []).some((m) => m.autor === 'contacto' && m.texto?.toLowerCase().includes(q))))
       .slice(0, 50)
       .map((ct) => {
@@ -844,6 +958,8 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const ahora = new Date().toISOString();
     ct.nombre = null;
     ct.datos = {};
+    ct.telefono = null;
+    ct.nombrePerfil = null;
     ct.borradoEn = ahora;
     for (const c of this.e.conversaciones.filter((x) => x.contactoId === ct.id)) {
       for (const m of this.e.mensajes.get(c.id) ?? []) {
@@ -875,15 +991,317 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       }
       if (new Date(c.actualizadaEn).getTime() < limite) c.sesion = { ...c.sesion, variables: {}, turnos: [] };
     }
-    for (const ct of this.e.contactos) {
-      const b = this.e.bots.find((x) => x.id === ct.botId);
-      const ultima = this.e.conversaciones.filter((c) => c.contactoId === ct.id).map((c) => c.actualizadaEn).sort().at(-1) ?? ct.creadoEn;
-      if (b && new Date(ultima).getTime() < ahora.getTime() - b.diasGuardado * 864e5 && (ct.nombre || Object.keys(ct.datos).length)) {
-        ct.nombre = null;
-        ct.datos = {};
+    // Los datos del contacto (nombre, número, lo que dio) no vencen: son la base de contactos de la campaña y se borran a
+    // pedido (decisión del 29/9). Lo que se vacía es el texto de los mensajes y lo que salió por WhatsApp.
+    for (const x of this.e.wa.envios) {
+      const c = this.e.conversaciones.find((y) => y.id === x.conversacionId);
+      const b = c ? this.e.bots.find((y) => y.id === c.botId) : undefined;
+      if (b && new Date(x.creadoEn).getTime() < ahora.getTime() - b.diasGuardado * 864e5) x.mensaje = { type: 'text', text: { body: '' } };
+    }
+    const limpieza = ahora.getTime() - 8 * 864e5;
+    for (const [k, x] of this.e.wa.entradas) if (new Date(x.recibidaEn).getTime() < limpieza) this.e.wa.entradas.delete(k);
+    return n;
+  }
+
+  // ── WhatsApp: lo que ve y hace el equipo (etapa 7) ────────────────────────────────────────────
+
+  private statsDe(canalId: string, dia: string): StatsDia {
+    const k = `${canalId}|${dia}`;
+    let x = this.e.wa.stats.get(k);
+    if (!x) {
+      x = statsVacias();
+      this.e.wa.stats.set(k, x);
+    }
+    return x;
+  }
+
+  private salud(canalId: string, ahora: Date): SaludCanal {
+    const dias = 7;
+    const desde = new Date(ahora.getTime() - (dias - 1) * 864e5).toISOString().slice(0, 10);
+    const t = statsVacias();
+    for (const [k, v] of this.e.wa.stats) {
+      const [c, dia] = k.split('|');
+      if (c !== canalId || dia! < desde) continue;
+      for (const clave of Object.keys(t) as (keyof StatsDia)[]) t[clave] = clave === 'demoraMaxMs' ? Math.max(t[clave], v[clave]) : t[clave] + v[clave];
+    }
+    return {
+      dias, recibidos: t.recibidos, repetidos: t.repetidos, enviados: t.enviados, entregados: t.entregados, leidos: t.leidos, fallidos: t.fallidos,
+      demoraMaxMs: t.demoraMaxMs, demoraMediaMs: t.avisos ? Math.round(t.demoraTotalMs / t.avisos) : null,
+      pendientes: this.e.wa.envios.filter((x) => x.canalId === canalId && (x.estado === 'pendiente' || x.estado === 'enviando')).length,
+    };
+  }
+
+  async canalWhatsapp(botId: string): Promise<CanalWhatsapp | null> {
+    const c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) return null;
+    const ahora = new Date();
+    const mes = ahora.toISOString().slice(0, 7);
+    return {
+      id: c.id, botId: c.botId, estado: c.estado, numero: c.numero, webhookUrl: c.webhookUrl, conectadoEn: c.conectadoEn, ultimoRecibido: c.ultimoRecibido,
+      ultimoError: c.ultimoError, ultimoErrorEn: c.ultimoErrorEn, salud: this.salud(c.id, ahora),
+      respuestasMes: this.e.wa.envios.filter((x) => x.canalId === c.id && x.idProveedor && x.creadoEn.startsWith(mes) && x.mensaje.type !== 'template').length,
+    };
+  }
+
+  async conectarWhatsapp(botId: string, d: ConexionWhatsapp, por: string): Promise<string> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    if (!/^[0-9a-f]{64}$/.test(d.secretoHash) || !d.clave.trim() || !d.webhookUrl) throw new ErrorDatos('datos', 'Faltan datos para conectar el canal.');
+    const ahora = new Date().toISOString();
+    let c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) {
+      c = {
+        id: this.nuevoId('wa'), botId, campanaId: b.campanaId, estado: 'activo', numero: null, webhookUrl: null, conectadoEn: null, secretoHash: null,
+        claveRef: null, ultimoRecibido: null, ultimoError: null, ultimoErrorEn: null, plantillasRevisadasEn: null,
+      };
+      this.e.wa.canales.push(c);
+    }
+    c.claveRef ??= this.nuevoId('vault');
+    this.e.wa.vault.set(c.claveRef, d.clave.trim());
+    Object.assign(c, { estado: 'activo', numero: d.numero, webhookUrl: d.webhookUrl, conectadoEn: ahora, secretoHash: d.secretoHash, ultimoError: null, ultimoErrorEn: null, plantillasRevisadasEn: null });
+    for (const a of this.e.alertas) if (a.tipo === 'canal_desconectado' && a.ref === c.id && !a.cerradaEn) a.cerradaEn = ahora;
+    return c.id;
+  }
+
+  async prenderWhatsapp(botId: string, activo: boolean, por: string): Promise<void> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    const c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) throw new ErrorDatos('sin_canal', 'El bot no tiene WhatsApp conectado.');
+    if (activo && c.estado === 'desconectado') throw new ErrorDatos('canal_desconectado', 'El canal está desconectado: hay que volver a conectarlo con una clave que funcione.');
+    c.estado = activo ? 'activo' : 'apagado';
+  }
+
+  async responderConPlantilla(conversacionId: string, p: PlantillaEnviada, por: string): Promise<number> {
+    const c = this.convDelEquipo(conversacionId, por);
+    const canalWa = this.canalWaDeConversacion(c);
+    if (!canalWa) throw new ErrorDatos('canal_no_whatsapp', 'Las plantillas son solo para conversaciones de WhatsApp.');
+    if (c.estado === 'cerrada') throw new ErrorDatos('conversacion_cerrada', 'La conversación está cerrada.');
+    const pl = this.e.wa.plantillas.find((x) => x.canalId === canalWa.id && x.nombre === p.nombre && x.idioma === p.idioma);
+    if (!pl?.usable) throw new ErrorDatos('plantilla_no_usable', 'Esa plantilla no está aprobada o no se puede mandar desde la bandeja.');
+    const texto = p.texto.trim();
+    if (!texto || texto.length > 4096 || pl.variables.some((v) => !(p.valores[v] ?? '').trim())) throw new ErrorDatos('datos', 'Completá todos los espacios de la plantilla.');
+    const ahora = new Date().toISOString();
+    if (c.estado === 'bot') {
+      c.derivadaEn = ahora;
+      c.motivoDerivacion = 'La retomó el equipo con una plantilla';
+      c.sesion = { ...c.sesion, estado: 'derivada', espera: null };
+    }
+    c.estado = 'en_atencion';
+    c.asignadaA ??= por;
+    const m = this.agregarMensaje(c, { autor: 'agente', personaId: por, tipo: 'texto', texto, datos: { plantilla: pl.nombre } as Mensaje['datos'], cajaId: null, decision: null, versionId: null, idCanal: null, muestra: false, creadoEn: ahora });
+    this.encolar(canalWa.id, c, m, [mensajePlantilla(pl, p.valores)], ahora);
+    c.ultimoDelEquipo = ahora;
+    return m.n;
+  }
+
+  async plantillas(botId: string): Promise<PlantillaGuardada[]> {
+    const c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) return [];
+    return this.e.wa.plantillas.filter((x) => x.canalId === c.id).sort((a, b) => Number(b.usable) - Number(a.usable) || a.nombre.localeCompare(b.nombre)).map((x) => structuredClone(x));
+  }
+
+  async guardarPlantillaCreada(botId: string, p: Plantilla, por: string): Promise<void> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    const c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) throw new ErrorDatos('sin_canal', 'El bot no tiene WhatsApp conectado.');
+    const ahora = new Date().toISOString();
+    this.e.wa.plantillas = this.e.wa.plantillas.filter((x) => !(x.canalId === c.id && x.nombre === p.nombre && x.idioma === p.idioma));
+    this.e.wa.plantillas.push({ ...structuredClone(p), canalId: c.id, creadaPor: por, creadaEn: ahora, revisadaEn: ahora });
+  }
+
+  async quitarPlantilla(botId: string, nombre: string, por: string): Promise<void> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    const c = this.e.wa.canales.find((x) => x.botId === botId);
+    if (!c) return;
+    this.e.wa.plantillas = this.e.wa.plantillas.filter((x) => !(x.canalId === c.id && x.nombre === nombre));
+  }
+
+  // ── WhatsApp sin persona: el aviso, la cola y el envío ────────────────────────────────────────
+
+  private publicoDe(c: CanalDemo): CanalWhatsappPublico {
+    const b = this.e.bots.find((x) => x.id === c.botId)!;
+    return { id: c.id, botId: c.botId, idPublico: b.idPublico, estado: c.estado, secretoHash: c.secretoHash };
+  }
+
+  async canalWhatsappPublico(idPublico: string): Promise<CanalWhatsappPublico | null> {
+    const b = this.e.bots.find((x) => x.idPublico === idPublico);
+    const c = b ? this.e.wa.canales.find((x) => x.botId === b.id) : undefined;
+    return c ? this.publicoDe(c) : null;
+  }
+
+  async canalWhatsappPorId(canalId: string): Promise<CanalWhatsappPublico | null> {
+    const c = this.e.wa.canales.find((x) => x.id === canalId);
+    return c ? this.publicoDe(c) : null;
+  }
+
+  async recibirEntradas(canalId: string, entradas: readonly EntradaWebhook[], p: { ahora: Date; demoraMs: number; numero: string | null }): Promise<{ nuevas: number; repetidas: number }> {
+    const c = this.e.wa.canales.find((x) => x.id === canalId);
+    if (!c) throw new ErrorDatos('no_existe', 'No existe el canal.');
+    const iso = p.ahora.toISOString();
+    const st = this.statsDe(canalId, iso.slice(0, 10));
+    let nuevas = 0;
+    let repetidas = 0;
+    for (const e of entradas) {
+      const k = `${canalId}|${e.clave}`;
+      if (this.e.wa.entradas.has(k)) {
+        repetidas++;
+        continue;
+      }
+      this.e.wa.entradas.set(k, { canalId, clave: e.clave, entrada: structuredClone(e), recibidaEn: iso, procesadaEn: null, tomadaEn: null, intentos: 0 });
+      nuevas++;
+      if (e.tipo === 'mensaje') {
+        st.recibidos++;
+        c.ultimoRecibido = iso;
       }
     }
-    return n;
+    st.repetidos += repetidas;
+    st.avisos++;
+    st.demoraTotalMs += p.demoraMs;
+    st.demoraMaxMs = Math.max(st.demoraMaxMs, p.demoraMs);
+    if (!c.numero && p.numero) c.numero = p.numero;
+    return { nuevas, repetidas };
+  }
+
+  async entradasPendientes(canalId: string, limite: number, ahora: Date): Promise<EntradaWebhook[]> {
+    const vencida = ahora.getTime() - 2 * 60_000;
+    const lista = [...this.e.wa.entradas.values()]
+      .filter((x) => x.canalId === canalId && !x.procesadaEn && x.entrada && x.intentos < 5 && (!x.tomadaEn || new Date(x.tomadaEn).getTime() < vencida))
+      .sort((a, b) => a.recibidaEn.localeCompare(b.recibidaEn) || a.entrada!.hora.localeCompare(b.entrada!.hora))
+      .slice(0, limite);
+    for (const x of lista) {
+      x.tomadaEn = ahora.toISOString();
+      x.intentos++;
+    }
+    return lista.map((x) => structuredClone(x.entrada!));
+  }
+
+  async entradaProcesada(canalId: string, clave: string): Promise<void> {
+    const x = this.e.wa.entradas.get(`${canalId}|${clave}`);
+    if (!x) return;
+    x.procesadaEn = new Date().toISOString();
+    // Queda la clave (para descartar reintentos); lo de la persona se borra.
+    x.entrada = null;
+  }
+
+  async guardarTelefono(contactoId: string, telefono: string, nombrePerfil: string | null): Promise<void> {
+    const ct = this.e.contactos.find((x) => x.id === contactoId);
+    if (!ct) throw new ErrorDatos('no_existe', 'No existe el contacto.');
+    if (!/^\d{7,15}$/.test(telefono)) throw new ErrorDatos('datos', 'Número inválido.');
+    ct.telefono = telefono;
+    ct.nombrePerfil = nombrePerfil?.trim().slice(0, 120) || null;
+  }
+
+  async tomarEnvios(f: { canalId?: string; conversacionId?: string }, ahora: Date, limite: number): Promise<EnvioPendiente[]> {
+    const iso = ahora.toISOString();
+    const vencido = new Date(ahora.getTime() - 2 * 60_000).toISOString();
+    const lista = this.e.wa.envios
+      .filter((x) => (!f.canalId || x.canalId === f.canalId) && (!f.conversacionId || x.conversacionId === f.conversacionId))
+      .filter((x) => (x.estado === 'pendiente' && x.proximo <= iso) || (x.estado === 'enviando' && x.proximo < vencido))
+      .sort((a, b) => a.conversacionId.localeCompare(b.conversacionId) || a.n - b.n || a.parte - b.parte)
+      .slice(0, limite);
+    return lista.map((x) => {
+      x.estado = 'enviando';
+      x.intentos++;
+      x.proximo = iso;
+      const conv = this.e.conversaciones.find((c) => c.id === x.conversacionId);
+      const ct = conv ? this.e.contactos.find((y) => y.id === conv.contactoId) : undefined;
+      return { id: x.id, canalId: x.canalId, conversacionId: x.conversacionId, n: x.n, parte: x.parte, direccion: ct?.telefono ?? null, mensaje: structuredClone(x.mensaje), intentos: x.intentos };
+    });
+  }
+
+  async resultadoEnvio(envioId: string, r: ResultadoEnvio, ahora: Date): Promise<void> {
+    const x = this.e.wa.envios.find((y) => y.id === envioId);
+    if (!x) return;
+    const st = this.statsDe(x.canalId, ahora.toISOString().slice(0, 10));
+    if (r.tipo === 'enviado') {
+      x.estado = 'enviado';
+      x.idProveedor = r.idProveedor;
+      x.error = null;
+      st.enviados++;
+    } else if (r.tipo === 'reintentar') {
+      x.estado = 'pendiente';
+      x.proximo = r.en;
+      x.error = r.error;
+    } else {
+      x.estado = 'fallido';
+      x.error = r.error;
+      st.fallidos++;
+    }
+  }
+
+  async aplicarEstado(canalId: string, idProveedor: string, estado: EstadoEnvio, error: string | null, ahora: Date): Promise<void> {
+    const x = this.e.wa.envios.find((y) => y.canalId === canalId && y.idProveedor === idProveedor);
+    if (!x || x.estado === 'pendiente' || x.estado === 'enviando') return;
+    const nuevo = estadoSiguiente(x.estado, estado);
+    if (nuevo === x.estado) return;
+    x.estado = nuevo;
+    if (estado === 'fallido') x.error = error ?? 'WhatsApp no lo pudo entregar.';
+    const st = this.statsDe(canalId, ahora.toISOString().slice(0, 10));
+    if (nuevo === 'entregado') st.entregados++;
+    if (nuevo === 'leido') st.leidos++;
+    if (nuevo === 'fallido') st.fallidos++;
+    const conv = this.e.conversaciones.find((c) => c.id === x.conversacionId);
+    const ct = conv ? this.e.contactos.find((y) => y.id === conv.contactoId) : undefined;
+    if (conv && ct) this.anotar(conv, ct, [{ nombre: 'estado_mensaje', cajaId: null, datos: { estado: nuevo } }], ahora.toISOString());
+  }
+
+  async claveWhatsapp(canalId: string): Promise<string | null> {
+    const c = this.e.wa.canales.find((x) => x.id === canalId);
+    return c?.claveRef && c.estado !== 'desconectado' ? this.e.wa.vault.get(c.claveRef) ?? null : null;
+  }
+
+  async canalDesconectado(canalId: string, error: string, ahora: Date): Promise<void> {
+    const c = this.e.wa.canales.find((x) => x.id === canalId);
+    if (!c) return;
+    const iso = ahora.toISOString();
+    c.estado = 'desconectado';
+    c.ultimoError = error.slice(0, 300);
+    c.ultimoErrorEn = iso;
+    if (!this.e.alertas.some((a) => a.tipo === 'canal_desconectado' && a.ref === c.id && !a.cerradaEn)) {
+      this.e.alertas.push({ id: this.nuevoId('al'), tipo: 'canal_desconectado', botId: c.botId, campanaId: c.campanaId, ref: c.id, abiertaEn: iso, cerradaEn: null });
+    }
+  }
+
+  async canalesConPendientes(ahora: Date): Promise<string[]> {
+    const iso = ahora.toISOString();
+    const vencida = new Date(ahora.getTime() - 2 * 60_000).toISOString();
+    const ids = new Set<string>();
+    for (const x of this.e.wa.entradas.values()) if (!x.procesadaEn && x.entrada && x.intentos < 5 && (!x.tomadaEn || x.tomadaEn < vencida)) ids.add(x.canalId);
+    for (const x of this.e.wa.envios) if ((x.estado === 'pendiente' && x.proximo <= iso) || (x.estado === 'enviando' && x.proximo < vencida)) ids.add(x.canalId);
+    return [...ids];
+  }
+
+  async canalesParaRevisarPlantillas(ahora: Date): Promise<string[]> {
+    const hace = new Date(ahora.getTime() - 30 * 60_000).toISOString();
+    return this.e.wa.canales
+      .filter((c) => c.estado === 'activo')
+      .filter((c) => !c.plantillasRevisadasEn || c.plantillasRevisadasEn < hace || this.e.wa.plantillas.some((p) => p.canalId === c.id && p.estado === 'en_revision'))
+      .map((c) => c.id);
+  }
+
+  async sincronizarPlantillas(canalId: string, plantillas: readonly Plantilla[], ahora: Date): Promise<void> {
+    const c = this.e.wa.canales.find((x) => x.id === canalId);
+    if (!c) return;
+    const iso = ahora.toISOString();
+    const antes = this.e.wa.plantillas.filter((x) => x.canalId === canalId);
+    this.e.wa.plantillas = [
+      ...this.e.wa.plantillas.filter((x) => x.canalId !== canalId),
+      ...plantillas.map((p) => {
+        const previa = antes.find((x) => x.nombre === p.nombre && x.idioma === p.idioma);
+        return { ...structuredClone(p), canalId, creadaPor: previa?.creadaPor ?? null, creadaEn: previa?.creadaEn ?? iso, revisadaEn: iso };
+      }),
+    ];
+    c.plantillasRevisadasEn = iso;
+  }
+
+  /** Solo la demo: simula que pasaron 24 horas desde el último mensaje de la persona (para probar las plantillas). */
+  cerrarVentana(conversacionId: string): void {
+    const c = this.e.conversaciones.find((x) => x.id === conversacionId);
+    if (c) c.ventanaHasta = new Date(Date.now() - 60_000).toISOString();
   }
 
   /** Solo para pruebas: los eventos de analítica que se guardaron. */

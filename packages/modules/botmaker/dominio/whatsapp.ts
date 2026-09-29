@@ -79,7 +79,7 @@ export type MensajeWhatsapp =
   | { type: 'text'; text: { body: string; preview_url?: boolean } }
   | { type: 'interactive'; interactive: { type: 'button'; body: { text: string }; action: { buttons: { type: 'reply'; reply: { id: string; title: string } }[] } } }
   | { type: 'interactive'; interactive: { type: 'list'; body: { text: string }; action: { button: string; sections: { title?: string; rows: { id: string; title: string; description?: string }[] }[] } } }
-  | { type: 'template'; template: { name: string; language: { code: string }; components?: { type: 'body'; parameters: { type: 'text'; text: string }[] }[] } };
+  | { type: 'template'; template: { name: string; language: { code: string }; components?: { type: 'body'; parameters: { type: 'text'; text: string; parameter_name?: string }[] }[] } };
 
 const recortar = (t: string, n: number) => (t.length <= n ? t : `${t.slice(0, n - 1)}…`);
 
@@ -196,6 +196,8 @@ export interface EntranteWhatsapp {
   /** El texto que queda en la conversación (el título del botón que tocó, o [audio]…). */
   texto: string;
   tipo: 'texto' | 'opcion' | 'adjunto';
+  /** El nombre de perfil de WhatsApp, si vino en el aviso. */
+  nombrePerfil?: string | null;
 }
 
 /** Un mensaje de Meta como entrada del motor, o null si no hay que contestarlo (una reacción, un aviso del sistema). */
@@ -251,29 +253,86 @@ export function ventanaAbierta(hasta: string | null | undefined, ahora: Date): b
   return !!hasta && new Date(hasta).getTime() > ahora.getTime();
 }
 
-// ── Plantillas ──────────────────────────────────────────────────────────────────────────────────
+// ── Plantillas (7.07) ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Una plantilla de la cuenta de 360dialog de la campaña: se crea en BotMaker (o en el panel de 360dialog), Meta la revisa
+ * y, aprobada, es la única forma de escribirle a alguien con la ventana de 24 horas cerrada.
+ */
+export const ESTADOS_PLANTILLA = ['en_revision', 'aprobada', 'rechazada', 'pausada', 'deshabilitada', 'otro'] as const;
+export type EstadoPlantilla = (typeof ESTADOS_PLANTILLA)[number];
+
+export const ETIQUETA_ESTADO_PLANTILLA: Record<EstadoPlantilla, string> = {
+  en_revision: 'En revisión',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  pausada: 'Pausada por Meta',
+  deshabilitada: 'Deshabilitada',
+  otro: 'Otro estado',
+};
+
+export function estadoPlantillaDeMeta(s: string | undefined): EstadoPlantilla {
+  switch ((s ?? '').toUpperCase()) {
+    case 'APPROVED': return 'aprobada';
+    case 'PENDING': case 'IN_REVIEW': case 'PENDING_APPROVAL': case 'SUBMITTED': return 'en_revision';
+    case 'REJECTED': return 'rechazada';
+    case 'PAUSED': return 'pausada';
+    case 'DISABLED': case 'DELETED': return 'deshabilitada';
+    default: return 'otro';
+  }
+}
+
+/** utility: seguir una consulta de la persona (lo que corresponde para retomar). marketing: novedades o convocatorias. */
+export const CATEGORIAS_PLANTILLA = ['utility', 'marketing'] as const;
+export type CategoriaPlantilla = (typeof CATEGORIAS_PLANTILLA)[number];
+export const ETIQUETA_CATEGORIA_PLANTILLA: Record<CategoriaPlantilla, string> = { utility: 'Utilidad (seguir una consulta)', marketing: 'Marketing (novedades)' };
+
+export const IDIOMAS_PLANTILLA = [
+  { codigo: 'es', nombre: 'Español' }, { codigo: 'es_AR', nombre: 'Español (Argentina)' }, { codigo: 'es_MX', nombre: 'Español (México)' },
+  { codigo: 'es_ES', nombre: 'Español (España)' }, { codigo: 'en_US', nombre: 'Inglés (Estados Unidos)' },
+] as const;
 
 export interface Plantilla {
+  /** El id de Meta (null si todavía no se mandó). */
+  id: string | null;
   nombre: string;
   idioma: string;
   categoria: string;
-  estado: string;
-  /** El cuerpo con sus variables {{1}}, {{2}}… */
-  texto: string;
-  parametros: number;
-  /** Solo las aprobadas con cuerpo de texto y variables numeradas se mandan desde la bandeja. */
-  usable: boolean;
+  estado: EstadoPlantilla;
+  /** Por qué la rechazó Meta, si la rechazó. */
   motivo: string | null;
+  /** El cuerpo con sus espacios: {{1}}, {{2}}… o {{nombre}}, {{tema}}… */
+  texto: string;
+  formato: 'posicional' | 'nombre';
+  /** Los espacios en orden: ["1", "2"] o ["nombre", "tema"]. */
+  variables: string[];
+  /** Se puede mandar desde la bandeja: aprobada y sin encabezado con imagen o variables. */
+  usable: boolean;
+  /** Si no es usable, por qué (para mostrar). */
+  aviso: string | null;
 }
 
 /** Una plantilla como la devuelve GET /message_templates (el subconjunto que usa BotMaker). */
 export interface PlantillaMeta {
+  id?: string;
   name?: string;
   language?: string;
   status?: string;
   category?: string;
+  rejected_reason?: string;
   parameter_format?: string;
   components?: { type?: string; format?: string; text?: string }[];
+}
+
+const RE_POSICIONAL = /\{\{\s*(\d+)\s*\}\}/g;
+const RE_NOMBRE = /\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}/g;
+
+/** Los espacios de un texto, en orden de aparición y sin repetir. */
+export function variablesDe(texto: string): { formato: 'posicional' | 'nombre'; variables: string[] } {
+  const pos = [...texto.matchAll(RE_POSICIONAL)].map((x) => x[1]!);
+  const nom = [...texto.matchAll(RE_NOMBRE)].map((x) => x[1]!);
+  if (nom.length && !pos.length) return { formato: 'nombre', variables: [...new Set(nom)] };
+  return { formato: 'posicional', variables: [...new Set(pos)].sort((a, b) => Number(a) - Number(b)) };
 }
 
 export function leerPlantilla(p: PlantillaMeta): Plantilla | null {
@@ -281,32 +340,87 @@ export function leerPlantilla(p: PlantillaMeta): Plantilla | null {
   const comps = p.components ?? [];
   const cuerpo = comps.find((c) => (c.type ?? '').toUpperCase() === 'BODY')?.text ?? '';
   const encabezado = comps.find((c) => (c.type ?? '').toUpperCase() === 'HEADER');
-  const numeradas = [...cuerpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((x) => Number(x[1]));
-  const nombradas = /\{\{\s*[a-z_][a-z0-9_]*\s*\}\}/i.test(cuerpo);
-  const parametros = numeradas.length ? Math.max(...numeradas) : 0;
-  let motivo: string | null = null;
-  if ((p.status ?? '').toUpperCase() !== 'APPROVED') motivo = 'Todavía no la aprobó Meta.';
-  else if (!cuerpo) motivo = 'No tiene texto.';
-  else if (nombradas || (p.parameter_format ?? '').toUpperCase() === 'NAMED') motivo = 'Usa variables con nombre: desde la bandeja solo se completan las numeradas.';
-  else if (encabezado && ((encabezado.format ?? 'TEXT').toUpperCase() !== 'TEXT' || /\{\{/.test(encabezado.text ?? ''))) motivo = 'Tiene un encabezado con imagen o variables: se manda desde 360dialog.';
+  const { formato, variables } = variablesDe(cuerpo);
+  const estado = estadoPlantillaDeMeta(p.status);
+  let aviso: string | null = null;
+  if (estado !== 'aprobada') aviso = estado === 'en_revision' ? 'Meta todavía la está revisando.' : `No se puede usar: ${ETIQUETA_ESTADO_PLANTILLA[estado].toLowerCase()}.`;
+  else if (!cuerpo) aviso = 'No tiene texto.';
+  else if (encabezado && ((encabezado.format ?? 'TEXT').toUpperCase() !== 'TEXT' || /\{\{/.test(encabezado.text ?? ''))) aviso = 'Tiene un encabezado con imagen o con espacios: se manda desde el panel de 360dialog.';
   return {
-    nombre: p.name, idioma: p.language, categoria: (p.category ?? '').toLowerCase(), estado: (p.status ?? '').toLowerCase(), texto: cuerpo,
-    parametros, usable: !motivo, motivo,
+    id: p.id ? String(p.id) : null, nombre: p.name, idioma: p.language, categoria: (p.category ?? '').toLowerCase(), estado,
+    motivo: estado === 'rechazada' ? (p.rejected_reason && p.rejected_reason !== 'NONE' ? p.rejected_reason : 'Meta no dio el motivo.') : null,
+    texto: cuerpo, formato: (p.parameter_format ?? '').toLowerCase() === 'named' ? 'nombre' : formato, variables, usable: !aviso, aviso,
   };
 }
 
-/** El texto de la plantilla con sus variables completas (lo que queda en la conversación). */
-export function completarPlantilla(texto: string, valores: readonly string[]): string {
-  return texto.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, n: string) => valores[Number(n) - 1] ?? '');
+/** El texto de la plantilla con sus espacios completos (lo que queda en la conversación). */
+export function completarPlantilla(texto: string, valores: Readonly<Record<string, string>>): string {
+  return texto.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k: string) => valores[k] ?? '');
 }
 
-export function mensajePlantilla(p: Pick<Plantilla, 'nombre' | 'idioma'>, valores: readonly string[]): MensajeWhatsapp {
+export function mensajePlantilla(p: Pick<Plantilla, 'nombre' | 'idioma' | 'formato' | 'variables'>, valores: Readonly<Record<string, string>>): MensajeWhatsapp {
+  const parametros = p.variables.map((v) => (p.formato === 'nombre' ? { type: 'text' as const, parameter_name: v, text: valores[v] ?? '' } : { type: 'text' as const, text: valores[v] ?? '' }));
   return {
     type: 'template',
-    template: {
-      name: p.nombre, language: { code: p.idioma },
-      ...(valores.length ? { components: [{ type: 'body' as const, parameters: valores.map((v) => ({ type: 'text' as const, text: v })) }] } : {}),
-    },
+    template: { name: p.nombre, language: { code: p.idioma }, ...(parametros.length ? { components: [{ type: 'body' as const, parameters: parametros }] } : {}) },
+  };
+}
+
+/** Una plantilla nueva, como la arma el administrador en BotMaker. */
+export interface NuevaPlantilla {
+  nombre: string;
+  categoria: CategoriaPlantilla;
+  idioma: string;
+  texto: string;
+  /** Un ejemplo por espacio (Meta los pide para revisarla). */
+  ejemplos: Record<string, string>;
+}
+
+export const LIMITES_PLANTILLA = { nombre: 60, texto: 1024, ejemplo: 200 } as const;
+
+/** Lo que hay que corregir antes de mandarla a aprobar (vacío: está lista). */
+export function problemasPlantilla(n: NuevaPlantilla): string[] {
+  const p: string[] = [];
+  if (!/^[a-z0-9_]{1,60}$/.test(n.nombre)) p.push('El nombre va en minúsculas, sin espacios ni tildes (letras, números y _), hasta 60 caracteres.');
+  if (!(CATEGORIAS_PLANTILLA as readonly string[]).includes(n.categoria)) p.push('Elegí la categoría.');
+  if (!IDIOMAS_PLANTILLA.some((i) => i.codigo === n.idioma)) p.push('Elegí el idioma.');
+  const t = n.texto.trim();
+  if (!t) p.push('Falta el texto.');
+  if (t.length > LIMITES_PLANTILLA.texto) p.push(`El texto pasa los ${LIMITES_PLANTILLA.texto} caracteres.`);
+  const pos = [...t.matchAll(RE_POSICIONAL)].length;
+  const nom = [...t.matchAll(RE_NOMBRE)].length;
+  if (pos && nom) p.push('Usá espacios numerados ({{1}}) o con nombre ({{nombre}}), no los dos.');
+  const { formato, variables } = variablesDe(t);
+  if (formato === 'posicional' && variables.some((v, i) => Number(v) !== i + 1)) p.push('Los espacios numerados van en orden y sin saltos: {{1}}, {{2}}…');
+  for (const v of variables) {
+    const e = (n.ejemplos[v] ?? '').trim();
+    if (!e) p.push(`Falta un ejemplo para {{${v}}}.`);
+    else if (e.length > LIMITES_PLANTILLA.ejemplo) p.push(`El ejemplo de {{${v}}} es muy largo.`);
+  }
+  return p;
+}
+
+/** Lo que conviene revisar antes de mandarla (no frena: Meta decide). */
+export function avisosPlantilla(n: Pick<NuevaPlantilla, 'texto' | 'categoria'>): string[] {
+  const a: string[] = [];
+  const t = n.texto.trim();
+  if (/^\{\{/.test(t) || /\}\}[\s.!?]*$/.test(t)) a.push('Meta suele rechazar las plantillas que empiezan o terminan con un espacio para completar.');
+  if (n.categoria === 'utility' && /\b(vot[aáe]|sumate|donaci[oó]n|don[aá]|evento|acto|marcha|campa[nñ]a)\b/i.test(t)) a.push('Parece de marketing: si Meta lo ve así, la cambia de categoría (y cuesta más).');
+  return a;
+}
+
+/** El pedido de POST /message_templates de 360dialog (formato de Meta). */
+export function plantillaAMeta(n: NuevaPlantilla): Record<string, unknown> {
+  const texto = n.texto.trim();
+  const { formato, variables } = variablesDe(texto);
+  const ejemplo = !variables.length
+    ? {}
+    : formato === 'nombre'
+      ? { example: { body_text_named_params: variables.map((v) => ({ param_name: v, example: n.ejemplos[v]!.trim() })) } }
+      : { example: { body_text: [variables.map((v) => n.ejemplos[v]!.trim())] } };
+  return {
+    name: n.nombre, language: n.idioma, category: n.categoria.toUpperCase(), parameter_format: formato === 'nombre' ? 'named' : 'positional',
+    components: [{ type: 'BODY', text: texto, ...ejemplo }],
   };
 }
 
