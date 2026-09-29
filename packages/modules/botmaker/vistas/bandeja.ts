@@ -116,7 +116,7 @@ export interface VistaConversacion {
   id: string;
   campanaId: string;
   volver: string;
-  contacto: { nombre: string; datos: { etiqueta: string; valor: string }[]; canal: string; condiciones: string; borrado: boolean };
+  contacto: { nombre: string; datos: { etiqueta: string; valor: string }[]; canal: string; condiciones: string; borrado: boolean; hrefFicha: string };
   bot: { nombre: string; href: string };
   estado: EstadoConversacion;
   estadoTexto: string;
@@ -198,6 +198,7 @@ export async function vistaConversacion(repo: Repositorio, ctx: ContextoPantalla
       canal: ETIQUETA_CANAL[x.contacto.canal],
       condiciones: x.contacto.condicionesVersion ? `aceptó la versión ${x.contacto.condicionesVersion}${x.contacto.condicionesAceptadasEn ? ` el ${fechaHoraUtc(x.contacto.condicionesAceptadasEn)}` : ''}` : 'no aceptó condiciones',
       borrado: !!x.contacto.borradoEn,
+      hrefFicha: ruta(ctx, `contactos/${encodeURIComponent(x.contacto.id)}`),
     },
     bot: { nombre: bot?.nombre ?? 'Bot', href: hrefBot(ctx, c.botId, 'flujos') },
     estado: c.estado,

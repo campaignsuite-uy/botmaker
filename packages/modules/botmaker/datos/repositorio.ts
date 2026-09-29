@@ -14,6 +14,7 @@ import type { Corrida, ResultadoCaso, ResumenCorrida } from '../dominio/corridas
 import type { Alerta, Canal, Condiciones, Contacto, Conversacion, EstadoConversacion, EventoAnalitica, Mensaje, ModoCondiciones, PedidoDatos } from '../dominio/conversaciones';
 import type { Decision, Sesion } from '../dominio/motor';
 import type { EntranteWhatsapp, EstadoCanal, EstadoEnvio, MensajeWhatsapp, Plantilla } from '../dominio/whatsapp';
+import type { ConsultaContacto, TipoConsulta } from '../dominio/contactos';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -141,6 +142,21 @@ export interface Repositorio {
   borrarContacto(contactoId: string, nota: string, por: string): Promise<void>;
   pedidosDatos(campanaId: string): Promise<PedidoDatos[]>;
 
+  // ── Base de contactos (7.06) ──────────────────────────────────────────────────────────────────
+
+  /**
+   * La base de contactos de la campaña, de a una página, los más recientes primero (leer_conversaciones). Sin los
+   * borrados a pedido. El número viene solo para quien atiende (responder_conversaciones), y solo quien atiende busca
+   * por número.
+   */
+  baseContactos(campanaId: string, filtro: FiltroContactos, por: string): Promise<PaginaContactos>;
+  /** Un contacto con sus conversaciones y todo lo que consultó (leer_conversaciones). null si no existe o no se ve. */
+  fichaContacto(contactoId: string, por: string): Promise<FichaContacto | null>;
+  /** Toda la base que cumple el filtro, para descargarla; queda registrado quién, cuándo y cuántos (gestionar_datos_contactos). */
+  exportarBaseContactos(campanaId: string, filtro: Omit<FiltroContactos, 'limite' | 'desde'>, por: string): Promise<FilaBaseContacto[]>;
+  /** Las descargas de la base, la más nueva primero (gestionar_datos_contactos). */
+  exportacionesBase(campanaId: string, por: string): Promise<ExportacionBase[]>;
+
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;
 
@@ -217,6 +233,50 @@ export interface FilaContacto {
   contacto: Contacto;
   conversaciones: number;
   ultima: string | null;
+}
+
+export interface FiltroContactos {
+  botId?: string;
+  canal?: Canal;
+  /** Nombre, nombre de perfil, dato que dio o (quien atiende) número. */
+  buscar?: string;
+  /** Solo los que consultaron esto. */
+  consulta?: { tipo: TipoConsulta; clave: string };
+  /** Tamaño de la página (hasta 200) y desde qué fila. */
+  limite?: number;
+  desde?: number;
+}
+
+export interface FilaBaseContacto {
+  contacto: Contacto;
+  conversaciones: number;
+  /** Cuándo empezó la primera y cuándo se movió la última (ISO, UTC). */
+  primera: string | null;
+  ultima: string | null;
+  consultas: ConsultaContacto[];
+}
+
+export interface PaginaContactos {
+  total: number;
+  filas: FilaBaseContacto[];
+}
+
+export interface FichaContacto extends FilaBaseContacto {
+  lista: { id: string; estado: EstadoConversacion; canal: Canal; iniciadaEn: string; actualizadaEn: string; mensajes: number; asignadaA: string | null }[];
+}
+
+/** Una descarga de la base: el filtro sin el texto buscado (puede ser un nombre) y cuántos contactos salieron. */
+export interface ExportacionBase {
+  id: string;
+  campanaId: string;
+  botId: string | null;
+  canal: Canal | null;
+  /** "tema:agua"… (claveConsulta). */
+  consulta: string | null;
+  conBusqueda: boolean;
+  cantidad: number;
+  hechoPor: string | null;
+  hechoEn: string;
 }
 
 export interface ExportacionContacto {

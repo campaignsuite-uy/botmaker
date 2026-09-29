@@ -4,7 +4,7 @@ import { ETIQUETA_ROL, puede } from '../dominio/permisos';
 import { nombreMercado } from '../dominio/mercados';
 import { ruta, type ContextoPantalla } from '../ui/contexto';
 
-export type SeccionBots = 'bots' | 'nuevo' | 'bandeja' | 'motores' | 'costos' | 'equipo';
+export type SeccionBots = 'bots' | 'nuevo' | 'bandeja' | 'contactos' | 'motores' | 'costos' | 'equipo';
 
 export interface ItemMenu {
   id: SeccionBots;
@@ -30,7 +30,7 @@ export async function datosMarco(repo: Repositorio, ctx: ContextoPantalla): Prom
   grupos.push({ titulo: 'Armar', items: armar });
   if (puede(ctx.rol, 'leer_conversaciones')) {
     const esperan = await repo.conversaciones(ctx.campana.id, { estado: 'derivada', limite: 500 }).then((x) => x.length).catch(() => 0);
-    grupos.push({ titulo: 'Conversaciones', items: [it('bandeja', 'Bandeja', 'bandeja', esperan ? String(esperan) : null)] });
+    grupos.push({ titulo: 'Conversaciones', items: [it('bandeja', 'Bandeja', 'bandeja', esperan ? String(esperan) : null), it('contactos', 'Contactos', 'contactos')] });
   }
   const config: ItemMenu[] = [it('motores', 'Motores', 'motores')];
   if (puede(ctx.rol, 'ver_costos')) config.push(it('costos', 'Costos', 'costos'));

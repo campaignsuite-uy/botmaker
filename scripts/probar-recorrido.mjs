@@ -14,7 +14,8 @@
  *  Etapa 6: alerta de derivada sin respuesta, revisión por muestreo, exportar y borrar los datos de un contacto.
  *  Etapa 7: WhatsApp con 360dialog simulado y el teléfono de prueba: conversar con botones y listas, derivar, responder
  *           desde la bandeja, un reintento descartado, la ventana de 24 horas y las plantillas (crear, aprobar, mandar),
- *           una clave que deja de valer (canal desconectado y alerta) y reconectar.
+ *           una clave que deja de valer (canal desconectado y alerta) y reconectar. La base de contactos: lo que
+ *           consultó cada uno, filtrar por eso, la ficha, la descarga en CSV y quién ve el número.
  *
  * Necesita el build (pnpm build). Levanta `next start` en un puerto propio y lo apaga al terminar.
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
@@ -427,6 +428,37 @@ try {
   await admin.goto(`${CAMPANA}/bot-demo-3`);
   prueba('la ficha del bot avisa la política de WhatsApp', (await admin.textContent('main')).includes('no admite partidos, candidatos ni campañas'));
   prueba('etapa 7 sin errores en la página', !tel.errores.length && !agente.errores.length && !admin.errores.length, [...tel.errores, ...agente.errores, ...admin.errores].join(' · '));
+
+  // ── Etapa 7: base de contactos (7.06) ─────────────────────────────────────────────────────────
+  console.log('\nEtapa 7: base de contactos\n');
+  await admin.goto(`${CAMPANA}/contactos`);
+  let base = await admin.textContent('main');
+  prueba('la base de contactos muestra a la persona de WhatsApp con su número y lo que consultó', base.includes('Vecina de Chilibre') && base.includes('+50765550001') && base.includes('Hablar con una persona') && await admin.locator('.menu__item:has-text("Contactos")').count() > 0);
+  // El teléfono de prueba escribió desde tres números con el mismo perfil: la que consultó es la del 6555-0001.
+  const filaVecina = admin.locator('tr:has-text("+50765550001")').first();
+  await filaVecina.locator('a.bots-chip:has-text("Hablar con una persona")').click();
+  await admin.waitForURL(/consulta=intencion%3Ahablar_con_persona/);
+  base = await admin.textContent('main');
+  prueba('tocar lo que consultó filtra a quienes consultaron lo mismo', base.includes('consultaron por «Hablar con una persona»') && base.includes('Vecina de Chilibre') && !base.includes('Marta G.'), base.slice(0, 300));
+  await admin.goto(`${CAMPANA}/contactos?buscar=6555-0001`);
+  await admin.locator('td a:has-text("Vecina de Chilibre")').first().click();
+  await admin.waitForURL(/\/contactos\/[^/?]+$/);
+  const fichaVecina = await admin.textContent('main');
+  prueba('la ficha: la opción que eligió en la lista, lo que consultó y sus conversaciones', fichaVecina.includes('Menú principal › Quién es') && fichaVecina.includes('Hablar con una persona') && await admin.locator('a[href*="/bandeja/conv-"]').count() > 0, fichaVecina.slice(0, 300));
+  await admin.goto(`${CAMPANA}/contactos?canal=whatsapp`);
+  const csvResp = await admin.request.get(`${BASE}${await admin.locator('a:has-text("Descargar (CSV)")').getAttribute('href')}`);
+  const csv = await csvResp.text();
+  prueba('el administrador descarga la base filtrada en CSV, con el número y lo que consultó', csvResp.status() === 200 && (csvResp.headers()['content-type'] ?? '').includes('text/csv') && csv.charCodeAt(0) === 0xfeff
+    && csv.includes('+50765550001') && csv.includes('Vecina de Chilibre') && csv.includes('Hablar con una persona') && !csv.includes('Rosa'), csv.slice(0, 300));
+  await admin.goto(`${CAMPANA}/contactos`);
+  prueba('la descarga queda registrada con su filtro', (await admin.locator('.caja:has-text("Descargar la base") table').textContent()).includes('WhatsApp'));
+  await ed.goto(`${CAMPANA}/contactos`);
+  const baseEditora = await ed.textContent('main');
+  prueba('la editora ve la base sin números y sin la descarga', baseEditora.includes('Vecina de Chilibre') && !baseEditora.includes('+50765550001') && await ed.locator('a:has-text("Descargar (CSV)")').count() === 0);
+  prueba('y si pide la descarga directo, no se la da', (await ed.request.get(`${CAMPANA}/contactos/descargar`)).status() === 403);
+  await lectorBandeja.goto(`${CAMPANA}/contactos`);
+  prueba('el lector no entra a la base de contactos', !lectorBandeja.url().includes('/contactos'));
+  prueba('base de contactos sin errores en la página', !admin.errores.length && !ed.errores.length, [...admin.errores, ...ed.errores].join(' · '));
 
   // ── La app pública aparte (apps/bots-publico), con su propia demo ─────────────────────────────
   if (!process.env.URL) {

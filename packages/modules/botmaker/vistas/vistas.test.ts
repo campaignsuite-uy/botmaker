@@ -11,6 +11,7 @@ import { datosMarco } from './marco';
 import { vistaMotores } from './motores';
 import { vistaNuevoBot } from './nuevo';
 import { mensajeDe } from './mensajes';
+import { descargaContactos, vistaContactos, vistaFichaContacto } from './contactos';
 
 let repo: RepositorioDemo;
 beforeEach(() => {
@@ -36,11 +37,11 @@ function ctx(personaId: string, parametros: Record<string, string> = {}, demo = 
 describe('menú', () => {
   it('cada rol ve lo suyo', async () => {
     const items = async (p: string, demo = false) => (await datosMarco(repo, ctx(p, {}, demo))).grupos.flatMap((g) => g.items.map((i) => i.id));
-    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'bandeja', 'motores', 'costos', 'equipo']);
-    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'bandeja', 'motores', 'equipo']);
-    expect(await items('p-andres')).toEqual(['bots', 'bandeja', 'motores', 'equipo']);
+    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'motores', 'costos', 'equipo']);
+    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'motores', 'equipo']);
+    expect(await items('p-andres')).toEqual(['bots', 'bandeja', 'contactos', 'motores', 'equipo']);
     expect(await items('p-equipo')).toEqual(['bots', 'motores', 'equipo']);
-    expect(await items('p-joaquin', true)).toEqual(['bots', 'bandeja', 'motores', 'costos', 'equipo']);
+    expect(await items('p-joaquin', true)).toEqual(['bots', 'bandeja', 'contactos', 'motores', 'costos', 'equipo']);
   });
 });
 
@@ -115,5 +116,50 @@ describe('motores, costos y equipo', () => {
     expect(v.puedeEditar).toBe(true);
     expect(vistaEquipo(ctx('p-lucia')).puedeEditar).toBe(false);
     expect(v.matriz.length).toBe(12);
+  });
+});
+
+describe('base de contactos', () => {
+  it('la lista con lo que consultó cada uno, los más recientes primero; un filtro que no es de la campaña no filtra', async () => {
+    const v = await vistaContactos(repo, ctx('p-andres', { bot: 'bot-de-otra-campana', canal: 'fax' }));
+    expect(v.resumen).toBe('5 contactos.');
+    expect(v.hayFiltro).toBe(false);
+    expect(v.filas.map((f) => f.nombre)).toEqual(['Contacto EMO2', 'Rosa', 'Marta G.', 'Contacto EMO1', 'Marcos']);
+    const marcos = v.filas.find((f) => f.nombre === 'Marcos')!;
+    expect(marcos.consultas.map((c) => c.texto)).toEqual(['Propuesta', 'Agua']);
+    expect(marcos.consultas[1]!.href).toBe('/otro-camino/pa-2029/bots/contactos?consulta=tema%3Aagua');
+    expect(marcos.datos).toBe('zona: Arraiján');
+    expect(v.filas[2]).toMatchObject({ numero: '+50761234567', canal: 'WhatsApp' });
+    expect(v.descarga).toBeNull();
+    expect(v.opcionesConsulta.map((g) => g.grupo)).toEqual(['Consultas', 'Temas']);
+    expect(v.opcionesConsulta[0]!.opciones.some((o) => o.valor === 'intencion:cortesia')).toBe(false);
+  });
+
+  it('el editor no ve el número ni busca por él', async () => {
+    const v = await vistaContactos(repo, ctx('p-lucia'));
+    expect(v.filas.every((f) => f.numero === null)).toBe(true);
+    expect((await vistaContactos(repo, ctx('p-lucia', { buscar: '61234567' }))).resumen).toBe('0 contactos con este filtro.');
+    expect((await vistaContactos(repo, ctx('p-andres', { buscar: '61234567' }))).filas.map((f) => f.nombre)).toEqual(['Marta G.']);
+  });
+
+  it('la ficha: lo que consultó con enlace al filtro y sus conversaciones con enlace a la bandeja', async () => {
+    const f = (await vistaFichaContacto(repo, ctx('p-joaquin'), 'ct-demo-4'))!;
+    expect(f.consultas.map((g) => [g.tipo, g.items.map((i) => i.texto)])).toEqual([['Consultas', ['Propuesta']], ['Temas', ['Agua']]]);
+    expect(f.conversaciones[0]).toMatchObject({ href: '/otro-camino/pa-2029/bots/bandeja/conv-demo-4', estado: 'cerrada' });
+    expect(f.pedidos).toMatchObject({ puedeBorrar: true });
+    expect(await vistaFichaContacto(repo, ctx('p-equipo'), 'ct-demo-4')).toBeNull();
+  });
+
+  it('descargar: solo el administrador, con el filtro, y queda en el registro', async () => {
+    await expect(descargaContactos(repo, ctx('p-andres'))).rejects.toMatchObject({ codigo: 'sin_permiso' });
+    const d = await descargaContactos(repo, ctx('p-joaquin', { canal: 'whatsapp' }));
+    expect(d.cantidad).toBe(1);
+    expect(d.archivo).toMatch(/^contactos-generales-2029-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(d.csv.startsWith('\uFEFFBot,Canal,Nombre')).toBe(true);
+    expect(d.csv).toContain('Asistente publicado,WhatsApp,,Marta G.,+50761234567,');
+    expect(d.csv).toContain(',Agenda,');
+    const v = await vistaContactos(repo, ctx('p-joaquin'));
+    expect(v.descarga?.registro).toEqual([expect.objectContaining({ bot: 'Todos', filtro: 'WhatsApp', cantidad: '1' })]);
+    expect(v.descarga?.href).toBe('/otro-camino/pa-2029/bots/contactos/descargar');
   });
 });

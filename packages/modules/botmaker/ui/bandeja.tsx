@@ -116,7 +116,7 @@ export function PantallaConversacion({ v }: { v: VistaConversacion }) {
               {v.contacto.datos.map((d) => <div key={d.etiqueta}><dt>{d.etiqueta}</dt><dd>{d.valor}</dd></div>)}
               <div><dt>Condiciones</dt><dd>{v.contacto.condiciones}</dd></div>
             </dl>
-            {v.contacto.borrado ? <p className="texto-mini apagado">Sus datos se borraron a pedido.</p> : null}
+            {v.contacto.borrado ? <p className="texto-mini apagado">Sus datos se borraron a pedido.</p> : <p className="texto-mini"><a href={v.contacto.hrefFicha}>Su ficha en la base de contactos</a>: todas sus conversaciones y lo que consultó.</p>}
           </Caja>
           <Caja titulo="Atención" nota={v.derivacion ?? undefined}>
             {v.motivoSinAcciones ? <SoloLectura>{v.motivoSinAcciones}</SoloLectura> : (

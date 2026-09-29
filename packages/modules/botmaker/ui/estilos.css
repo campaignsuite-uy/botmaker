@@ -278,3 +278,18 @@ textarea.bots-yaml { min-height: 520px; }
 .bots-chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--linea); color: var(--texto-3); }
 .bots-chip--bien { border-color: var(--bien); color: var(--bien); }
 .bots-chip--critico { border-color: var(--critico); color: var(--critico); }
+
+/* Base de contactos (7.06) */
+.bots-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+a.bots-chip { text-decoration: none; display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.bots-chip:hover { border-color: var(--lavanda-oscura); color: var(--texto); }
+.bots-chip--tema { border-color: var(--lavanda); color: var(--texto-2); }
+.bots-chip--intencion { border-color: var(--bien); color: var(--texto-2); }
+.bots-chip--opcion { border-style: dashed; }
+.bots-tabla-contactos td { vertical-align: top; }
+.bots-tabla-contactos td:nth-child(3) { min-width: 180px; }
+.bots-paginas { justify-content: center; align-items: center; gap: 12px; margin-top: 12px; }
+.bots-datos--una { grid-template-columns: minmax(0, 1fr); }
+.bots-consultas + .bots-consultas { margin-top: 12px; }
+.bots-consultas__titulo { margin: 0; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gris); }
+.bots-consultas__lista { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
