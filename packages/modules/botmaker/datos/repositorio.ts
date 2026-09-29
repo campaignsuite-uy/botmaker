@@ -9,7 +9,8 @@
  */
 import type { Definicion } from '../dominio/definicion';
 import type { FichaMotor } from '../dominio/motores';
-import type { Borrador, Cambio, CambioResumen, NuevoCambio, Version } from '../dominio/versiones';
+import type { Borrador, Cambio, CambioResumen, EventoPublicacion, NuevoCambio, Version, VersionCompleta } from '../dominio/versiones';
+import type { Corrida, ResultadoCaso, ResumenCorrida } from '../dominio/corridas';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -56,6 +57,31 @@ export interface Repositorio {
   cambios(versionId: string): Promise<CambioResumen[]>;
   /** Un cambio completo, con sus operaciones y su inversa. */
   cambio(versionId: string, seq: number): Promise<Cambio | null>;
+
+  /** Una versión cualquiera del bot con su definición (la publicada, una pedida, una vieja). */
+  version(versionId: string): Promise<VersionCompleta | null>;
+
+  // ── Corridas de prueba (bots.test_runs y bots.test_results) ───────────────────────────────────
+
+  /** Empieza una corrida de la versión (en su cambio actual) con una combinación de motores. */
+  crearCorrida(versionId: string, motores: Record<string, unknown>, etiqueta: string, total: number, por: string): Promise<string>;
+  /** Agrega resultados a una corrida en curso (los repetidos se ignoran). Devuelve cuántos casos lleva. */
+  guardarResultados(corridaId: string, resultados: ResultadoCaso[], por: string): Promise<number>;
+  cerrarCorrida(corridaId: string, resumen: ResumenCorrida | null, estado: 'terminada' | 'cancelada', por: string): Promise<void>;
+  /** Las corridas del bot, de la más nueva a la más vieja, sin los resultados. */
+  corridas(botId: string): Promise<Corrida[]>;
+  corrida(corridaId: string): Promise<(Corrida & { resultados: ResultadoCaso[] }) | null>;
+
+  // ── Publicación ───────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * El editor pide publicar el borrador como lo vio. Necesita una corrida terminada sobre su último cambio y no bajar
+   * BAJA_MAXIMA_ACIERTO puntos o más de acierto contra la publicada (ErrorDatos 'sin_corrida' o 'baja_acierto').
+   */
+  pedirPublicacion(versionId: string, seqEsperada: number, nota: string, por: string): Promise<void>;
+  aprobarPublicacion(versionId: string, nota: string, por: string): Promise<void>;
+  devolverPublicacion(versionId: string, nota: string, por: string): Promise<void>;
+  eventosPublicacion(botId: string): Promise<EventoPublicacion[]>;
 
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;

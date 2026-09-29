@@ -113,3 +113,30 @@ export function pilasDeshacer(cambios: readonly CambioResumen[]): Pilas {
   }
   return { deshacer: hechos.at(-1) ?? null, rehacer: deshechos.at(-1) ?? null };
 }
+
+// ── Publicación (etapa 4, tarea 4.06) ───────────────────────────────────────────────────────────
+
+export type AccionPublicacion = 'pedido' | 'aprobado' | 'devuelto';
+
+export const ETIQUETA_ACCION_PUBLICACION: Record<AccionPublicacion, string> = {
+  pedido: 'Pidió publicar',
+  aprobado: 'Aprobó y publicó',
+  devuelto: 'Devolvió con comentarios',
+};
+
+export interface EventoPublicacion {
+  id: number;
+  botId: string;
+  versionId: string;
+  accion: AccionPublicacion;
+  nota: string;
+  corridaId: string | null;
+  personaId: string | null;
+  fecha: string;
+}
+
+/** Una versión con su definición tal como está guardada. */
+export type VersionCompleta = Version & { definicion: unknown };
+
+/** Cuánto puede bajar el acierto de las intenciones contra la versión publicada sin que se pueda pedir publicar. */
+export const BAJA_MAXIMA_ACIERTO = 2;

@@ -89,7 +89,7 @@ describe('YAML', () => {
     if (!r.ok) throw new Error(JSON.stringify(r.problemas));
     const op = operacionImportar(d, r.definicion)!;
     const c = aplicarCambio(d, [op]);
-    expect(c.resumen).toBe('Importó el YAML: cambió 1 flujo y 1 contenido; agregó 1 tema; quitó 1 intención');
+    expect(c.resumen).toBe('Importó el YAML: cambió 1 flujo y 1 contenido; agregó 1 tema; quitó 1 intención y 2 casos de prueba');
     expect(texto(c.definicion)).toBe(texto(r.definicion));
     expect(texto(aplicarOperacion(c.definicion, c.inversa).definicion)).toBe(texto(d));
   });

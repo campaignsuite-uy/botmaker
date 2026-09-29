@@ -26,13 +26,13 @@ const LARGO_MAXIMO = 1_500_000;
 
 export function exportarYaml(def: Definicion, encabezado: string[] = []): string {
   // El material va aparte (pestaña Material): es largo y se carga como texto. Al importar, si no viene, queda el que está.
-  const { material: _material, ultimaSeccion: _ultima, ...resto } = def;
+  const { material: _material, ultimaSeccion: _ultima, casos: _casos, ultimoCaso: _ultimoCaso, ...resto } = def;
   const doc = new Document(resto);
   doc.commentBefore = [
     ...encabezado,
     'Definición de un bot de BotMaker. Cada caja lleva su dirección (flujo.caja) en el comentario de arriba.',
     'Para agregar una caja o una opción, se puede dejar sin id, sin código o sin letra: se completan al importar.',
-    `El material (${def.material.length} ${def.material.length === 1 ? 'sección' : 'secciones'}) no está acá: se edita en la pestaña Material.`,
+    `El material (${def.material.length} ${def.material.length === 1 ? 'sección' : 'secciones'}) y los casos de prueba (${def.casos.length}) no están acá: se editan en Material y en Pruebas.`,
   ].map((l) => ` ${l}`).join('\n');
   def.flujos.forEach((f, i) => {
     const nodoFlujo = doc.getIn(['flujos', i], true) as Node | undefined;
@@ -52,6 +52,14 @@ const esObjeto = (x: unknown): x is Objeto => !!x && typeof x === 'object' && !A
 function completar(x: Objeto, actual: Definicion | null, azar?: () => number): void {
   if (x.material === undefined) x.material = actual?.material ?? [];
   if (x.ultimaSeccion === undefined) x.ultimaSeccion = actual?.ultimaSeccion ?? 0;
+  if (x.casos === undefined) {
+    // Los casos no viajan en el YAML: quedan los del borrador, sin los que esperan una intención que el YAML quitó.
+    const intenciones = new Set((Array.isArray(x.intenciones) ? x.intenciones : []).filter(esObjeto).map((i) => i.id));
+    x.casos = (actual?.casos ?? [])
+      .filter((k) => k.tipo !== 'intencion' || intenciones.has(k.intencion))
+      .map((k) => (k.tipo === 'intencion' ? { ...k, alternativas: k.alternativas.filter((a) => intenciones.has(a)) } : k));
+  }
+  if (x.ultimoCaso === undefined) x.ultimoCaso = actual?.ultimoCaso ?? 0;
   const usados = actual ? idsUsados(actual) : new Set<string>();
   const anotar = (v: unknown) => typeof v === 'string' && usados.add(v);
   const flujos = Array.isArray(x.flujos) ? x.flujos.filter(esObjeto) : [];

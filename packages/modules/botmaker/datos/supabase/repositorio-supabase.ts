@@ -12,7 +12,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Definicion } from '../../dominio/definicion';
 import type { FichaMotor } from '../../dominio/motores';
-import type { Borrador, Cambio, CambioResumen, NuevoCambio, Version } from '../../dominio/versiones';
+import type { Borrador, Cambio, CambioResumen, EventoPublicacion, NuevoCambio, Version, VersionCompleta } from '../../dominio/versiones';
+import type { Corrida, ResultadoCaso, ResumenCorrida } from '../../dominio/corridas';
 import type {
   Bot, CambiosBot, EleccionMotores, FuncionMotor, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../../dominio/tipos';
@@ -209,6 +210,67 @@ export class RepositorioSupabase implements Repositorio {
     const b = await this.bots_();
     const f = datos(await b.from('version_changes').select(`${M.COLUMNAS_CAMBIO}, operations, inverse`).eq('version_id', versionId).eq('seq', seq).maybeSingle(), 'leer el cambio') as M.FilaCambio | null;
     return f ? M.aCambio(f) : null;
+  }
+
+  async version(versionId: string): Promise<VersionCompleta | null> {
+    const b = await this.bots_();
+    const f = datos(await b.from('versions').select(`${M.COLUMNAS_VERSION}, definition`).eq('id', versionId).maybeSingle(), 'leer la versión') as M.FilaVersion | null;
+    return f ? { ...M.aVersion(f), definicion: f.definition } : null;
+  }
+
+  // ── Corridas ──────────────────────────────────────────────────────────────────────────────────
+
+  async crearCorrida(versionId: string, motores: Record<string, unknown>, etiqueta: string, total: number, _por: string): Promise<string> {
+    const b = await this.bots_();
+    return String(datos(await b.rpc('crear_corrida', { version: versionId, motores, etiqueta, total }), 'empezar la corrida'));
+  }
+
+  async guardarResultados(corridaId: string, resultados: ResultadoCaso[], _por: string): Promise<number> {
+    const b = await this.bots_();
+    const filas = resultados.map((r) => ({ caso: r.caso, tipo: r.tipo, ok: r.ok, resultado: r.resultado, costo: r.costo }));
+    return Number(datos(await b.rpc('guardar_resultados', { corrida: corridaId, resultados: filas }), 'guardar los resultados'));
+  }
+
+  async cerrarCorrida(corridaId: string, resumen: ResumenCorrida | null, estado: 'terminada' | 'cancelada', _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('cerrar_corrida', { corrida: corridaId, resumen, estado }), 'cerrar la corrida');
+  }
+
+  async corridas(botId: string): Promise<Corrida[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('test_runs').select(M.COLUMNAS_CORRIDA).eq('bot_id', botId).order('created_at', { ascending: false }).limit(100), 'leer las corridas') as M.FilaCorrida[];
+    return filas.map(M.aCorrida);
+  }
+
+  async corrida(corridaId: string): Promise<(Corrida & { resultados: ResultadoCaso[] }) | null> {
+    const b = await this.bots_();
+    const f = datos(await b.from('test_runs').select(M.COLUMNAS_CORRIDA).eq('id', corridaId).maybeSingle(), 'leer la corrida') as M.FilaCorrida | null;
+    if (!f) return null;
+    const rs = datos(await b.from('test_results').select('case_id, kind, ok, result, cost_usd').eq('run_id', corridaId).order('case_id'), 'leer los resultados') as M.FilaResultado[];
+    return { ...M.aCorrida(f), resultados: rs.map(M.aResultado) };
+  }
+
+  // ── Publicación ───────────────────────────────────────────────────────────────────────────────
+
+  async pedirPublicacion(versionId: string, seqEsperada: number, nota: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('pedir_publicacion', { version: versionId, seq_esperada: seqEsperada, nota }), 'pedir publicar');
+  }
+
+  async aprobarPublicacion(versionId: string, nota: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('aprobar_publicacion', { version: versionId, nota }), 'aprobar la publicación');
+  }
+
+  async devolverPublicacion(versionId: string, nota: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('devolver_publicacion', { version: versionId, nota }), 'devolver el pedido');
+  }
+
+  async eventosPublicacion(botId: string): Promise<EventoPublicacion[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('publication_events').select('id, bot_id, version_id, action, note, run_id, profile_id, created_at').eq('bot_id', botId).order('id', { ascending: false }), 'leer la publicación') as M.FilaEventoPublicacion[];
+    return filas.map(M.aEventoPublicacion);
   }
 
   async registrarLlamada(l: NuevaLlamada): Promise<void> {

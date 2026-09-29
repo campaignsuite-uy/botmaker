@@ -52,6 +52,7 @@ export const LIMITES = {
   alias: 10,
   secciones: 300,
   textoSeccion: 20000,
+  casos: 1000,
 } as const;
 
 // ── Piezas ──────────────────────────────────────────────────────────────────────────────────────
@@ -228,6 +229,23 @@ export const esquemaSeccion = z.object({
   temas: z.array(idCatalogo).default([]),
 });
 
+/**
+ * Un caso de prueba del bot (etapa 4): un mensaje con la intención que tiene que reconocer, o una pregunta con lo que
+ * tiene que pasar con el material. Las corridas los pasan por los motores antes de publicar.
+ */
+export const RE_ID_CASO = /^[a-z0-9_-]{1,40}$/;
+const idCaso = z.string().regex(RE_ID_CASO, 'id_caso');
+export const esquemaCaso = z.discriminatedUnion('tipo', [
+  z.object({
+    id: idCaso, tipo: z.literal('intencion'), mensaje: texto(1000).min(1, 'texto_vacio'),
+    intencion: idCatalogo, alternativas: z.array(idCatalogo).max(5).default([]),
+  }),
+  z.object({
+    id: idCaso, tipo: z.literal('base'), pregunta: texto(1000).min(1, 'texto_vacio'),
+    tieneRespuesta: z.enum(['si', 'no', 'parcial']), queDecir: texto(1000).default(''),
+  }),
+]);
+
 export const esquemaVariable = z.object({
   nombre: refVariable,
   descripcion: texto(200).default(''),
@@ -263,6 +281,10 @@ export const esquemaDefinicion = z.object({
   material: z.array(esquemaSeccion).max(LIMITES.secciones).default([]),
   /** El último número de sección asignado (no se reusan: una conversación vieja sigue citando lo mismo). */
   ultimaSeccion: z.number().int().min(0).max(999).default(0),
+  /** Los casos de prueba (etapa 4). */
+  casos: z.array(esquemaCaso).max(LIMITES.casos).default([]),
+  /** El último número de caso asignado (no se reusan: las corridas viejas se siguen pudiendo comparar). */
+  ultimoCaso: z.number().int().min(0).max(99999).default(0),
   identidad: z.object({ candidato: persona, partido: persona.nullable().default(null) }),
   /** Canales de contacto: el de consultas es el que ofrece el bot cuando no sabe algo; el de aportes, solo para aportes. */
   contacto: z.object({ consultas: canal.nullable().default(null), aportes: canal.nullable().default(null) }),
@@ -288,6 +310,7 @@ export type Intencion = z.infer<typeof esquemaIntencion>;
 export type Tema = z.infer<typeof esquemaTema>;
 export type Variable = z.infer<typeof esquemaVariable>;
 export type Seccion = z.infer<typeof esquemaSeccion>;
+export type Caso = z.infer<typeof esquemaCaso>;
 export type Opcion = z.infer<typeof opcion>;
 export type Condicion = z.infer<typeof condicion>;
 export type Definicion = z.infer<typeof esquemaDefinicion>;
@@ -461,6 +484,11 @@ export function problemasDeReferencias(def: Definicion): Problema[] {
     const donde = `intención ${i.id}`;
     if (i.destino !== null && !idCajas.has(i.destino)) agregar('destino_inexistente', `La intención ${i.id} va a una caja que no existe.`, donde);
     if (i.tema !== null && !temas.has(i.tema)) agregar('tema_inexistente', `La intención ${i.id} usa el tema ${i.tema}, que no existe.`, donde);
+  }
+  for (const c of repetidos(def.casos.map((x) => x.id))) agregar('id_repetido', `El caso ${c} está dos veces.`, `caso ${c}`);
+  for (const k of def.casos) {
+    if (k.tipo !== 'intencion') continue;
+    for (const i of [k.intencion, ...k.alternativas]) if (!intenciones.has(i)) agregar('intencion_inexistente', `El caso ${k.id} espera la intención ${i}, que no existe.`, `caso ${k.id}`);
   }
   for (const c of repetidos(def.material.map((x) => x.codigo))) agregar('id_repetido', `La sección ${c} está dos veces en el material.`, `sección ${c}`);
   for (const x of def.material) {

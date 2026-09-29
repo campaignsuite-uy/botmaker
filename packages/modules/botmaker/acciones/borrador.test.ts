@@ -127,7 +127,7 @@ describe('cambios del borrador', () => {
   it('el repositorio corta un guardado con un seq viejo', async () => {
     const b = (await repo.borrador(BOT))!;
     bien(await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 0, operaciones: [renombrarMenu('Uno')], origen: 'editor' }));
-    await expect(repo.guardarCambio(b.id, 0, { origen: 'editor', operaciones: [], inversa: { tipo: 'restaurar', partes: { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], sueltos: {} } }, resumen: 'x', objetivo: null }, await definicion(), 'p-lucia'))
+    await expect(repo.guardarCambio(b.id, 0, { origen: 'editor', operaciones: [], inversa: { tipo: 'restaurar', partes: { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], casos: [], sueltos: {} } }, resumen: 'x', objetivo: null }, await definicion(), 'p-lucia'))
       .rejects.toMatchObject({ codigo: 'borrador_cambio' });
   });
 });
@@ -138,11 +138,11 @@ describe('deshacer y rehacer', () => {
     const a = bien(await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 0, operaciones: [renombrarMenu('A')], origen: 'editor' }));
     const v1 = texto(a.definicion);
     const b = bien(await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 1, operaciones: [{ tipo: 'quitar_intencion', intencion: 'prensa' }], origen: 'editor' }));
-    expect(b.deshacer).toBe('Quitó la intención prensa');
+    expect(b.deshacer).toBe('Quitó la intención prensa y sus 2 casos de prueba');
 
     let r = bien(await ejecutarDeshacer(como('p-lucia'), { botId: BOT, seq: 2 }));
     expect(texto(r.definicion)).toBe(v1);
-    expect(r).toMatchObject({ deshacer: 'Editó la caja 1.2', rehacer: 'Quitó la intención prensa' });
+    expect(r).toMatchObject({ deshacer: 'Editó la caja 1.2', rehacer: 'Quitó la intención prensa y sus 2 casos de prueba' });
     r = bien(await ejecutarDeshacer(como('p-lucia'), { botId: BOT, seq: 3 }));
     expect(texto(r.definicion)).toBe(v0);
     expect(r).toMatchObject({ deshacer: null, rehacer: 'Editó la caja 1.2' });
@@ -150,7 +150,7 @@ describe('deshacer y rehacer', () => {
 
     r = bien(await ejecutarDeshacer(como('p-joaquin'), { botId: BOT, seq: 4, rehacer: true }));
     expect(texto(r.definicion)).toBe(v1);
-    expect(r).toMatchObject({ resumen: 'Rehízo: Editó la caja 1.2', deshacer: 'Editó la caja 1.2', rehacer: 'Quitó la intención prensa' });
+    expect(r).toMatchObject({ resumen: 'Rehízo: Editó la caja 1.2', deshacer: 'Editó la caja 1.2', rehacer: 'Quitó la intención prensa y sus 2 casos de prueba' });
 
     r = bien(await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 5, operaciones: [renombrarMenu('C')], origen: 'editor' }));
     expect(r).toMatchObject({ deshacer: 'Editó la caja 1.2', rehacer: null });

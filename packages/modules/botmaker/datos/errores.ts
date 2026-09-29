@@ -18,6 +18,11 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (c === '40001' || /borrador cambió/.test(m)) return new ErrorDatos('borrador_cambio', m);
   if (/ya no es un borrador/.test(m)) return new ErrorDatos('no_borrador', m);
   if (/versión de la que partir/.test(m)) return new ErrorDatos('sin_version', m);
+  if (/Falta correr las pruebas/.test(m)) return new ErrorDatos('sin_corrida', m);
+  if (/baja el acierto/.test(m)) return new ErrorDatos('baja_acierto', m);
+  if (/no tiene un pedido de publicación/.test(m)) return new ErrorDatos('sin_pedido', m);
+  if (/hace falta un comentario/.test(m)) return new ErrorDatos('falta_comentario', m);
+  if (/La corrida ya terminó/.test(m)) return new ErrorDatos('corrida_terminada', m);
   if (/doble lectura/.test(m)) return new ErrorDatos('doble_lectura', m);
   if (/Motor desconocido/.test(m)) return new ErrorDatos('motor', m);
   if (/no sirve para la función/.test(m)) return new ErrorDatos('motor_funcion', m);

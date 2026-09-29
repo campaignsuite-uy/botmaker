@@ -574,6 +574,107 @@ async function main() {
       afirmar(e instanceof ErrorDatos && e.codigo === 'sin_version', `Dio: ${(e as Error).message}`);
     }
   });
+  console.log('\nCorridas de prueba y publicación');
+  const botP = await comoPersona(db, P.editor, (tx) => crearConPlantilla(tx, 'Para publicar'));
+  const verP = (await uno<{ id: string }>(db, `select id from bots.versions where bot_id = $1`, [botP]))!.id;
+  const correr = async (persona: string, version: string, acierto: number) => {
+    const id = (await comoPersona(db, persona, (tx) => uno<{ id: string }>(tx, `select bots.crear_corrida($1, $2::jsonb, 'Motores del bot', 2) as id`, [version, '{"interpretar": {"principal": "gemini-3.1-flash-lite"}}'])))!.id;
+    const n = await comoPersona(db, persona, (tx) => uno<{ n: number }>(tx, `select bots.guardar_resultados($1, $2::jsonb) as n`, [id, JSON.stringify([
+      { caso: 'c001', tipo: 'intencion', ok: true, resultado: { final: 'cortesia' }, costo: 0.001 },
+      { caso: 'c002', tipo: 'base', ok: false, resultado: { tieneRespuesta: 'no' }, costo: 0.002 },
+      { caso: 'c001', tipo: 'intencion', ok: false, resultado: {}, costo: 9 },
+    ])]));
+    afirmar(n?.n === 2, `Guardó ${n?.n} resultados (el repetido no cuenta)`);
+    await comoPersona(db, persona, (tx) => tx.query(`select bots.cerrar_corrida($1, $2::jsonb, 'terminada')`, [id, JSON.stringify({ acierto })]));
+    return id;
+  };
+  let corridaP = '';
+  await prueba('corridas: editor y administrador corren; agente y lector no; los repetidos no se duplican; costo sumado', async () => {
+    for (const p of [P.agente, P.lector, P.ajeno]) {
+      const e = await error(() => comoPersona(db, p, (tx) => tx.query(`select bots.crear_corrida($1, '{}'::jsonb, 'x', 1)`, [verP])));
+      afirmar(e && /no permite/.test(e), `${p} pudo correr: ${e}`);
+    }
+    corridaP = await correr(P.editor, verP, 90);
+    const r = await uno<{ status: string; done: number; cost_usd: string; version_seq: number; organization_id: string }>(db, `select status, done, cost_usd, version_seq, organization_id from bots.test_runs where id = $1`, [corridaP]);
+    afirmar(r?.status === 'terminada' && r.done === 2 && Number(r.cost_usd) === 0.003 && r.version_seq === 0 && r.organization_id === ORG_A, JSON.stringify(r));
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.guardar_resultados($1, '[]'::jsonb)`, [corridaP])));
+    afirmar(e && /ya terminó/.test(e), `Una corrida terminada aceptó resultados: ${e}`);
+    const lector = await comoPersona(db, P.lector, (tx) => cuenta(tx, `select count(*) as n from bots.test_results where run_id = $1`, [corridaP]));
+    const ajeno = await comoPersona(db, P.ajeno, (tx) => cuenta(tx, `select count(*) as n from bots.test_results where run_id = $1`, [corridaP]));
+    afirmar(lector === 2 && ajeno === 0, `lector ${lector}, ajeno ${ajeno}`);
+  });
+  await prueba('pedir publicar: sin corrida sobre el último cambio no; el agente no; con corrida sí, y la versión queda pedida', async () => {
+    await comoPersona(db, P.editor, (tx) => guardar(tx, verP, 0));
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 1, '')`, [verP])));
+    afirmar(e && /Falta correr las pruebas/.test(e), `Dio: ${e}`);
+    await correr(P.editor, verP, 90);
+    const e2 = await error(() => comoPersona(db, P.agente, (tx) => tx.query(`select bots.pedir_publicacion($1, 1, '')`, [verP])));
+    afirmar(e2 && /no permite/.test(e2), `El agente pudo pedir: ${e2}`);
+    const e3 = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 0, '')`, [verP])));
+    afirmar(e3 && /borrador cambió/.test(e3), `Con un seq viejo: ${e3}`);
+    await comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 1, 'Primera')`, [verP]));
+    const v = await uno<{ status: string }>(db, `select status from bots.versions where id = $1`, [verP]);
+    afirmar(v?.status === 'pedida', JSON.stringify(v));
+    const e4 = await error(() => comoPersona(db, P.editor, (tx) => guardar(tx, verP, 1)));
+    afirmar(e4 && /ya no es un borrador/.test(e4), `Una versión pedida se pudo cambiar: ${e4}`);
+  });
+  await prueba('aprobar: solo el administrador; la versión queda publicada y el bot publicado; queda en la actividad', async () => {
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.aprobar_publicacion($1, '')`, [verP])));
+    afirmar(e && /no permite/.test(e), `El editor pudo aprobar: ${e}`);
+    await comoPersona(db, P.adminCamp, (tx) => tx.query(`select bots.aprobar_publicacion($1, 'Bien')`, [verP]));
+    const b = await uno<{ status: string; published_version_id: string }>(db, `select status, published_version_id from bots.bots where id = $1`, [botP]);
+    afirmar(b?.status === 'publicado' && b.published_version_id === verP, JSON.stringify(b));
+    const ev = (await filas<{ action: string }>(db, `select action from bots.publication_events where bot_id = $1 order by id`, [botP])).map((x) => x.action).join();
+    afirmar(ev === 'pedido,aprobado', ev);
+    const act = await cuenta(db, `select count(*) as n from core.audit_log where action in ('bots.publicacion_pedida', 'bots.publicacion_aprobada')`);
+    afirmar(act === 2, `Actividad: ${act}`);
+  });
+  await prueba('una versión nueva que baja 2 puntos no se puede pedir; devolver pide comentario y vuelve a borrador', async () => {
+    const v2 = (await comoPersona(db, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, null) as id`, [botP])))!.id;
+    await correr(P.editor, v2, 87.5);
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 0, '')`, [v2])));
+    afirmar(e && /baja el acierto/.test(e), `Dio: ${e}`);
+    await correr(P.editor, v2, 88.5);
+    await comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 0, '')`, [v2]));
+    const e2 = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.devolver_publicacion($1, '  ')`, [v2])));
+    afirmar(e2 && /hace falta un comentario/.test(e2), `Dio: ${e2}`);
+    await comoPersona(db, P.dueno, (tx) => tx.query(`select bots.devolver_publicacion($1, 'Revisar el menú')`, [v2]));
+    const v = await uno<{ status: string }>(db, `select status from bots.versions where id = $1`, [v2]);
+    afirmar(v?.status === 'borrador', JSON.stringify(v));
+    const e3 = await error(() => comoServicio(db, (tx) => tx.query(`update bots.publication_events set note = 'x' where bot_id = $1`, [botP])));
+    afirmar(e3 && /permission denied|solo admite agregar/.test(e3), `Se pudo cambiar un evento: ${e3}`);
+  });
+  await prueba('repositorio de Supabase: corridas, resultados y publicación con códigos de error', async () => {
+    const r = repoDe(P.editor);
+    const b = (await r.borrador(botP))!;
+    const otro = await r.crearBot(CAMP_A, { nombre: 'Sin corridas', caso: 'electoral', mercado: 'PA', trato: 'usted' }, U(904), P.editor, plantilla);
+    try {
+      const bo = (await r.borrador(otro))!;
+      await r.pedirPublicacion(bo.id, bo.seq, '', P.editor);
+      throw new Error('Pidió sin corrida');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_corrida', `Dio: ${(e as Error).message}`);
+    }
+    const id = await r.crearCorrida(b.id, { interpretar: { principal: 'gemini-3.1-flash-lite' } }, 'Motores del bot', 1, P.editor);
+    const n = await r.guardarResultados(id, [{ caso: 'c001', tipo: 'intencion', ok: true, resultado: { final: 'cortesia' }, costo: 0.001 }], P.editor);
+    afirmar(n === 1, `Resultados: ${n}`);
+    await r.cerrarCorrida(id, { casos: 1, acierto: 100, intencion: { casos: 1, porReglas: 0, sinRespuesta: 0, acierto: 100, coinciden: 100, aciertoCuandoCoinciden: 100, aclaracion: 0 }, base: { casos: 0, sinRespuesta: 0, acierto: null, contesta: null, reconoce: null, cortadas: null }, costoUsd: 0.001, demoraP50: null }, 'terminada', P.editor);
+    const c = await repoDe(P.lector).corrida(id);
+    afirmar(c?.estado === 'terminada' && c.resultados.length === 1 && c.resumen?.acierto === 100 && c.costoUsd === 0.001, JSON.stringify(c));
+    afirmar((await r.corridas(botP)).length >= 4, 'corridas');
+    await r.pedirPublicacion(b.id, b.seq, 'Otra vez', P.editor);
+    try {
+      await r.aprobarPublicacion(b.id, '', P.editor);
+      throw new Error('El editor aprobó');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    await repoDe(P.dueno).aprobarPublicacion(b.id, '', P.dueno);
+    const vs = await r.versiones(botP);
+    afirmar(vs.map((v) => `${v.numero}:${v.estado}`).join() === '2:publicada,1:archivada', JSON.stringify(vs.map((v) => [v.numero, v.estado])));
+    afirmar((await r.eventosPublicacion(botP)).map((x) => x.accion).join() === 'aprobado,pedido,devuelto,pedido,aprobado,pedido', 'eventos');
+    afirmar((await r.version(b.id))?.estado === 'publicada', 'version()');
+  });
   await prueba('borrar un bot borra sus versiones y su historial', async () => {
     await db.query(`delete from bots.bots where id = $1`, [botV]);
     afirmar(await cuenta(db, `select (select count(*) from bots.versions where bot_id = $1) + (select count(*) from bots.version_changes where version_id = $2) as n`, [botV, verV]) === 0, 'Quedaron versiones');

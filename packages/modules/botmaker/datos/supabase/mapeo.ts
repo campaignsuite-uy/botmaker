@@ -3,7 +3,8 @@
  * numeric llega como texto o número según el cliente: se pasa siempre por Number().
  */
 import type { FichaMotor, Permiso } from '../../dominio/motores';
-import type { Cambio, CambioResumen, EstadoVersion, OrigenCambio, Version } from '../../dominio/versiones';
+import type { AccionPublicacion, Cambio, CambioResumen, EstadoVersion, EventoPublicacion, OrigenCambio, Version } from '../../dominio/versiones';
+import type { Corrida, EstadoCorrida, ResultadoCaso, ResumenCorrida } from '../../dominio/corridas';
 import type { Operacion } from '../../dominio/operaciones';
 import { FUNCIONES, type Bot, type CasoUso, type EstadoBot, type FuncionMotor, type GastoDia, type LlamadaMotor, type MotorFuncion, type NuevaLlamada, type Trato, type UsoMotor } from '../../dominio/tipos';
 
@@ -147,3 +148,28 @@ export const aCambioResumen = (f: FilaCambio): CambioResumen => ({
 });
 
 export const aCambio = (f: FilaCambio): Cambio => ({ ...aCambioResumen(f), operaciones: f.operations ?? [], inversa: f.inverse! });
+
+export const COLUMNAS_CORRIDA = 'id, bot_id, version_id, version_seq, engines, engines_label, status, total, done, summary, cost_usd, created_by, created_at, finished_at';
+
+export interface FilaCorrida {
+  id: string; bot_id: string; version_id: string; version_seq: number; engines: Record<string, unknown>; engines_label: string; status: EstadoCorrida;
+  total: number; done: number; summary: ResumenCorrida | null; cost_usd: number | string; created_by: string | null; created_at: string; finished_at: string | null;
+}
+
+export const aCorrida = (f: FilaCorrida): Corrida => ({
+  id: f.id, botId: f.bot_id, versionId: f.version_id, versionSeq: Number(f.version_seq), motores: f.engines, etiqueta: f.engines_label, estado: f.status,
+  total: Number(f.total), hechos: Number(f.done), resumen: f.summary, costoUsd: Number(f.cost_usd), creadaPor: f.created_by,
+  creadaEn: new Date(f.created_at).toISOString(), terminadaEn: f.finished_at ? new Date(f.finished_at).toISOString() : null,
+});
+
+export interface FilaResultado { case_id: string; kind: 'intencion' | 'base'; ok: boolean | null; result: Record<string, unknown>; cost_usd: number | string }
+
+export const aResultado = (f: FilaResultado): ResultadoCaso => ({ caso: f.case_id, tipo: f.kind, ok: f.ok, resultado: f.result, costo: Number(f.cost_usd) });
+
+export interface FilaEventoPublicacion {
+  id: number; bot_id: string; version_id: string; action: AccionPublicacion; note: string; run_id: string | null; profile_id: string | null; created_at: string;
+}
+
+export const aEventoPublicacion = (f: FilaEventoPublicacion): EventoPublicacion => ({
+  id: Number(f.id), botId: f.bot_id, versionId: f.version_id, accion: f.action, nota: f.note, corridaId: f.run_id, personaId: f.profile_id, fecha: new Date(f.created_at).toISOString(),
+});

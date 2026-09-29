@@ -9,10 +9,11 @@
  */
 import { z } from 'zod';
 import {
-  esquemaCaja, esquemaContenido, esquemaIntencion, esquemaSeccion, esquemaTema, esquemaVariable, idsUsados, letraDeNumero, nuevoId, opcionesDe,
+  esquemaCaja, esquemaCaso, esquemaContenido, esquemaIntencion, esquemaSeccion, esquemaTema, esquemaVariable, idsUsados, letraDeNumero, nuevoId, opcionesDe,
   problemasDeReferencias, esquemaDefinicion, ubicar, type Caja, type Definicion, type Problema,
 } from './definicion';
 import { asignarCodigos, dividirMaterial } from './material';
+import { idDeCaso, leerCasos } from './casos';
 
 export class ErrorOperacion extends Error {
   constructor(readonly codigo: string, mensaje: string, readonly problemas: Problema[] = []) {
@@ -43,6 +44,7 @@ const partes = z.object({
   temas: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   variables: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   material: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
+  casos: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   sueltos: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -80,6 +82,10 @@ export const esquemaOperacion = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('quitar_seccion'), seccion: z.string() }),
   /** Cargar el material pegado o subido como texto ("## Título" por sección): se agrega o reemplaza todo. */
   z.object({ tipo: z.literal('cargar_material'), texto: z.string().max(2_000_000), reemplazar: z.boolean().default(false) }),
+  z.object({ tipo: z.literal('agregar_caso'), caso: z.record(z.string(), z.unknown()) }),
+  z.object({ tipo: z.literal('quitar_caso'), caso: z.string() }),
+  /** Cargar casos de prueba como texto (un caso por renglón): se agregan o reemplazan todos. */
+  z.object({ tipo: z.literal('cargar_casos'), texto: z.string().max(500_000), reemplazar: z.boolean().default(false) }),
   z.object({ tipo: z.literal('restaurar'), partes }),
   /** Reemplazar partes enteras con lo que vino de un YAML (operacionImportar arma las partes y el resumen). */
   z.object({ tipo: z.literal('importar'), partes, resumen: z.string().max(400).default('Importó el YAML') }),
@@ -107,9 +113,9 @@ export interface OpcionesOperacion {
 
 // ── Partes: de dónde sale la inversa ───────────────────────────────────────────────────────────
 
-type Coleccion = 'flujos' | 'contenidos' | 'intenciones' | 'temas' | 'variables' | 'material';
-const COLECCIONES: Coleccion[] = ['flujos', 'contenidos', 'intenciones', 'temas', 'variables', 'material'];
-const SUELTOS = ['formato', 'inicio', 'textoLibre', 'ultimoFlujo', 'ultimaSeccion', 'identidad', 'contacto', 'sistema'] as const;
+type Coleccion = 'flujos' | 'contenidos' | 'intenciones' | 'temas' | 'variables' | 'material' | 'casos';
+const COLECCIONES: Coleccion[] = ['flujos', 'contenidos', 'intenciones', 'temas', 'variables', 'material', 'casos'];
+const SUELTOS = ['formato', 'inicio', 'textoLibre', 'ultimoFlujo', 'ultimaSeccion', 'ultimoCaso', 'identidad', 'contacto', 'sistema'] as const;
 const claveDe = (c: Coleccion, x: { id?: string; nombre?: string; codigo?: string }) => (c === 'variables' ? x.nombre! : c === 'material' ? x.codigo! : x.id!);
 const igual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -117,7 +123,7 @@ type Partes = z.infer<typeof partes>;
 
 /** Lo que hay que volver a poner para pasar de `despues` a `antes`. */
 function partesParaVolver(antes: Definicion, despues: Definicion): Partes {
-  const p: Partes = { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], sueltos: {} };
+  const p: Partes = { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], casos: [], sueltos: {} };
   for (const c of COLECCIONES) {
     const a = antes[c] as { id?: string; nombre?: string }[];
     const d = despues[c] as { id?: string; nombre?: string }[];
@@ -370,7 +376,13 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
         const { [op.intencion]: _, ...resto } = c.rutas;
         c.rutas = resto;
       }
-      return { resumen: `Quitó la intención ${op.intencion}` };
+      // Los casos de prueba que la esperaban se van con ella; si era una alternativa, se saca de la lista.
+      const antes = d.casos.length;
+      d.casos = d.casos
+        .filter((k) => k.tipo !== 'intencion' || k.intencion !== op.intencion)
+        .map((k) => (k.tipo === 'intencion' ? { ...k, alternativas: k.alternativas.filter((a) => a !== op.intencion) } : k));
+      const quitados = antes - d.casos.length;
+      return { resumen: `Quitó la intención ${op.intencion}${quitados ? ` y ${quitados === 1 ? 'su caso de prueba' : `sus ${quitados} casos de prueba`}` : ''}` };
     }
     case 'agregar_tema': {
       const r = esquemaTema.safeParse(op.tema);
@@ -460,6 +472,30 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
       if (!d.material.some((x) => x.codigo === op.seccion)) falla('seccion_inexistente', 'La sección no existe.');
       d.material = d.material.filter((x) => x.codigo !== op.seccion);
       return { resumen: `Quitó la sección ${op.seccion} del material` };
+    }
+    case 'agregar_caso': {
+      const id = idDeCaso(d.ultimoCaso + 1);
+      const r = esquemaCaso.safeParse({ ...op.caso, id });
+      if (!r.success) falla('caso_invalido', `El caso no es válido: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+      d.casos.push(r.data!);
+      d.ultimoCaso += 1;
+      return { resumen: `Agregó el caso de prueba ${id}`, creado: id };
+    }
+    case 'quitar_caso': {
+      if (!d.casos.some((x) => x.id === op.caso)) falla('caso_inexistente', 'El caso no existe.');
+      d.casos = d.casos.filter((x) => x.id !== op.caso);
+      return { resumen: `Quitó el caso de prueba ${op.caso}` };
+    }
+    case 'cargar_casos': {
+      const l = leerCasos(op.texto, new Set(d.intenciones.map((i) => i.id)));
+      if (l.errores.length) falla('casos_invalidos', l.errores.slice(0, 5).map((e) => `Renglón ${e.linea}: ${e.mensaje}`).join(' '));
+      if (!l.casos.length) falla('casos_invalidos', 'No hay ningún caso para cargar.');
+      let n = d.ultimoCaso;
+      const nuevos = l.casos.map((c) => esquemaCaso.parse({ ...c, id: idDeCaso(++n) }));
+      d.casos = op.reemplazar ? nuevos : [...d.casos, ...nuevos];
+      d.ultimoCaso = n;
+      if (d.casos.length > 1000) falla('limite', 'Un bot tiene hasta 1000 casos de prueba.');
+      return { resumen: `${op.reemplazar ? 'Cargó' : 'Agregó'} ${nuevos.length} ${nuevos.length === 1 ? 'caso' : 'casos'} de prueba` };
     }
     case 'cargar_material': {
       const leido = dividirMaterial(op.texto);
@@ -555,6 +591,7 @@ export function operacionImportar(actual: Definicion, importada: Definicion): Op
   const nombres: Record<Coleccion, [string, string]> = {
     flujos: ['flujo', 'flujos'], contenidos: ['contenido', 'contenidos'], intenciones: ['intención', 'intenciones'], temas: ['tema', 'temas'], variables: ['variable', 'variables'],
     material: ['sección del material', 'secciones del material'],
+    casos: ['caso de prueba', 'casos de prueba'],
   };
   const cuantos = (n: number, c: Coleccion) => `${n} ${nombres[c][n === 1 ? 0 : 1]}`;
   const agregados: string[] = [];

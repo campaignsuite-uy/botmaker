@@ -7,6 +7,8 @@ import { MOTORES_POR_DEFECTO, fichaMotor, costoEstimado } from '../../dominio/mo
 import { aplicarOperacion } from '../../dominio/operaciones';
 import { plantillaPolitica } from '../../dominio/plantilla-politica';
 import { MATERIAL_DEMO } from './material-demo';
+import set from '../../pruebas/set-de-prueba.json';
+import preguntas from '../../pruebas/preguntas-con-base.json';
 import type { Bot, FuncionMotor, LlamadaMotor, MotorFuncion, UsoMotor } from '../../dominio/tipos';
 import type { Version } from '../../dominio/versiones';
 
@@ -101,6 +103,13 @@ export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, Mo
       trato: bots[1]!.trato, mercado: bots[1]!.mercado, consultas: { canal: 'web', valor: 'otrocamino.org' },
     }), { tipo: 'cargar_material', texto: MATERIAL_DEMO, reemplazar: true }).definicion,
   ];
+  // El segundo bot trae como casos de prueba el set de la prueba de motores: 218 mensajes y 72 preguntas al material.
+  const INTENCION: Record<string, string> = { saludo: 'cortesia', despedida: 'cortesia' };
+  const lineas = [
+    ...set.mensajes.map((m) => [m.mensaje.replace(/[|\n]/g, ' '), INTENCION[m.intencion] ?? m.intencion, m.intencionAlt.map((x) => INTENCION[x] ?? x).filter((x) => x !== (INTENCION[m.intencion] ?? m.intencion)).join(', ')].filter(Boolean).join(' | ')),
+    ...preguntas.preguntas.map((p) => `? ${p.pregunta.replace(/[|\n]/g, ' ')} | ${p.tieneRespuesta} | ${p.queDecir.replace(/[|\n]/g, ' ')}`),
+  ];
+  definiciones[1] = aplicarOperacion(definiciones[1]!, { tipo: 'cargar_casos', texto: lineas.join('\n'), reemplazar: true }).definicion;
   const versiones = bots.map((b, i) => ({
     id: `ver-demo-${i + 1}`, botId: b.id, campanaId: b.campanaId, numero: 1, estado: 'borrador' as const, basadaEn: null, seq: 0,
     creadaPor: b.creadoPor, creadaEn: b.creadoEn, actualizadaEn: b.actualizadoEn, definicion: definiciones[i],

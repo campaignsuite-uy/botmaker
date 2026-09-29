@@ -10,7 +10,10 @@ import { nucleoMemoria, operacionesCampanaMemoria } from '@campaignsuite/platfor
 import { rolEnCampana } from '@campaignsuite/platform';
 import { esquemaCambiosBot, esquemaDatosPersonales, esquemaNuevoBot, esquemaTopes } from '../../dominio/bots';
 import type { Definicion } from '../../dominio/definicion';
-import { ORIGENES_CAMBIO, type Borrador, type Cambio, type CambioResumen, type NuevoCambio, type Version } from '../../dominio/versiones';
+import {
+  BAJA_MAXIMA_ACIERTO, ORIGENES_CAMBIO, type Borrador, type Cambio, type CambioResumen, type EventoPublicacion, type NuevoCambio, type Version, type VersionCompleta,
+} from '../../dominio/versiones';
+import type { Corrida, ResultadoCaso, ResumenCorrida } from '../../dominio/corridas';
 import { FICHAS_MOTORES, MOTORES_POR_DEFECTO, fichaMotor, type FichaMotor } from '../../dominio/motores';
 import { exigir, type Accion } from '../../dominio/permisos';
 import type {
@@ -29,6 +32,8 @@ interface EstadoDemo {
   llamadas: LlamadaMotor[];
   versiones: VersionDemo[];
   cambios: Map<string, Cambio[]>;
+  corridas: (Corrida & { resultados: ResultadoCaso[] })[];
+  eventos: EventoPublicacion[];
   claves: Map<string, string>;
   siguienteBot: number;
   siguienteLlamada: number;
@@ -48,6 +53,8 @@ export class RepositorioDemo implements Repositorio {
       llamadas: s.llamadas,
       versiones: s.versiones,
       cambios: new Map(),
+      corridas: [],
+      eventos: [],
       claves: new Map(),
       siguienteBot: s.bots.length + 1,
       siguienteLlamada: s.llamadas.length + 1,
@@ -295,6 +302,120 @@ export class RepositorioDemo implements Repositorio {
   async cambio(versionId: string, seq: number): Promise<Cambio | null> {
     const c = (this.e.cambios.get(versionId) ?? []).find((x) => x.seq === seq);
     return c ? structuredClone(c) : null;
+  }
+
+  async version(versionId: string): Promise<VersionCompleta | null> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    return v ? { ...v, definicion: structuredClone(v.definicion) } : null;
+  }
+
+  // ── Corridas ──────────────────────────────────────────────────────────────────────────────────
+
+  private corridaEditable(corridaId: string, por: string) {
+    const r = this.e.corridas.find((x) => x.id === corridaId);
+    if (!r) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(r.botId);
+    this.exigir(b.campanaId, por, 'correr_pruebas');
+    if (r.estado !== 'en_curso') throw new ErrorDatos('corrida_terminada', 'La corrida ya terminó.');
+    return r;
+  }
+
+  async crearCorrida(versionId: string, motores: Record<string, unknown>, etiqueta: string, total: number, por: string): Promise<string> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    if (!v) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(v.botId);
+    this.exigir(b.campanaId, por, 'correr_pruebas');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    const id = `corrida-${this.e.corridas.length + 1}`;
+    this.e.corridas.push({
+      id, botId: v.botId, versionId, versionSeq: v.seq, motores: structuredClone(motores), etiqueta: etiqueta.trim().slice(0, 200), estado: 'en_curso',
+      total, hechos: 0, resumen: null, costoUsd: 0, creadaPor: por, creadaEn: new Date().toISOString(), terminadaEn: null, resultados: [],
+    });
+    return id;
+  }
+
+  async guardarResultados(corridaId: string, resultados: ResultadoCaso[], por: string): Promise<number> {
+    const r = this.corridaEditable(corridaId, por);
+    for (const x of resultados) if (!r.resultados.some((y) => y.caso === x.caso)) r.resultados.push(structuredClone(x));
+    r.hechos = r.resultados.length;
+    r.costoUsd = r.resultados.reduce((a, x) => a + x.costo, 0);
+    return r.hechos;
+  }
+
+  async cerrarCorrida(corridaId: string, resumen: ResumenCorrida | null, estado: 'terminada' | 'cancelada', por: string): Promise<void> {
+    const r = this.corridaEditable(corridaId, por);
+    r.estado = estado;
+    r.resumen = resumen ? structuredClone(resumen) : null;
+    r.terminadaEn = new Date().toISOString();
+  }
+
+  async corridas(botId: string): Promise<Corrida[]> {
+    return this.e.corridas.filter((r) => r.botId === botId).reverse().map(({ resultados: _, ...r }) => structuredClone(r));
+  }
+
+  async corrida(corridaId: string): Promise<(Corrida & { resultados: ResultadoCaso[] }) | null> {
+    const r = this.e.corridas.find((x) => x.id === corridaId);
+    return r ? structuredClone(r) : null;
+  }
+
+  // ── Publicación (las mismas reglas que bots.pedir_publicacion y compañía) ─────────────────────
+
+  private aciertoDe(versionId: string, seq: number | null): number | null {
+    const r = this.e.corridas
+      .filter((x) => x.versionId === versionId && x.estado === 'terminada' && (seq === null || x.versionSeq === seq) && typeof x.resumen?.acierto === 'number')
+      .sort((a, b) => (b.terminadaEn ?? '').localeCompare(a.terminadaEn ?? ''))[0];
+    return r?.resumen?.acierto ?? null;
+  }
+
+  private evento(v: VersionDemo, accion: EventoPublicacion['accion'], nota: string, por: string, corridaId: string | null = null) {
+    this.e.eventos.push({ id: this.e.eventos.length + 1, botId: v.botId, versionId: v.id, accion, nota: nota.slice(0, 2000), corridaId, personaId: por, fecha: new Date().toISOString() });
+  }
+
+  async pedirPublicacion(versionId: string, seqEsperada: number, nota: string, por: string): Promise<void> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    if (!v) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(v.botId);
+    this.exigir(b.campanaId, por, 'pedir_publicacion');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    if (v.estado !== 'borrador') throw new ErrorDatos('no_borrador', 'Esta versión ya no es un borrador.');
+    if (v.seq !== seqEsperada) throw new ErrorDatos('borrador_cambio', 'El borrador cambió mientras lo editabas.');
+    const corrida = this.e.corridas.filter((x) => x.versionId === versionId && x.versionSeq === v.seq && x.estado === 'terminada').at(-1);
+    if (!corrida) throw new ErrorDatos('sin_corrida', 'Falta correr las pruebas sobre el último cambio del borrador.');
+    const nuevo = this.aciertoDe(versionId, v.seq);
+    const publicado = b.versionPublicadaId ? this.aciertoDe(b.versionPublicadaId, null) : null;
+    if (nuevo !== null && publicado !== null && publicado - nuevo >= BAJA_MAXIMA_ACIERTO) throw new ErrorDatos('baja_acierto', `La versión baja el acierto de ${publicado} a ${nuevo}.`);
+    v.estado = 'pedida';
+    this.evento(v, 'pedido', nota, por, corrida.id);
+  }
+
+  async aprobarPublicacion(versionId: string, nota: string, por: string): Promise<void> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    if (!v) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(v.botId);
+    this.exigir(b.campanaId, por, 'publicar');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    if (v.estado !== 'pedida') throw new ErrorDatos('sin_pedido', 'Esa versión no tiene un pedido de publicación.');
+    for (const x of this.e.versiones) if (x.botId === v.botId && x.estado === 'publicada') x.estado = 'archivada';
+    v.estado = 'publicada';
+    b.versionPublicadaId = v.id;
+    if (b.estado !== 'pausado') b.estado = 'publicado';
+    b.actualizadoEn = new Date().toISOString();
+    this.evento(v, 'aprobado', nota, por);
+  }
+
+  async devolverPublicacion(versionId: string, nota: string, por: string): Promise<void> {
+    const v = this.e.versiones.find((x) => x.id === versionId);
+    if (!v) throw new ErrorDatos('no_existe', 'No existe el bot o la campaña.');
+    const b = this.botEditable(v.botId);
+    this.exigir(b.campanaId, por, 'publicar');
+    if (v.estado !== 'pedida') throw new ErrorDatos('sin_pedido', 'Esa versión no tiene un pedido de publicación.');
+    if (!nota.trim()) throw new ErrorDatos('falta_comentario', 'Para devolver hace falta un comentario.');
+    v.estado = this.e.versiones.some((x) => x.botId === v.botId && x.estado === 'borrador') ? 'devuelta' : 'borrador';
+    this.evento(v, 'devuelto', nota, por);
+  }
+
+  async eventosPublicacion(botId: string): Promise<EventoPublicacion[]> {
+    return this.e.eventos.filter((x) => x.botId === botId).reverse().map((x) => ({ ...x }));
   }
 
   private agregarVersion(b: Bot, definicion: unknown, basadaEn: string | null, por: string): VersionDemo {
