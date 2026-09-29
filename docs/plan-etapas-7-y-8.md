@@ -5,16 +5,17 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 
 ## En qué quedó
 
-- La rama `etapa-7-whatsapp` tiene el trabajo empezado. `main` sigue con las etapas 2 a 6 y todas las pruebas en verde.
-- Hecho en la rama:
-  - `dominio/whatsapp.ts`: el formato de mensajes de WhatsApp (texto, botones, lista, plantilla), la lectura de lo que
-    llega (texto, botón, fila de lista, adjuntos), la ventana de 24 horas, las plantillas, el consumo del mes, el aviso
-    de política y los estados de envío.
-  - `canal-whatsapp/d360.ts`: el cliente real de 360dialog.
-  - `datos/repositorio.ts`: el contrato nuevo (`RepositorioWhatsapp` y los métodos del equipo). Todavía no compila: la
-    demo y Supabase no lo implementan.
-  - `dominio/conversaciones.ts`: `ventanaHasta` en la conversación y `envio` en el mensaje.
-- Lo que sigue, en orden, está en «Pasos».
+- **Etapa 7 (WhatsApp con 360dialog simulado):** hecha y en `main`, con todas las pruebas en verde. Falta probarla con
+  una cuenta real (7.01 y 7.05).
+  - Tareas: 7.02, 7.03, 7.04 y 7.07.
+  - Pruebas: 261 unitarias, 68 de base, 175 de pantallas, 334 de celular y 76 del recorrido.
+- **Lo que sigue, en orden:**
+  1. Base de contactos (7.06).
+  2. Analítica (8.01).
+  3. Sentry (8.03).
+  4. Respuestas grabadas (1.07).
+  5. Semilla de demo para Supabase.
+  6. Manual (8.06).
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
@@ -119,36 +120,36 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 
 - [x] Dominio (`dominio/whatsapp.ts`) y cliente real (`canal-whatsapp/d360.ts`)
 - [x] Contrato de datos (`datos/repositorio.ts`)
-- [ ] Pruebas del dominio (`dominio/whatsapp.test.ts`): botones, lista, texto largo, ids, lectura de cada tipo,
+- [x] Pruebas del dominio (`dominio/whatsapp.test.ts`): botones, lista, texto largo, ids, lectura de cada tipo,
       ventana, plantillas y consumo
-- [ ] Núcleo `canal-whatsapp/`:
+- [x] Núcleo `canal-whatsapp/`:
   - `webhook.ts`: lectura del aviso con zod y secreto
   - `nucleo.ts`: `recibirWebhook`, `procesarCanal`, `atenderWhatsapp` y `enviarPendientes`
   - `simulado.ts`
   - `http.ts`: manejadores de Request a Response
   - `nucleo.test.ts`
-- [ ] Demo en memoria: `RepositorioWhatsapp` y los métodos del equipo en `repositorio-demo.ts`, y un canal de ejemplo
+- [x] Demo en memoria: `RepositorioWhatsapp` y los métodos del equipo en `repositorio-demo.ts`, y un canal de ejemplo
       conectado en `semilla-canal.ts`
-- [ ] Migración `bots_0008_whatsapp.sql`, Vault simulado y sus pruebas en `probar-migraciones.ts`
-- [ ] Supabase: los métodos nuevos en `repositorio-supabase.ts` y `publico-supabase.ts`, y los errores nuevos en
+- [x] Migración `bots_0008_whatsapp.sql`, Vault simulado y sus pruebas en `probar-migraciones.ts`
+- [x] Supabase: los métodos nuevos en `repositorio-supabase.ts` y `publico-supabase.ts`, y los errores nuevos en
       `errores.ts` (`ventana_cerrada`, `canal_no_whatsapp`)
-- [ ] Rutas:
+- [x] Rutas:
   - `/api/whatsapp/[bot]` en las dos apps
   - `/publico/telefono` y `/publico/api/telefono`, solo en la demo
   - `/api/tareas` procesa lo atascado y reintenta envíos
-- [ ] Gestor de plantillas (7.07): crear, mandar a aprobar, seguir el estado y borrar; el simulado aprueba o rechaza
-- [ ] Pantallas:
+- [x] Gestor de plantillas (7.07): crear, mandar a aprobar, seguir el estado y borrar; el simulado aprueba o rechaza
+- [x] Pantallas:
   - Canales, sección WhatsApp: conectar, prender o apagar, salud, consumo y aviso
   - Bandeja: ventana, estados, plantillas
   - Ficha del bot: aviso de política
   - Mensajes nuevos en `vistas/mensajes.ts`
-- [ ] Pruebas de pantallas (`correr-pruebas.ts`), celular y recorrido (`probar-recorrido.mjs`):
+- [x] Pruebas de pantallas (`correr-pruebas.ts`), celular y recorrido (`probar-recorrido.mjs`):
   - conectar con una clave de prueba
   - el teléfono de prueba conversa
   - un reintento no se duplica
   - la ventana cerrada solo deja plantillas
   - una clave revocada desconecta y abre la alerta
-- [ ] Docs:
+- [x] Docs:
   - `guia-desarrollo.md`
   - `puesta-en-marcha.md`, sección 9: 360dialog con la cuenta de la campaña
   - `.env.ejemplo`: `BOTS_WHATSAPP_SIMULADO`
