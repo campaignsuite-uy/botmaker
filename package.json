@@ -10,7 +10,9 @@
     "db:probar": "pnpm --filter @botmaker/db probar",
     "db:sql": "pnpm --filter @botmaker/db sql",
     "probar": "pnpm --filter @campaignsuite/botmaker probar",
-    "probar:celular": "node scripts/probar-celular.mjs"
+    "probar:celular": "node scripts/probar-celular.mjs",
+    "motores:interpretar": "pnpm --filter @campaignsuite/botmaker exec tsx scripts/prueba-motores/cli.ts interpretar",
+    "motores:responder": "pnpm --filter @campaignsuite/botmaker exec tsx scripts/prueba-motores/cli.ts responder"
   },
   "devDependencies": {
     "playwright": "^1.63.0",
