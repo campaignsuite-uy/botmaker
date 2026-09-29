@@ -14,7 +14,8 @@
     "probar:celular": "node scripts/probar-celular.mjs",
     "motores:interpretar": "pnpm --filter @campaignsuite/botmaker exec tsx scripts/prueba-motores/cli.ts interpretar",
     "motores:responder": "pnpm --filter @campaignsuite/botmaker exec tsx scripts/prueba-motores/cli.ts responder",
-    "probar:recorrido": "node scripts/probar-recorrido.mjs"
+    "probar:recorrido": "node scripts/probar-recorrido.mjs",
+    "probar:carga": "node scripts/probar-carga.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0",
