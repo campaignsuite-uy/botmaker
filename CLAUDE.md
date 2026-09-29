@@ -9,6 +9,7 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 - Resultado de la prueba de motores: https://claude.ai/code/artifact/12653699-1f3d-4a3c-8985-6ea5b9aa281d
 - Pruebas de aceptación de las etapas 2 a 6: https://claude.ai/code/artifact/eb2284e1-de5d-41af-be0b-1c99d8c072f2
 - Guía de desarrollo: `docs/guia-desarrollo.md`. Puesta en marcha: `docs/puesta-en-marcha.md`.
+- Hoja de ruta de las etapas 7 y 8 hasta Supabase (dónde quedó y qué sigue): `docs/plan-etapas-7-y-8.md`.
 
 ## No se negocia
 
