@@ -24,6 +24,7 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   costos). Sin WhatsApp (necesita una clave real). Pesa algo más de 1 MB.
 - **Manual (8.06):** borrador en Claude Docs (https://claude.ai/code/artifact/22ed80b7-30a4-4800-8239-bb44794a2fea).
   Se prueba dándoselo a alguien que no conoce el producto.
+- **Controles en `main`:** 297 unitarias, 79 de base, 202 de pantallas, 385 de celular y 94 del recorrido.
 - **Lo que sigue: Supabase.** Todo lo que se hace sin cuentas está hecho. El próximo paso es el proyecto de Supabase de
   desarrollo (1.10 a 1.13) y cargar la estructura, la semilla y, si se quiere, los bots de ejemplo.
 
