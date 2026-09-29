@@ -127,3 +127,28 @@ describe('simulador con material (etapa 3)', () => {
     expect(r.eventos.map((e) => e.nombre)).toContain('tramite_electoral');
   });
 });
+
+describe('las 72 preguntas de la planilla en el simulador (cierre de la etapa 3)', () => {
+  it('cada una termina en una respuesta citada, en "no tengo ese dato" o en el organismo electoral, sin datos sin respaldo', async () => {
+    const { preguntas } = await import('../pruebas/preguntas-con-base.json');
+    const { validarDatos } = await import('../dominio/validar-datos');
+    const def = (await repo.borrador('bot-demo-2'))!.definicion as { material: { codigo: string; titulo: string; texto: string; fuente: string }[] };
+    const cuenta = { citada: 0, sinDato: 0, tramite: 0, cortada: 0 };
+    for (const p of preguntas) {
+      const a = await ejecutarTurnoSimulador(como('p-lucia'), capa, { botId: 'bot-demo-2', sesion: null, entrada: { tipo: 'inicio' }, horario: 'dentro' });
+      if (!a.ok) throw new Error(a.codigo);
+      const r = await ejecutarTurnoSimulador(como('p-lucia'), capa, { botId: 'bot-demo-2', sesion: a.sesion, entrada: { tipo: 'texto', texto: p.pregunta }, horario: 'dentro' });
+      if (!r.ok) throw new Error(r.codigo);
+      const eventos = r.eventos.map((e) => e.nombre);
+      if (eventos.includes('dato_cortado')) cuenta.cortada++;
+      if (eventos.includes('tramite_electoral')) cuenta.tramite++;
+      else if (r.decision.secciones?.length) {
+        cuenta.citada++;
+        const citadas = def.material.filter((s) => r.decision.secciones!.includes(s.codigo)).map((s) => `${s.titulo}\n${s.texto}\n${s.fuente}`);
+        expect(validarDatos(r.mensajes[0]!.texto, { citadas, otros: [p.pregunta] }), p.id).toEqual([]);
+      } else cuenta.sinDato++;
+    }
+    expect(cuenta.citada + cuenta.sinDato + cuenta.tramite).toBeGreaterThanOrEqual(preguntas.length);
+    expect(cuenta.citada).toBeGreaterThan(20);
+  }, 60_000);
+});

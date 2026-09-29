@@ -19,7 +19,7 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 - **Avisar, no bloquear:** las condiciones de los proveedores y de cada mercado se informan donde se decide.
 - **El motor es configuración:** ninguna pantalla ni flujo conoce el modelo; todo pasa por `motores/`.
 - **Migraciones:** nunca se edita una aplicada; cada cambio, un archivo nuevo entre `begin` y `commit`.
-- **Antes de entregar:** `pnpm typecheck && pnpm test && pnpm db:probar && pnpm probar && pnpm build && pnpm probar:celular`.
+- **Antes de entregar:** `pnpm typecheck && pnpm test && pnpm db:probar && pnpm probar && pnpm build && pnpm probar:celular && pnpm probar:recorrido`.
 
 ## Qué se muda a CampaignSuite y qué no
 
