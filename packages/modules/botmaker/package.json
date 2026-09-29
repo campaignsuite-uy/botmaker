@@ -12,8 +12,10 @@
     "./vistas/*": "./vistas/*.ts",
     "./ui/estilos.css": "./ui/estilos.css",
     "./ui/contexto": "./ui/contexto.ts",
+    "./ui/publico/estilos.css": "./ui/publico/estilos.css",
     "./ui/*": "./ui/*.tsx",
-    "./acciones/*": "./acciones/*.ts"
+    "./acciones/*": "./acciones/*.ts",
+    "./canal-web/*": "./canal-web/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

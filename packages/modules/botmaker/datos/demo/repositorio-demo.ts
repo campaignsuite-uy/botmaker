@@ -21,8 +21,16 @@ import type {
 } from '../../dominio/tipos';
 import { PRODUCTO } from '../../dominio/tipos';
 import { ErrorDatos } from '../errores';
-import type { FiltroLlamadas, Repositorio } from '../repositorio';
+import type {
+  BotPublico, CanalWeb, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FiltroConversaciones, FiltroLlamadas, FilaMuestra,
+  Repositorio, RepositorioPublico, RepositorioTareas, TurnoDevuelto, TurnoGuardado,
+} from '../repositorio';
+import {
+  inicioVentana, LIMITES_WEB, MINUTOS_ALERTA_DERIVADA, type Alerta, type Canal, type Condiciones, type Contacto, type Conversacion, type EventoAnalitica, type Mensaje, type PedidoDatos,
+} from '../../dominio/conversaciones';
+import { sesionNueva } from '../../dominio/motor';
 import { semillaDemo } from './semilla';
+import { semillaCanal } from './semilla-canal';
 
 type VersionDemo = Version & { definicion: unknown };
 
@@ -38,15 +46,35 @@ interface EstadoDemo {
   siguienteBot: number;
   siguienteLlamada: number;
   siguienteVersion: number;
+  // Etapas 5 y 6: canal web, conversaciones y bandeja.
+  canales: Map<string, CanalWeb>;
+  condiciones: Condiciones[];
+  contactos: Contacto[];
+  conversaciones: Conversacion[];
+  mensajes: Map<string, Mensaje[]>;
+  analitica: (EventoAnalitica & { botId: string; versionId: string | null; canal: Canal; conversacionId: string; contactoHash: string; fecha: string })[];
+  conteos: Map<string, number>;
+  alertas: Alerta[];
+  revisiones: Map<string, { veredicto: 'correcta' | 'incorrecta'; convertida: boolean; por: string; fecha: string }>;
+  pedidos: PedidoDatos[];
+  siguienteId: number;
 }
 
 const ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789';
 
-export class RepositorioDemo implements Repositorio {
+export class RepositorioDemo implements Repositorio, RepositorioPublico, RepositorioTareas {
   private e: EstadoDemo;
 
   constructor(opciones: { ahora?: Date; vacio?: boolean } = {}) {
-    const s = opciones.vacio ? { bots: [], motores: new Map(), llamadas: [], versiones: [] } : semillaDemo(opciones.ahora ?? new Date());
+    const ahora = opciones.ahora ?? new Date();
+    const s: ReturnType<typeof semillaDemo> = opciones.vacio ? { bots: [], motores: new Map(), llamadas: [], versiones: [] } : semillaDemo(ahora);
+    const c = opciones.vacio ? null : semillaCanal(ahora);
+    if (c) {
+      s.bots.push(c.bot);
+      s.motores.set(c.bot.id, c.motores);
+      s.versiones.push(c.version);
+    }
+    const hace = (min: number) => new Date(new Date(c?.publicadoDesde ?? ahora).getTime() - min * 60_000).toISOString();
     this.e = {
       bots: s.bots,
       motores: s.motores,
@@ -54,11 +82,25 @@ export class RepositorioDemo implements Repositorio {
       versiones: s.versiones,
       cambios: new Map(),
       corridas: [],
-      eventos: [],
+      eventos: c ? [
+        { id: 1, botId: c.bot.id, versionId: c.version.id, accion: 'pedido', nota: 'Primera versión para la web', corridaId: null, personaId: 'p-lucia', fecha: hace(60) },
+        { id: 2, botId: c.bot.id, versionId: c.version.id, accion: 'aprobado', nota: '', corridaId: null, personaId: 'p-joaquin', fecha: hace(0) },
+      ] : [],
       claves: new Map(),
       siguienteBot: s.bots.length + 1,
       siguienteLlamada: s.llamadas.length + 1,
       siguienteVersion: s.versiones.length + 1,
+      canales: new Map(),
+      condiciones: c?.condiciones ?? [],
+      contactos: c?.contactos ?? [],
+      conversaciones: c?.conversaciones ?? [],
+      mensajes: c?.mensajes ?? new Map(),
+      analitica: [],
+      conteos: new Map(),
+      alertas: [],
+      revisiones: new Map(),
+      pedidos: [],
+      siguienteId: 100,
     };
   }
 
@@ -417,6 +459,436 @@ export class RepositorioDemo implements Repositorio {
 
   async eventosPublicacion(botId: string): Promise<EventoPublicacion[]> {
     return this.e.eventos.filter((x) => x.botId === botId).reverse().map((x) => ({ ...x }));
+  }
+
+  // ── Pausar (etapa 5) ──────────────────────────────────────────────────────────────────────────
+
+  async pausarBot(botId: string, pausar: boolean, por: string): Promise<void> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'publicar');
+    if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
+    if (pausar) {
+      if (b.estado !== 'publicado') throw new ErrorDatos('no_publicado', 'Solo se pausa un bot publicado.');
+      b.estado = 'pausado';
+    } else {
+      if (b.estado !== 'pausado') throw new ErrorDatos('no_pausado', 'El bot no está en pausa.');
+      b.estado = 'publicado';
+    }
+    b.actualizadoEn = new Date().toISOString();
+  }
+
+  // ── Canal web y condiciones ───────────────────────────────────────────────────────────────────
+
+  async canalWeb(botId: string): Promise<CanalWeb> {
+    return { ...(this.e.canales.get(botId) ?? { activo: true, modoCondiciones: 'aviso' }) };
+  }
+
+  async guardarCanalWeb(botId: string, canal: CanalWeb, por: string): Promise<void> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    if (!['aviso', 'acepto'].includes(canal.modoCondiciones)) throw new ErrorDatos('datos', 'Modo de condiciones inválido.');
+    this.e.canales.set(botId, { activo: !!canal.activo, modoCondiciones: canal.modoCondiciones });
+  }
+
+  async condiciones(botId: string): Promise<Condiciones[]> {
+    return this.e.condiciones.filter((c) => c.botId === botId).sort((a, b) => b.numero - a.numero).map((c) => ({ ...c }));
+  }
+
+  async publicarCondiciones(botId: string, texto: string, por: string): Promise<number> {
+    const b = this.botEditable(botId);
+    this.exigir(b.campanaId, por, 'configurar_canales');
+    const t = texto.trim();
+    if (!t || t.length > 20000) throw new ErrorDatos('datos', 'Las condiciones tienen que tener texto (hasta 20.000 caracteres).');
+    const numero = Math.max(0, ...this.e.condiciones.filter((c) => c.botId === botId).map((c) => c.numero)) + 1;
+    this.e.condiciones.push({ botId, numero, texto: t, publicadasEn: new Date().toISOString(), publicadasPor: por });
+    return numero;
+  }
+
+  // ── App pública ───────────────────────────────────────────────────────────────────────────────
+
+  async botPublico(idPublico: string): Promise<BotPublico | null> {
+    const b = this.e.bots.find((x) => x.idPublico === idPublico);
+    if (!b) return null;
+    const v = this.e.versiones.find((x) => x.id === b.versionPublicadaId);
+    const org = nucleoMemoria().organizaciones.find((o) => o.id === b.organizacionId);
+    const cond = this.e.condiciones.filter((c) => c.botId === b.id).sort((x, y) => y.numero - x.numero)[0];
+    const aprobado = this.e.eventos.filter((e) => e.botId === b.id && e.accion === 'aprobado').sort((x, y) => x.fecha.localeCompare(y.fecha))[0];
+    const campana = nucleoMemoria().campanas.find((x) => x.id === b.campanaId);
+    return {
+      bot: { ...b }, campana: { nombre: campana?.nombre ?? '', zonaHoraria: campana?.ubicacion.zonaHoraria ?? 'UTC' },
+      version: v ? { id: v.id, numero: v.numero, definicion: structuredClone(v.definicion) } : null, publicadoDesde: aprobado?.fecha ?? null,
+      organizacionDemo: !!org?.demo, canal: await this.canalWeb(b.id), condiciones: cond ? { numero: cond.numero, texto: cond.texto } : null,
+    };
+  }
+
+  async contar(claves: readonly { clave: string; ventanaSegundos: number }[], ahora: Date): Promise<number[]> {
+    return claves.map((c) => {
+      const k = `${c.clave}|${inicioVentana(ahora, c.ventanaSegundos)}`;
+      const n = (this.e.conteos.get(k) ?? 0) + 1;
+      this.e.conteos.set(k, n);
+      return n;
+    });
+  }
+
+  private nuevoId(prefijo: string): string {
+    return `${prefijo}-${this.e.siguienteId++}`;
+  }
+
+  async buscarConversacion(botId: string, contactoHash: string): Promise<{ conversacion: Conversacion; contacto: Contacto } | null> {
+    const contacto = this.e.contactos.find((c) => c.botId === botId && c.hash === contactoHash);
+    if (!contacto) return null;
+    const c = this.e.conversaciones.filter((x) => x.contactoId === contacto.id && x.estado !== 'cerrada').sort((x, y) => y.iniciadaEn.localeCompare(x.iniciadaEn))[0];
+    return c ? { conversacion: structuredClone(c), contacto: { ...contacto } } : null;
+  }
+
+  async abrirConversacion(p: { botId: string; contactoHash: string; canal: Canal; verificadoAhora: boolean; ahora: Date }): Promise<{ conversacion: Conversacion; contacto: Contacto; nueva: boolean }> {
+    const b = this.botEditable(p.botId);
+    const iso = p.ahora.toISOString();
+    let contacto = this.e.contactos.find((c) => c.botId === b.id && c.hash === p.contactoHash);
+    if (!contacto) {
+      contacto = {
+        id: this.nuevoId('ct'), botId: b.id, campanaId: b.campanaId, canal: p.canal, hash: p.contactoHash, nombre: null, datos: {},
+        condicionesVersion: null, condicionesAceptadasEn: null, verificadoEn: null, creadoEn: iso, borradoEn: null,
+      };
+      this.e.contactos.push(contacto);
+    }
+    if (p.verificadoAhora) contacto.verificadoEn = iso;
+    const verificada = !!contacto.verificadoEn && new Date(contacto.verificadoEn).getTime() >= p.ahora.getTime() - LIMITES_WEB.horasVerificacion * 36e5;
+    const limite = p.ahora.getTime() - LIMITES_WEB.minutosSesion * 60_000;
+    let c = this.e.conversaciones.filter((x) => x.contactoId === contacto!.id && x.estado !== 'cerrada').sort((x, y) => y.iniciadaEn.localeCompare(x.iniciadaEn))[0];
+    if (c && c.estado === 'bot' && new Date(c.actualizadaEn).getTime() < limite) {
+      c.estado = 'cerrada';
+      c = undefined;
+    }
+    if (c) {
+      if (verificada) c.verificada = true;
+      return { conversacion: structuredClone(c), contacto: { ...contacto }, nueva: false };
+    }
+    const nueva: Conversacion = {
+      id: this.nuevoId('conv'), botId: b.id, campanaId: b.campanaId, contactoId: contacto.id, canal: p.canal, versionId: b.versionPublicadaId,
+      estado: 'bot', sesion: sesionNueva(), cajaActual: null, asignadaA: null, derivadaEn: null, motivoDerivacion: null, cajaDerivacion: null,
+      ultimoDelContacto: null, ultimoDelEquipo: null, verificada, seq: 0, iniciadaEn: iso, actualizadaEn: iso,
+    };
+    this.e.conversaciones.push(nueva);
+    this.e.mensajes.set(nueva.id, []);
+    return { conversacion: structuredClone(nueva), contacto: { ...contacto }, nueva: true };
+  }
+
+  async mensajes(conversacionId: string, desde: number): Promise<Mensaje[]> {
+    return (this.e.mensajes.get(conversacionId) ?? []).filter((m) => m.n > desde).map((m) => structuredClone(m));
+  }
+
+  async mensajePorIdCanal(conversacionId: string, idCanal: string): Promise<Mensaje | null> {
+    const m = (this.e.mensajes.get(conversacionId) ?? []).find((x) => x.idCanal === idCanal);
+    return m ? structuredClone(m) : null;
+  }
+
+  private conv(conversacionId: string): Conversacion {
+    const c = this.e.conversaciones.find((x) => x.id === conversacionId);
+    if (!c) throw new ErrorDatos('no_existe', 'No existe la conversación.');
+    return c;
+  }
+
+  private agregarMensaje(c: Conversacion, m: Omit<Mensaje, 'conversacionId' | 'n'>): Mensaje {
+    const lista = this.e.mensajes.get(c.id) ?? [];
+    const nuevo: Mensaje = { ...structuredClone(m), conversacionId: c.id, n: c.seq + 1 };
+    lista.push(nuevo);
+    this.e.mensajes.set(c.id, lista);
+    c.seq += 1;
+    c.actualizadaEn = m.creadoEn;
+    return nuevo;
+  }
+
+  private anotar(c: Conversacion, contacto: Contacto, eventos: readonly EventoAnalitica[], fecha: string) {
+    for (const e of eventos) {
+      this.e.analitica.push({ ...structuredClone(e), botId: c.botId, versionId: c.versionId, canal: c.canal, conversacionId: c.id, contactoHash: contacto.hash, fecha });
+    }
+  }
+
+  async guardarTurno(conversacionId: string, seqEsperada: number, t: TurnoGuardado): Promise<Mensaje[]> {
+    const c = this.conv(conversacionId);
+    if (c.seq !== seqEsperada) throw new ErrorDatos('conversacion_cambio', 'La conversación cambió mientras se contestaba.');
+    if (t.entrante?.idCanal && (this.e.mensajes.get(c.id) ?? []).some((m) => m.idCanal === t.entrante!.idCanal)) throw new ErrorDatos('repetido', 'Ese mensaje ya llegó.');
+    const contacto = this.e.contactos.find((x) => x.id === c.contactoId)!;
+    const nuevos: Mensaje[] = [];
+    if (t.entrante) {
+      nuevos.push(this.agregarMensaje(c, { autor: 'contacto', personaId: null, tipo: t.entrante.tipo, texto: t.entrante.texto, datos: t.entrante.datos, cajaId: null, decision: null, versionId: t.versionId, idCanal: t.entrante.idCanal, muestra: false, creadoEn: t.ahora }));
+      c.ultimoDelContacto = t.ahora;
+    }
+    let primero = true;
+    for (const m of t.salientes) {
+      const esBot = m.autor === 'bot';
+      nuevos.push(this.agregarMensaje(c, {
+        autor: m.autor, personaId: null, tipo: 'texto', texto: m.texto, datos: m.datos, cajaId: m.cajaId, decision: esBot && primero ? t.decision : null,
+        versionId: t.versionId, idCanal: null, muestra: esBot && primero && t.muestra, creadoEn: t.ahora,
+      }));
+      if (esBot) primero = false;
+    }
+    c.sesion = structuredClone(t.sesion);
+    c.estado = t.estado;
+    c.cajaActual = t.cajaActual;
+    c.versionId = t.versionId ?? c.versionId;
+    if (t.derivacion) {
+      c.derivadaEn = t.ahora;
+      c.motivoDerivacion = t.derivacion.motivo;
+      c.cajaDerivacion = t.derivacion.cajaId;
+    }
+    for (const [k, v] of Object.entries(t.datosContacto)) {
+      contacto.datos[k] = v;
+      if (k === 'contacto.nombre') contacto.nombre = v;
+    }
+    this.anotar(c, contacto, t.eventos, t.ahora);
+    return nuevos.map((m) => structuredClone(m));
+  }
+
+  async aceptarCondiciones(contactoId: string, numero: number, ahora: Date): Promise<void> {
+    const c = this.e.contactos.find((x) => x.id === contactoId);
+    if (!c) throw new ErrorDatos('no_existe', 'No existe el contacto.');
+    c.condicionesVersion = numero;
+    c.condicionesAceptadasEn = ahora.toISOString();
+  }
+
+  // ── Bandeja ───────────────────────────────────────────────────────────────────────────────────
+
+  async conversaciones(campanaId: string, filtro: FiltroConversaciones = {}): Promise<FilaConversacion[]> {
+    const buscar = filtro.buscar?.trim().toLowerCase();
+    return this.e.conversaciones
+      .filter((c) => c.campanaId === campanaId && (!filtro.botId || c.botId === filtro.botId) && (!filtro.canal || c.canal === filtro.canal))
+      .filter((c) => !filtro.estado || (filtro.estado === 'abiertas' ? c.estado === 'derivada' || c.estado === 'en_atencion' : c.estado === filtro.estado))
+      .filter((c) => !filtro.asignadaA || c.asignadaA === filtro.asignadaA)
+      .filter((c) => {
+        if (!buscar) return true;
+        const ct = this.e.contactos.find((x) => x.id === c.contactoId);
+        return !!ct && [ct.nombre ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(buscar));
+      })
+      .sort((a, b) => b.actualizadaEn.localeCompare(a.actualizadaEn))
+      .slice(0, filtro.limite ?? 100)
+      .map((c) => {
+        const ct = this.e.contactos.find((x) => x.id === c.contactoId)!;
+        const ms = this.e.mensajes.get(c.id) ?? [];
+        const u = ms.at(-1);
+        return {
+          conversacion: structuredClone(c), contacto: { id: ct.id, nombre: ct.nombre, borradoEn: ct.borradoEn },
+          ultimo: u ? { autor: u.autor, texto: u.texto, creadoEn: u.creadoEn } : null, mensajes: ms.length,
+        };
+      });
+  }
+
+  async conversacion(conversacionId: string): Promise<ConversacionCompleta | null> {
+    const c = this.e.conversaciones.find((x) => x.id === conversacionId);
+    if (!c) return null;
+    const ct = this.e.contactos.find((x) => x.id === c.contactoId)!;
+    return { conversacion: structuredClone(c), contacto: structuredClone(ct), mensajes: structuredClone(this.e.mensajes.get(c.id) ?? []) };
+  }
+
+  private convDelEquipo(conversacionId: string, por: string, accion: Accion = 'responder_conversaciones'): Conversacion {
+    const c = this.conv(conversacionId);
+    this.exigir(c.campanaId, por, accion);
+    return c;
+  }
+
+  async tomarConversacion(conversacionId: string, por: string): Promise<void> {
+    const c = this.convDelEquipo(conversacionId, por);
+    if (c.estado === 'cerrada') throw new ErrorDatos('conversacion_cerrada', 'La conversación está cerrada.');
+    const ahora = new Date().toISOString();
+    if (c.estado === 'bot') {
+      c.derivadaEn = ahora;
+      c.motivoDerivacion = 'La tomó el equipo';
+      c.sesion = { ...c.sesion, estado: 'derivada', espera: null };
+    }
+    c.estado = 'en_atencion';
+    c.asignadaA = por;
+    c.actualizadaEn = ahora;
+  }
+
+  async responderConversacion(conversacionId: string, texto: string, por: string): Promise<number> {
+    const c = this.convDelEquipo(conversacionId, por);
+    const t = texto.trim();
+    if (!t || t.length > 4096) throw new ErrorDatos('datos', 'La respuesta tiene que tener texto (hasta 4.096 caracteres).');
+    if (c.estado !== 'derivada' && c.estado !== 'en_atencion') throw new ErrorDatos('no_derivada', 'Para responder, primero hay que tomar la conversación.');
+    const ahora = new Date().toISOString();
+    if (c.estado === 'derivada') {
+      c.estado = 'en_atencion';
+      c.asignadaA = por;
+    }
+    const m = this.agregarMensaje(c, { autor: 'agente', personaId: por, tipo: 'texto', texto: t, datos: null, cajaId: null, decision: null, versionId: null, idCanal: null, muestra: false, creadoEn: ahora });
+    c.ultimoDelEquipo = ahora;
+    return m.n;
+  }
+
+  async devolverConversacion(conversacionId: string, turno: TurnoDevuelto, por: string): Promise<void> {
+    const c = this.convDelEquipo(conversacionId, por);
+    if (c.estado !== 'derivada' && c.estado !== 'en_atencion') throw new ErrorDatos('no_derivada', 'La conversación no está derivada.');
+    const ahora = new Date().toISOString();
+    let primero = true;
+    for (const m of turno.mensajes) {
+      this.agregarMensaje(c, { autor: 'bot', personaId: null, tipo: 'texto', texto: m.texto, datos: m.datos, cajaId: m.cajaId, decision: primero ? turno.decision : null, versionId: c.versionId, idCanal: null, muestra: false, creadoEn: ahora });
+      primero = false;
+    }
+    c.estado = 'bot';
+    c.asignadaA = null;
+    c.sesion = structuredClone(turno.sesion);
+    c.cajaActual = turno.cajaActual;
+    c.actualizadaEn = ahora;
+    const ct = this.e.contactos.find((x) => x.id === c.contactoId)!;
+    this.anotar(c, ct, turno.eventos, ahora);
+  }
+
+  async cerrarConversacion(conversacionId: string, por: string): Promise<void> {
+    const c = this.convDelEquipo(conversacionId, por);
+    c.estado = 'cerrada';
+    c.asignadaA = null;
+    c.actualizadaEn = new Date().toISOString();
+  }
+
+  async alertas(campanaId: string, opciones: { abiertas?: boolean } = {}): Promise<Alerta[]> {
+    // La demo no tiene tareas programadas: revisa al leer.
+    await this.revisarAlertas(new Date());
+    return this.e.alertas
+      .filter((a) => a.campanaId === campanaId && (!opciones.abiertas || !a.cerradaEn))
+      .sort((a, b) => b.abiertaEn.localeCompare(a.abiertaEn))
+      .map((a) => ({ ...a }));
+  }
+
+  async revisarAlertas(ahora: Date): Promise<{ abiertas: number; cerradas: number }> {
+    let abiertas = 0;
+    let cerradas = 0;
+    const iso = ahora.toISOString();
+    const limite = ahora.getTime() - MINUTOS_ALERTA_DERIVADA * 60_000;
+    const debe = new Map<string, { tipo: Alerta['tipo']; botId: string; campanaId: string; ref: string }>();
+    for (const c of this.e.conversaciones) {
+      const sinRespuesta = (c.estado === 'derivada' || c.estado === 'en_atencion') && c.derivadaEn && (!c.ultimoDelEquipo || c.ultimoDelEquipo < c.derivadaEn);
+      if (sinRespuesta && new Date(c.derivadaEn!).getTime() <= limite) debe.set(`derivada_sin_respuesta|${c.id}`, { tipo: 'derivada_sin_respuesta', botId: c.botId, campanaId: c.campanaId, ref: c.id });
+    }
+    const dia = iso.slice(0, 10);
+    for (const b of this.e.bots) {
+      if (b.estado !== 'publicado' && b.estado !== 'pausado') continue;
+      if (b.topeDiarioUsd > 0 && (await this.gastoBot(b.id, dia, 'en_vivo')) >= b.topeDiarioUsd) debe.set(`tope_alcanzado|${dia}|${b.id}`, { tipo: 'tope_alcanzado', botId: b.id, campanaId: b.campanaId, ref: dia });
+    }
+    for (const a of this.e.alertas) {
+      if (a.cerradaEn) continue;
+      const k = a.tipo === 'tope_alcanzado' ? `${a.tipo}|${a.ref}|${a.botId}` : `${a.tipo}|${a.ref}`;
+      if (debe.has(k)) debe.delete(k);
+      else if (a.tipo !== 'canal_desconectado') {
+        a.cerradaEn = iso;
+        cerradas++;
+      }
+    }
+    for (const x of debe.values()) {
+      this.e.alertas.push({ id: this.nuevoId('al'), ...x, abiertaEn: iso, cerradaEn: null });
+      abiertas++;
+    }
+    return { abiertas, cerradas };
+  }
+
+  async muestra(campanaId: string, opciones: { pendientes?: boolean; limite?: number } = {}): Promise<FilaMuestra[]> {
+    const filas: FilaMuestra[] = [];
+    for (const c of this.e.conversaciones.filter((x) => x.campanaId === campanaId)) {
+      const ms = this.e.mensajes.get(c.id) ?? [];
+      for (const m of ms.filter((x) => x.muestra)) {
+        const r = this.e.revisiones.get(`${c.id}|${m.n}`);
+        if (opciones.pendientes && r) continue;
+        const pregunta = [...ms].reverse().find((x) => x.n < m.n && x.autor === 'contacto');
+        filas.push({
+          conversacionId: c.id, botId: c.botId, n: m.n, pregunta: pregunta?.texto ?? null, respuesta: m.texto, secciones: m.decision?.secciones ?? [], fecha: m.creadoEn,
+          veredicto: r?.veredicto ?? null, convertida: r?.convertida ?? false, revisadaPor: r?.por ?? null,
+        });
+      }
+    }
+    return filas.sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, opciones.limite ?? 100);
+  }
+
+  async revisarRespuesta(conversacionId: string, n: number, veredicto: 'correcta' | 'incorrecta', convertida: boolean, por: string): Promise<void> {
+    const c = this.convDelEquipo(conversacionId, por, 'editar_borrador');
+    const m = (this.e.mensajes.get(c.id) ?? []).find((x) => x.n === n);
+    if (!m?.muestra) throw new ErrorDatos('no_muestra', 'Ese mensaje no está en la muestra.');
+    if (!['correcta', 'incorrecta'].includes(veredicto)) throw new ErrorDatos('datos', 'Veredicto inválido.');
+    this.e.revisiones.set(`${c.id}|${n}`, { veredicto, convertida, por, fecha: new Date().toISOString() });
+  }
+
+  async buscarContactos(campanaId: string, texto: string, por: string): Promise<FilaContacto[]> {
+    this.exigir(campanaId, por, 'gestionar_datos_contactos');
+    const q = texto.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return this.e.contactos
+      .filter((ct) => ct.campanaId === campanaId && !ct.borradoEn)
+      .filter((ct) => ct.id === texto.trim() || [ct.nombre ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(q))
+        || this.e.conversaciones.some((c) => c.contactoId === ct.id && (this.e.mensajes.get(c.id) ?? []).some((m) => m.autor === 'contacto' && m.texto?.toLowerCase().includes(q))))
+      .slice(0, 50)
+      .map((ct) => {
+        const cs = this.e.conversaciones.filter((c) => c.contactoId === ct.id);
+        return { contacto: structuredClone(ct), conversaciones: cs.length, ultima: cs.map((c) => c.actualizadaEn).sort().at(-1) ?? null };
+      });
+  }
+
+  private pedido(ct: Contacto, tipo: PedidoDatos['tipo'], nota: string, por: string) {
+    this.e.pedidos.push({ id: this.nuevoId('pd'), campanaId: ct.campanaId, contactoId: ct.id, tipo, nota: nota.slice(0, 500), hechoPor: por, hechoEn: new Date().toISOString() });
+  }
+
+  async exportarContacto(contactoId: string, por: string): Promise<ExportacionContacto> {
+    const ct = this.e.contactos.find((x) => x.id === contactoId);
+    if (!ct) throw new ErrorDatos('no_existe', 'No existe el contacto.');
+    this.exigir(ct.campanaId, por, 'gestionar_datos_contactos');
+    this.pedido(ct, 'exportar', '', por);
+    return {
+      contacto: structuredClone(ct),
+      conversaciones: this.e.conversaciones.filter((c) => c.contactoId === ct.id).map(({ sesion: _, ...c }) => ({ conversacion: structuredClone(c), mensajes: structuredClone(this.e.mensajes.get(c.id) ?? []) })),
+      exportadoEn: new Date().toISOString(),
+    };
+  }
+
+  async borrarContacto(contactoId: string, nota: string, por: string): Promise<void> {
+    const ct = this.e.contactos.find((x) => x.id === contactoId);
+    if (!ct) throw new ErrorDatos('no_existe', 'No existe el contacto.');
+    this.exigir(ct.campanaId, por, 'gestionar_datos_contactos');
+    const ahora = new Date().toISOString();
+    ct.nombre = null;
+    ct.datos = {};
+    ct.borradoEn = ahora;
+    for (const c of this.e.conversaciones.filter((x) => x.contactoId === ct.id)) {
+      for (const m of this.e.mensajes.get(c.id) ?? []) {
+        m.texto = null;
+        m.datos = null;
+      }
+      c.sesion = { ...c.sesion, variables: {}, turnos: [] };
+      if (c.estado !== 'cerrada') c.estado = 'cerrada';
+    }
+    this.pedido(ct, 'borrar', nota, por);
+  }
+
+  async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {
+    return this.e.pedidos.filter((p) => p.campanaId === campanaId).reverse().sort((a, b) => b.hechoEn.localeCompare(a.hechoEn)).map((p) => ({ ...p }));
+  }
+
+  async borrarVencidos(ahora: Date): Promise<number> {
+    let n = 0;
+    for (const c of this.e.conversaciones) {
+      const b = this.e.bots.find((x) => x.id === c.botId);
+      if (!b) continue;
+      const limite = ahora.getTime() - b.diasGuardado * 864e5;
+      for (const m of this.e.mensajes.get(c.id) ?? []) {
+        if (m.texto !== null && new Date(m.creadoEn).getTime() < limite) {
+          m.texto = null;
+          m.datos = null;
+          n++;
+        }
+      }
+      if (new Date(c.actualizadaEn).getTime() < limite) c.sesion = { ...c.sesion, variables: {}, turnos: [] };
+    }
+    for (const ct of this.e.contactos) {
+      const b = this.e.bots.find((x) => x.id === ct.botId);
+      const ultima = this.e.conversaciones.filter((c) => c.contactoId === ct.id).map((c) => c.actualizadaEn).sort().at(-1) ?? ct.creadoEn;
+      if (b && new Date(ultima).getTime() < ahora.getTime() - b.diasGuardado * 864e5 && (ct.nombre || Object.keys(ct.datos).length)) {
+        ct.nombre = null;
+        ct.datos = {};
+      }
+    }
+    return n;
+  }
+
+  /** Solo para pruebas: los eventos de analítica que se guardaron. */
+  analiticaGuardada() {
+    return structuredClone(this.e.analitica);
   }
 
   private agregarVersion(b: Bot, definicion: unknown, basadaEn: string | null, por: string): VersionDemo {

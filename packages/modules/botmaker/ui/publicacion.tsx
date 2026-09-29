@@ -1,5 +1,6 @@
 /** Publicación: lo publicado, los requisitos del borrador, el pedido pendiente y el historial. Solo dibuja VistaPublicacion. */
 import { Caja } from '@campaignsuite/ui';
+import { pausarBot } from '../acciones/bandeja';
 import { pedirPublicacion, resolverPublicacion } from '../acciones/publicacion';
 import type { Diferencia } from '../dominio/diferencias';
 import type { VistaPublicacion } from '../vistas/publicacion';
@@ -44,7 +45,15 @@ export function PantallaPublicacion({ v }: { v: VistaPublicacion }) {
 
       <Caja titulo="Lo que está publicado" nota={v.publicada ? `acierto de intenciones: ${v.publicada.acierto}` : undefined} accion={v.publicada ? { texto: 'Probarla en el simulador', href: v.publicada.hrefSimular } : undefined}>
         {v.publicada ? (
-          <p className="texto-chico">Versión {v.publicada.numero}: es la que conversa en los canales del bot.</p>
+          <>
+            <p className="texto-chico">Versión {v.publicada.numero}: es la que conversa en los canales del bot.{v.pausa?.pausado ? ' El bot está en pausa: no contesta y lo que llega va a la bandeja.' : ''}</p>
+            {v.pausa?.puede ? (
+              <form action={pausarBot}>
+                <Ocultos campanaId={v.campanaId} volver={v.volver} extra={{ botId: v.botId, pausar: v.pausa.pausado ? 'no' : 'si' }} />
+                <button type="submit" className="boton boton--sec boton--chico">{v.pausa.pausado ? 'Reanudar el bot' : 'Pausar el bot'}</button>
+              </form>
+            ) : null}
+          </>
         ) : (
           <p className="texto-chico apagado">Este bot todavía no tiene una versión publicada.</p>
         )}

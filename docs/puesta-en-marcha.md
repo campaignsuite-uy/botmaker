@@ -109,3 +109,38 @@ Para probar los otros roles: ingresá una vez con otra cuenta de Google, volvé 
 - En sus ajustes, **Motores y gasto → Probar un motor** con gpt-oss-120b. Tiene que responder, con demora y costo.
 - En **Costos** aparece esa llamada, como uso "Pruebas", con su costo.
 - Con una cuenta de cada rol, cada una ve solo lo que su rol permite.
+
+## 8. La app pública (etapa 5): widget y página de cada bot
+
+Es otra app (`apps/bots-publico`), en otro proyecto de Vercel de la misma cuenta, con su propia dirección `.vercel.app`.
+No comparte sesión con la app del equipo: usa la clave de servicio y solo las funciones `bots.publico_*`.
+
+En la computadora, sin cuentas: `pnpm dev:publico` y abrí http://localhost:3100/prueba (un sitio de prueba con el widget
+pegado, conversando con el bot publicado de la demo). En la demo de la app del equipo también está montada en
+`/publico` (por ejemplo, http://localhost:3000/publico/prueba): así lo que conversa el widget aparece en la bandeja.
+
+Variables (los nombres están en `apps/bots-publico/.env.ejemplo`). `scripts/cargar-variable.sh` acepta el archivo como
+segundo argumento:
+
+```bash
+# La clave del HMAC se genera en la computadora y va directo al archivo, sin mostrarse:
+openssl rand -hex 32 | scripts/cargar-variable.sh BOTS_HASH_SECRET apps/bots-publico/.env.local
+scripts/cargar-variable.sh SUPABASE_SERVICE_ROLE_KEY apps/bots-publico/.env.local
+scripts/cargar-variable.sh TURNSTILE_SECRET_KEY apps/bots-publico/.env.local
+```
+
+- `BOTS_HASH_SECRET`: obligatoria con Supabase. Si se cambia, los contactos que ya escribieron empiezan de cero.
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET_KEY`: en Cloudflare → Turnstile → Add site, con el dominio de la
+  app pública (modo "Managed"). Sin ellas no se verifica que no sea un robot y Canales lo recuerda.
+- `CRON_SECRET`: el cron de Vercel (`apps/bots-publico/vercel.json`, una vez por día en el plan Hobby) llama a
+  `/api/tareas` con esa clave para las alertas y el borrado por vencimiento.
+- En la app del equipo, `BOTS_URL_PUBLICA` con la dirección de la app pública, para que Canales muestre el código del
+  widget y la página de cada bot.
+
+Alertas cada 10 minutos sin Trigger.dev ni Vercel Pro: pg_cron de Supabase (Database → Extensions → pg_cron) y en el
+SQL Editor:
+
+```sql
+select cron.schedule('bots-alertas', '*/10 * * * *', $$select bots.tarea_revisar_alertas(now())$$);
+select cron.schedule('bots-borrado', '20 6 * * *', $$select bots.tarea_borrar_vencidos(now())$$);
+```

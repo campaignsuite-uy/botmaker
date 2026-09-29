@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "turbo run dev --filter=@botmaker/web",
+    "dev:publico": "turbo run dev --filter=@botmaker/publico",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

@@ -23,6 +23,7 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 
 ## Qué se muda a CampaignSuite y qué no
 
-Se muda: `packages/modules/botmaker`, `packages/db/migraciones/bots_*` (renumeradas) y
-`apps/web/app/[org]/[campana]/bots/` (con `lib/modulo.ts`). No se muda: `packages/platform`, `packages/ui`,
-`packages/db/core-dev` ni las pantallas mínimas de organización y campaña: CampaignSuite ya las tiene.
+Se muda: `packages/modules/botmaker`, `packages/db/migraciones/bots_*` (renumeradas),
+`apps/web/app/[org]/[campana]/bots/` (con `lib/modulo.ts`) y `apps/bots-publico` (entra como otra app). No se muda:
+`packages/platform`, `packages/ui`, `packages/db/core-dev`, `apps/web/app/publico` (la app pública montada en la demo)
+ni las pantallas mínimas de organización y campaña: CampaignSuite ya las tiene.

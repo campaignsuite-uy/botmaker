@@ -17,8 +17,11 @@ import type { Corrida, ResultadoCaso, ResumenCorrida } from '../../dominio/corri
 import type {
   Bot, CambiosBot, EleccionMotores, FuncionMotor, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../../dominio/tipos';
+import type { Alerta, Condiciones, PedidoDatos } from '../../dominio/conversaciones';
 import { ErrorDatos, errorDeBase } from '../errores';
-import type { FiltroLlamadas, Repositorio } from '../repositorio';
+import type {
+  CanalWeb, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FilaMuestra, FiltroConversaciones, FiltroLlamadas, Repositorio, TurnoDevuelto,
+} from '../repositorio';
 import * as M from './mapeo';
 
 export interface ClientesSupabase {
@@ -275,5 +278,113 @@ export class RepositorioSupabase implements Repositorio {
 
   async registrarLlamada(l: NuevaLlamada): Promise<void> {
     datos(await this.servicio.from('engine_calls').insert(M.haciaLlamada(l)), 'registrar la llamada');
+  }
+
+  // ── Pausa, canal web y condiciones (bots_0006) ────────────────────────────────────────────────
+
+  async pausarBot(botId: string, pausar: boolean, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('pausar', { bot: botId, pausar }), pausar ? 'pausar el bot' : 'reanudar el bot');
+  }
+
+  async canalWeb(botId: string): Promise<CanalWeb> {
+    const b = await this.bots_();
+    return datos(await b.rpc('canal_web', { bot: botId }), 'leer el canal web') as CanalWeb;
+  }
+
+  async guardarCanalWeb(botId: string, canal: CanalWeb, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('guardar_canal_web', { bot: botId, activo: canal.activo, modo_condiciones: canal.modoCondiciones }), 'guardar el canal web');
+  }
+
+  async condiciones(botId: string): Promise<Condiciones[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('terms').select('bot_id, number, body, published_by, published_at').eq('bot_id', botId).order('number', { ascending: false }), 'leer las condiciones') as
+      { bot_id: string; number: number; body: string; published_by: string | null; published_at: string }[];
+    return filas.map((f) => ({ botId: f.bot_id, numero: f.number, texto: f.body, publicadasPor: f.published_by, publicadasEn: f.published_at }));
+  }
+
+  async publicarCondiciones(botId: string, texto: string, _por: string): Promise<number> {
+    const b = await this.bots_();
+    return Number(datos(await b.rpc('publicar_condiciones', { bot: botId, texto }), 'publicar las condiciones'));
+  }
+
+  // ── Bandeja (bots_0007) ───────────────────────────────────────────────────────────────────────
+
+  async conversaciones(campanaId: string, filtro: FiltroConversaciones = {}): Promise<FilaConversacion[]> {
+    const b = await this.bots_();
+    const f = {
+      ...(filtro.botId ? { bot: filtro.botId } : {}), ...(filtro.estado ? { estado: filtro.estado } : {}), ...(filtro.canal ? { canal: filtro.canal } : {}),
+      ...(filtro.buscar ? { buscar: filtro.buscar } : {}), ...(filtro.asignadaA ? { asignada: filtro.asignadaA } : {}), limite: filtro.limite ?? 100,
+    };
+    return datos(await b.rpc('bandeja_conversaciones', { campana: campanaId, filtro: f }), 'leer la bandeja') as FilaConversacion[];
+  }
+
+  async conversacion(conversacionId: string): Promise<ConversacionCompleta | null> {
+    const b = await this.bots_();
+    const r = await b.rpc('bandeja_conversacion', { sesion: conversacionId });
+    if (r.error && /no permite/.test(r.error.message)) return null;
+    return datos(r, 'leer la conversación') as ConversacionCompleta | null;
+  }
+
+  async tomarConversacion(conversacionId: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('tomar_conversacion', { sesion: conversacionId }), 'tomar la conversación');
+  }
+
+  async responderConversacion(conversacionId: string, texto: string, _por: string): Promise<number> {
+    const b = await this.bots_();
+    return Number(datos(await b.rpc('responder_conversacion', { sesion: conversacionId, texto }), 'responder'));
+  }
+
+  async devolverConversacion(conversacionId: string, turno: TurnoDevuelto, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('devolver_conversacion', { sesion: conversacionId, turno }), 'devolver la conversación');
+  }
+
+  async cerrarConversacion(conversacionId: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('cerrar_conversacion', { sesion: conversacionId }), 'cerrar la conversación');
+  }
+
+  async alertas(campanaId: string, opciones: { abiertas?: boolean } = {}): Promise<Alerta[]> {
+    const b = await this.bots_();
+    let q = b.from('alerts').select('id, kind, bot_id, campaign_id, ref, opened_at, closed_at').eq('campaign_id', campanaId);
+    if (opciones.abiertas) q = q.is('closed_at', null);
+    const filas = datos(await q.order('opened_at', { ascending: false }).limit(200), 'leer las alertas') as
+      { id: string; kind: Alerta['tipo']; bot_id: string; campaign_id: string; ref: string; opened_at: string; closed_at: string | null }[];
+    return filas.map((f) => ({ id: f.id, tipo: f.kind, botId: f.bot_id, campanaId: f.campaign_id, ref: f.ref, abiertaEn: f.opened_at, cerradaEn: f.closed_at }));
+  }
+
+  async muestra(campanaId: string, opciones: { pendientes?: boolean; limite?: number } = {}): Promise<FilaMuestra[]> {
+    const b = await this.bots_();
+    return datos(await b.rpc('bandeja_muestra', { campana: campanaId, pendientes: !!opciones.pendientes, limite: opciones.limite ?? 100 }), 'leer la muestra') as FilaMuestra[];
+  }
+
+  async revisarRespuesta(conversacionId: string, n: number, veredicto: 'correcta' | 'incorrecta', convertida: boolean, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('revisar_respuesta', { sesion: conversacionId, numero: n, veredicto, convertida }), 'guardar la revisión');
+  }
+
+  async buscarContactos(campanaId: string, texto: string, _por: string): Promise<FilaContacto[]> {
+    const b = await this.bots_();
+    return datos(await b.rpc('buscar_contactos', { campana: campanaId, texto }), 'buscar contactos') as FilaContacto[];
+  }
+
+  async exportarContacto(contactoId: string, _por: string): Promise<ExportacionContacto> {
+    const b = await this.bots_();
+    return datos(await b.rpc('exportar_contacto', { contacto: contactoId }), 'exportar el contacto') as ExportacionContacto;
+  }
+
+  async borrarContacto(contactoId: string, nota: string, _por: string): Promise<void> {
+    const b = await this.bots_();
+    datos(await b.rpc('borrar_contacto', { contacto: contactoId, nota }), 'borrar el contacto');
+  }
+
+  async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {
+    const b = await this.bots_();
+    const filas = datos(await b.from('data_requests').select('id, campaign_id, contact_id, kind, note, handled_by, handled_at').eq('campaign_id', campanaId).order('handled_at', { ascending: false }).limit(200), 'leer los pedidos') as
+      { id: string; campaign_id: string; contact_id: string; kind: PedidoDatos['tipo']; note: string; handled_by: string | null; handled_at: string }[];
+    return filas.map((f) => ({ id: f.id, campanaId: f.campaign_id, contactoId: f.contact_id, tipo: f.kind, nota: f.note, hechoPor: f.handled_by, hechoEn: f.handled_at }));
   }
 }

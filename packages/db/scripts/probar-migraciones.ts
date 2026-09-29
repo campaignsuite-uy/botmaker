@@ -24,6 +24,11 @@ import { plantillaPolitica } from '../../modules/botmaker/dominio/plantilla-poli
 import { esquemaDefinicion } from '../../modules/botmaker/dominio/definicion.ts';
 import { aplicarCambio } from '../../modules/botmaker/dominio/operaciones.ts';
 import { pilasDeshacer } from '../../modules/botmaker/dominio/versiones.ts';
+import { createHmac } from 'node:crypto';
+import { RepositorioPublicoSupabase } from '../../modules/botmaker/datos/supabase/publico-supabase.ts';
+import { atenderMensaje } from '../../modules/botmaker/canal-web/nucleo.ts';
+import { CapaMotores } from '../../modules/botmaker/motores/capa.ts';
+import { AdaptadorSimulado } from '../../modules/botmaker/motores/simulado.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -693,6 +698,195 @@ async function main() {
     afirmar(vs.map((v) => `${v.numero}:${v.estado}`).join() === '2:publicada,1:archivada', JSON.stringify(vs.map((v) => [v.numero, v.estado])));
     afirmar((await r.eventosPublicacion(botP)).map((x) => x.accion).join() === 'aprobado,pedido,devuelto,pedido,aprobado,pedido', 'eventos');
     afirmar((await r.version(b.id))?.estado === 'publicada', 'version()');
+  });
+  console.log('\nCanal web (bots_0006)');
+  const pub = new RepositorioPublicoSupabase(clienteSimulado(db, { servicio: true }) as never);
+  const hmac = (t: string) => createHmac('sha256', 'clave-de-prueba').update(t).digest('hex');
+  const idPublico = (await uno<{ public_id: string }>(db, `select public_id from bots.bots where id = $1`, [botP]))!.public_id;
+  let convWeb = '';
+  await prueba('la app pública ve el bot publicado con su canal; una persona no puede llamar a las funciones públicas', async () => {
+    const bp = await pub.botPublico(idPublico);
+    afirmar(bp?.version && bp.bot.estado === 'publicado' && bp.canal.activo && bp.canal.modoCondiciones === 'aviso' && bp.condiciones === null && bp.campana.nombre === 'Campaña A' && bp.publicadoDesde, JSON.stringify(bp?.canal));
+    afirmar(typeof bp.bot.topeDiarioUsd === 'number', 'topes');
+    afirmar((await pub.botPublico('noexiste00')) === null, 'Un id que no existe devuelve algo');
+    const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.publico_bot($1)`, [idPublico])));
+    afirmar(e && /permission denied/.test(e), `Una persona llamó a publico_bot: ${e}`);
+    const e2 = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select * from bots.rate_limits`)));
+    afirmar(e2 && /permission denied/.test(e2) || (await comoPersona(db, P.dueno, (tx) => cuenta(tx, `select count(*) as n from bots.rate_limits`))) === 0, `rate_limits a la vista: ${e2}`);
+  });
+  await prueba('conteos por ventana fija; conversación nueva, la misma, y otra después de 30 minutos', async () => {
+    const t0 = new Date('2026-09-30T20:00:10Z');
+    afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }, { clave: 'ip:x:d', ventanaSegundos: 86400 }], t0)).join() === '1,1', 'primer conteo');
+    afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }], t0)).join() === '2', 'segundo conteo');
+    afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }], new Date('2026-09-30T20:01:01Z'))).join() === '1', 'ventana nueva');
+    const h = hmac('contacto-1');
+    const a = await pub.abrirConversacion({ botId: botP, contactoHash: h, canal: 'web', verificadoAhora: true, ahora: t0 });
+    afirmar(a.nueva && a.conversacion.verificada && a.conversacion.estado === 'bot' && a.contacto.hash === h, JSON.stringify(a.conversacion));
+    const b = await pub.abrirConversacion({ botId: botP, contactoHash: h, canal: 'web', verificadoAhora: false, ahora: new Date('2026-09-30T20:05:00Z') });
+    afirmar(!b.nueva && b.conversacion.id === a.conversacion.id, 'No siguió la misma');
+    convWeb = a.conversacion.id;
+  });
+  await prueba('guardar un turno: mensajes, datos del contacto, eventos; otro turno a la vez corta; un reintento no se duplica', async () => {
+    const t = (n: number) => ({
+      entrante: { tipo: 'texto' as const, texto: `Hola ${n}`, datos: null, idCanal: `m-${n}` }, salientes: [{ autor: 'bot' as const, texto: 'Hola, ¿cómo se llama?', cajaId: 'n_sumate', datos: null }, { autor: 'bot' as const, texto: 'Otra', cajaId: null, datos: { opciones: [{ letra: 'A', texto: 'Sí' }], modo: 'botones' as const } }],
+      decision: { recorrido: ['n_sumate'], costoUsd: 0.001, secciones: ['S01'] }, sesion: { espera: null, variables: { 'contacto.nombre': 'Rosa' }, estado: 'bot' as const, turnos: [], iniciada: true },
+      estado: 'bot' as const, cajaActual: 'n_sumate', versionId: null, eventos: [{ nombre: 'texto_recibido' as const, cajaId: null, datos: { largo: 6 } }],
+      derivacion: null, datosContacto: { 'contacto.nombre': 'Rosa' }, muestra: true, ahora: '2026-09-30T20:06:00Z',
+    });
+    const ms = await pub.guardarTurno(convWeb, 0, t(1));
+    afirmar(ms.map((m) => `${m.n}:${m.autor}`).join() === '1:contacto,2:bot,3:bot' && ms[1]!.decision && !ms[2]!.decision && ms[1]!.muestra && !ms[2]!.muestra, JSON.stringify(ms.map((m) => [m.n, m.autor, !!m.decision, m.muestra])));
+    try {
+      await pub.guardarTurno(convWeb, 0, t(2));
+      throw new Error('Guardó con un seq viejo');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'conversacion_cambio', `Dio: ${(e as Error).message}`);
+    }
+    try {
+      await pub.guardarTurno(convWeb, 3, t(1));
+      throw new Error('Guardó un repetido');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'repetido', `Dio: ${(e as Error).message}`);
+    }
+    const c = await uno<{ name: string; seq: number }>(db, `select c.name, s.seq from bots.sessions s join bots.contacts c on c.id = s.contact_id where s.id = $1`, [convWeb]);
+    afirmar(c?.name === 'Rosa' && c.seq === 3, JSON.stringify(c));
+    afirmar(await cuenta(db, `select count(*) as n from bots.events where session_id = $1 and name = 'texto_recibido' and contact_hash is not null`, [convWeb]) === 1, 'eventos');
+    afirmar((await pub.mensajes(convWeb, 1)).length === 2 && (await pub.mensajePorIdCanal(convWeb, 'm-1'))?.n === 1, 'mensajes');
+  });
+  await prueba('reglas por fila: conversaciones para quien lee conversaciones; eventos para quien entra al producto', async () => {
+    const ve = async (p: string, tabla: string) => comoPersona(db, p, (tx) => cuenta(tx, `select count(*) as n from bots.${tabla} where campaign_id = $1`, [CAMP_A]));
+    afirmar(await ve(P.agente, 'messages') === 3 && await ve(P.editor, 'sessions') === 1 && await ve(P.dueno, 'contacts') === 1, 'agente, editor y dueño');
+    afirmar(await ve(P.lector, 'messages') === 0 && await ve(P.lector, 'contacts') === 0 && await ve(P.ajeno, 'sessions') === 0, 'lector y ajeno');
+    afirmar(await ve(P.lector, 'events') === 1 && await ve(P.ajeno, 'events') === 0, 'eventos');
+    const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`update bots.messages set text = 'x'`)));
+    afirmar(e && /permission denied/.test(e), `Una persona cambió un mensaje: ${e}`);
+  });
+  await prueba('canal web, condiciones y pausa: cada cosa con su permiso y en la actividad', async () => {
+    const r = repoDe(P.editor);
+    try {
+      await r.guardarCanalWeb(botP, { activo: false, modoCondiciones: 'acepto' }, P.editor);
+      throw new Error('El editor configuró el canal');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    const a = repoDe(P.adminCamp);
+    await a.guardarCanalWeb(botP, { activo: true, modoCondiciones: 'acepto' }, P.adminCamp);
+    afirmar(JSON.stringify(await r.canalWeb(botP)) === '{"activo":true,"modoCondiciones":"acepto"}', 'canal');
+    afirmar(await a.publicarCondiciones(botP, 'Condiciones uno', P.adminCamp) === 1 && await a.publicarCondiciones(botP, 'Condiciones dos', P.adminCamp) === 2, 'números');
+    afirmar((await r.condiciones(botP)).map((c) => c.numero).join() === '2,1', 'condiciones');
+    const e = await error(() => comoServicio(db, (tx) => tx.query(`update bots.terms set body = 'x' where bot_id = $1`, [botP])));
+    afirmar(e && /permission denied|solo admite agregar/.test(e), `Se cambió una versión de las condiciones: ${e}`);
+    await a.pausarBot(botP, true, P.adminCamp);
+    afirmar((await pub.botPublico(idPublico))?.bot.estado === 'pausado', 'pausa');
+    try {
+      await a.pausarBot(botP, true, P.adminCamp);
+      throw new Error('Pausó dos veces');
+    } catch (e2) {
+      afirmar(e2 instanceof ErrorDatos && e2.codigo === 'no_publicado', `Dio: ${(e2 as Error).message}`);
+    }
+    await a.pausarBot(botP, false, P.adminCamp);
+    await a.guardarCanalWeb(botP, { activo: true, modoCondiciones: 'aviso' }, P.adminCamp);
+    const act = await cuenta(db, `select count(*) as n from core.audit_log where action in ('bots.pausar', 'bots.reanudar', 'bots.canal_web', 'bots.condiciones')`);
+    afirmar(act === 6, `Actividad: ${act}`);
+  });
+  await prueba('de punta a punta: el núcleo del canal web contra la base (turno con motor simulado, derivación y mensaje en espera)', async () => {
+    const capa = new CapaMotores({ repo: pub, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true });
+    const entorno = { ahora: () => new Date('2026-09-30T20:10:00Z'), ip: '203.0.113.9', hash: hmac, verificar: async () => true, verificacionConfigurada: true, capa };
+    let n = 0;
+    const pedir = (entrada: unknown) => atenderMensaje(pub, entorno, { bot: idPublico, contacto: 'contacto-punta-0000001', canal: 'landing', id: `p-${String(++n).padStart(8, '0')}`, entrada, verificacion: 'ok' });
+    const i = await pedir({ tipo: 'inicio' });
+    afirmar(i.ok && i.mensajes.some((m) => m.enlace === 'condiciones') && i.mensajes.some((m) => m.opcionesDe === 'n_menu'), JSON.stringify(i).slice(0, 300));
+    const d = await pedir({ tipo: 'texto', texto: 'Quiero hablar con una persona del equipo' });
+    afirmar(d.ok && d.estado === 'derivada', JSON.stringify(d).slice(0, 300));
+    const s = await pedir({ tipo: 'texto', texto: '¿Hay alguien?' });
+    afirmar(s.ok && s.mensajes.length === 0 && s.estado === 'derivada', JSON.stringify(s).slice(0, 300));
+    const c = await uno<{ terms_number: number; state: string; handoff_reason: string }>(db, `select c.terms_number, s.state, s.handoff_reason from bots.sessions s join bots.contacts c on c.id = s.contact_id where c.external_id_hash = $1`, [hmac(`contacto:${botP}:contacto-punta-0000001`)]);
+    afirmar(c?.terms_number === 2 && c.state === 'derivada' && c.handoff_reason === 'Pidió hablar con el equipo', JSON.stringify(c));
+  });
+
+  console.log('\nBandeja (bots_0007)');
+  let convDerivada = '';
+  await prueba('la bandeja: la leen el agente y el editor; el lector y el ajeno no', async () => {
+    const filas = await repoDe(P.agente).conversaciones(CAMP_A, { estado: 'derivada' });
+    afirmar(filas.length === 1 && filas[0]!.ultimo?.autor === 'contacto' && filas[0]!.contacto.nombre === null, JSON.stringify(filas));
+    convDerivada = filas[0]!.conversacion.id;
+    afirmar((await repoDe(P.editor).conversaciones(CAMP_A)).length === 2, 'editor');
+    for (const p of [P.lector, P.ajeno]) {
+      try {
+        await repoDe(p).conversaciones(CAMP_A);
+        throw new Error(`${p} leyó la bandeja`);
+      } catch (e) {
+        afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+      }
+    }
+    const c = await repoDe(P.agente).conversacion(convDerivada);
+    afirmar(c && c.mensajes.length >= 4 && c.contacto.condicionesVersion === 2, 'conversación');
+    afirmar((await repoDe(P.lector).conversacion(convDerivada)) === null, 'El lector ve una conversación');
+  });
+  await prueba('alerta de derivada sin respuesta a las 2 horas (fechas simuladas); el agente toma, responde y se cierra la alerta', async () => {
+    const tareas = pub;
+    // La derivación, hace 3 horas (la respuesta del equipo queda con la hora real).
+    await db.query(`update bots.sessions set handoff_at = now() - interval '3 hours' where id = $1`, [convDerivada]);
+    const hace = (min: number) => new Date(Date.now() - min * 60_000);
+    afirmar((await tareas.revisarAlertas(hace(61))).abiertas === 0, 'Abrió antes de las 2 horas');
+    afirmar((await tareas.revisarAlertas(hace(59))).abiertas === 1, 'No abrió a las 2 horas');
+    afirmar((await tareas.revisarAlertas(hace(58))).abiertas === 0, 'Abrió dos veces');
+    afirmar((await repoDe(P.agente).alertas(CAMP_A, { abiertas: true })).map((a) => a.tipo).join() === 'derivada_sin_respuesta', 'alertas');
+    try {
+      await repoDe(P.editor).tomarConversacion(convDerivada, P.editor);
+      throw new Error('El editor tomó la conversación');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    await repoDe(P.agente).tomarConversacion(convDerivada, P.agente);
+    const n = await repoDe(P.agente).responderConversacion(convDerivada, 'Hola, soy del equipo.', P.agente);
+    afirmar(n > 4, `n: ${n}`);
+    const r = await tareas.revisarAlertas(new Date(Date.now() + 60_000));
+    afirmar(r.cerradas === 1, JSON.stringify(r));
+    const pn = await pub.mensajes(convDerivada, n - 1);
+    afirmar(pn.length === 1 && pn[0]!.autor === 'agente', 'El navegador no recibe la respuesta');
+    await repoDe(P.agente).devolverConversacion(convDerivada, { mensajes: [{ texto: '¿Algo más?', cajaId: 'n_masayuda', datos: null }], sesion: { espera: null, variables: {}, estado: 'bot', turnos: [], iniciada: true }, decision: { recorrido: ['n_masayuda'], costoUsd: 0 }, cajaActual: 'n_masayuda', eventos: [] }, P.agente);
+    afirmar((await repoDe(P.agente).conversacion(convDerivada))?.conversacion.estado === 'bot', 'devolver');
+    await repoDe(P.dueno).cerrarConversacion(convDerivada, P.dueno);
+    afirmar((await repoDe(P.agente).conversacion(convDerivada))?.conversacion.estado === 'cerrada', 'cerrar');
+  });
+  await prueba('revisión por muestreo: el editor revisa; el agente no', async () => {
+    const m = await repoDe(P.editor).muestra(CAMP_A, { pendientes: true });
+    afirmar(m.length === 1 && m[0]!.conversacionId === convWeb && m[0]!.n === 2 && m[0]!.pregunta === 'Hola 1' && m[0]!.secciones.join() === 'S01', JSON.stringify(m));
+    try {
+      await repoDe(P.agente).revisarRespuesta(convWeb, 2, 'correcta', false, P.agente);
+      throw new Error('El agente revisó');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    await repoDe(P.editor).revisarRespuesta(convWeb, 2, 'correcta', true, P.editor);
+    afirmar((await repoDe(P.editor).muestra(CAMP_A, { pendientes: true })).length === 0, 'pendientes');
+    const t = await repoDe(P.editor).muestra(CAMP_A);
+    afirmar(t[0]!.veredicto === 'correcta' && t[0]!.convertida && t[0]!.revisadaPor === P.editor, JSON.stringify(t));
+  });
+  await prueba('datos de un contacto: el administrador busca, exporta y borra; queda registrado sin el dato', async () => {
+    const a = repoDe(P.adminCamp);
+    const f = await a.buscarContactos(CAMP_A, 'Rosa', P.adminCamp);
+    afirmar(f.length === 1 && f[0]!.conversaciones === 1, JSON.stringify(f));
+    try {
+      await repoDe(P.agente).buscarContactos(CAMP_A, 'Rosa', P.agente);
+      throw new Error('El agente buscó');
+    } catch (e) {
+      afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
+    }
+    const x = await a.exportarContacto(f[0]!.contacto.id, P.adminCamp);
+    afirmar(x.contacto.nombre === 'Rosa' && x.conversaciones[0]!.mensajes.length === 3 && !('sesion' in x.conversaciones[0]!.conversacion), 'exportación');
+    await a.borrarContacto(f[0]!.contacto.id, 'Lo pidió', P.adminCamp);
+    afirmar(await cuenta(db, `select count(*) as n from bots.messages where session_id = $1 and text is not null`, [convWeb]) === 0, 'Quedaron textos');
+    afirmar((await a.pedidosDatos(CAMP_A)).map((p) => p.tipo).join() === 'borrar,exportar', 'pedidos');
+    afirmar(await cuenta(db, `select count(*) as n from core.audit_log where action = 'bots.datos_contacto' and detail::text not like '%Rosa%'`) === 2, 'actividad sin el dato');
+    const e = await error(() => comoServicio(db, (tx) => tx.query(`update bots.data_requests set note = 'x'`)));
+    afirmar(e && /permission denied|solo admite agregar/.test(e), `Se cambió un pedido: ${e}`);
+  });
+  await prueba('borrado por vencimiento: vacía los textos pasados los días de guardado (fechas simuladas)', async () => {
+    afirmar(await pub.borrarVencidos(new Date('2026-10-30T00:00:00Z')) === 0, 'Borró antes de tiempo');
+    const n = await pub.borrarVencidos(new Date('2027-02-01T00:00:00Z'));
+    afirmar(n > 0 && await cuenta(db, `select count(*) as n from bots.messages where campaign_id = $1 and text is not null`, [CAMP_A]) === 0, `Borró ${n}`);
+    afirmar(await cuenta(db, `select count(*) as n from bots.events where campaign_id = $1`, [CAMP_A]) > 0, 'Se borraron los eventos');
   });
   await prueba('borrar un bot borra sus versiones y su historial', async () => {
     await db.query(`delete from bots.bots where id = $1`, [botV]);

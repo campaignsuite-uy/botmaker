@@ -15,7 +15,15 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (c === '42501' || /no permite esta acción|Solo el Administrador|permission denied|row-level security/i.test(m)) return new ErrorDatos('sin_permiso', m);
   if (/archivado/.test(m)) return new ErrorDatos('archivado', m);
   if (/respaldo tiene que ser otro/.test(m)) return new ErrorDatos('respaldo_igual', m);
+  if (/conversación cambió/.test(m)) return new ErrorDatos('conversacion_cambio', m);
+  if (c === '23505' && /channel_message_id/.test(m)) return new ErrorDatos('repetido', m);
   if (c === '40001' || /borrador cambió/.test(m)) return new ErrorDatos('borrador_cambio', m);
+  if (/Solo se pausa un bot publicado/.test(m)) return new ErrorDatos('no_publicado', m);
+  if (/no está en pausa/.test(m)) return new ErrorDatos('no_pausado', m);
+  if (/primero hay que tomar|no está derivada/.test(m)) return new ErrorDatos('no_derivada', m);
+  if (/conversación está cerrada/.test(m)) return new ErrorDatos('conversacion_cerrada', m);
+  if (/no está en la muestra/.test(m)) return new ErrorDatos('no_muestra', m);
+  if (/No existe la conversación|No existe el contacto/.test(m)) return new ErrorDatos('no_existe', m);
   if (/ya no es un borrador/.test(m)) return new ErrorDatos('no_borrador', m);
   if (/versión de la que partir/.test(m)) return new ErrorDatos('sin_version', m);
   if (/Falta correr las pruebas/.test(m)) return new ErrorDatos('sin_corrida', m);

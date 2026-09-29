@@ -228,3 +228,32 @@ textarea.bots-yaml { min-height: 520px; }
 .bots-copiloto__items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bots-copiloto__item { font-size: 13px; overflow-wrap: anywhere; }
 .bots-copiloto__item--mal { opacity: 0.75; }
+
+/* Bandeja */
+.bots-conteos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.bots-conteo { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--linea); background: var(--caja); color: var(--texto); text-decoration: none; }
+.bots-conteo:hover { border-color: var(--lavanda-oscura); }
+.bots-conteo__n { font-size: 22px; font-weight: 300; }
+.bots-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.bots-filtros .campo { min-width: 160px; flex: 1 1 160px; }
+.bots-conversacion { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.bots-hilo { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bots-hilo__mensaje { max-width: 85%; padding: 8px 10px; border: 1px solid var(--linea); background: var(--fila-a); overflow-wrap: anywhere; }
+.bots-hilo__mensaje--contacto { align-self: flex-end; background: var(--lavanda-suave); border-color: var(--lavanda-oscura); }
+.bots-hilo__mensaje--agente { border-color: var(--bien); }
+.bots-hilo__mensaje--sistema { background: transparent; border-style: dashed; }
+.bots-hilo__texto { font-size: 14px; white-space: pre-wrap; }
+.bots-hilo__decision summary { cursor: pointer; color: var(--texto-3); margin-top: 4px; }
+.bots-decision { margin: 6px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.bots-decision > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; }
+.bots-decision dt { color: var(--gris); }
+.bots-decision dd { margin: 0; overflow-wrap: anywhere; }
+.bots-muestra { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.bots-muestra__item { padding: 10px 0; border-bottom: 1px solid var(--linea-suave); }
+.bots-muestra__item p { margin: 4px 0; overflow-wrap: anywhere; }
+.bots-snippet { display: block; padding: 10px; background: var(--negro); border: 1px solid var(--linea); font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .bots-conteos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bots-conversacion { grid-template-columns: minmax(0, 1fr); }
+  .bots-hilo__mensaje { max-width: 100%; }
+}

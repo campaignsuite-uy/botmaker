@@ -36,18 +36,18 @@ function ctx(personaId: string, parametros: Record<string, string> = {}, demo = 
 describe('menú', () => {
   it('cada rol ve lo suyo', async () => {
     const items = async (p: string, demo = false) => (await datosMarco(repo, ctx(p, {}, demo))).grupos.flatMap((g) => g.items.map((i) => i.id));
-    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'motores', 'costos', 'equipo']);
-    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'motores', 'equipo']);
-    expect(await items('p-andres')).toEqual(['bots', 'motores', 'equipo']);
+    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'bandeja', 'motores', 'costos', 'equipo']);
+    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'bandeja', 'motores', 'equipo']);
+    expect(await items('p-andres')).toEqual(['bots', 'bandeja', 'motores', 'equipo']);
     expect(await items('p-equipo')).toEqual(['bots', 'motores', 'equipo']);
-    expect(await items('p-joaquin', true)).toEqual(['bots', 'motores', 'costos', 'equipo']);
+    expect(await items('p-joaquin', true)).toEqual(['bots', 'bandeja', 'motores', 'costos', 'equipo']);
   });
 });
 
 describe('bots y nuevo bot', () => {
   it('lista con motores; crear solo editor y administrador, nunca en una demo', async () => {
     const v = await vistaBots(repo, ctx('p-lucia'));
-    expect(v.filas.map((f) => f.nombre)).toEqual(['Consultas del partido', 'Asistente de la campaña']);
+    expect(v.filas.map((f) => f.nombre)).toEqual(['Consultas del partido', 'Asistente de la campaña', 'Asistente publicado']);
     expect(v.filas[0]!.motores[1]).toEqual({ funcion: 'Responder', texto: 'Claude Haiku 4.5' });
     expect(v.puedeCrear).toBe(true);
     expect((await vistaBots(repo, ctx('p-equipo'))).puedeCrear).toBe(false);

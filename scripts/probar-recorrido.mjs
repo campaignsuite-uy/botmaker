@@ -1,6 +1,6 @@
 /**
  * Prueba de recorrido en el navegador: lo que Joaquín prueba a mano en las pruebas de aceptación, hecho por Playwright
- * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2, 3 y 4.
+ * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2 a 6.
  *
  *  Etapa 2: crear un bot con la plantilla, agregar y conectar una caja en el editor, editarla y deshacer, recorrerlo en
  *           el simulador con botones y texto, exportar e importar el YAML; el lector ve todo sin poder tocar.
@@ -9,6 +9,9 @@
  *  Etapa 4: el copiloto propone y aplica un cambio por dirección (y se deshace), correr las pruebas con los motores del
  *           bot y con otros, comparar las dos corridas, pedir publicar, devolver sin comentario (no), aprobar, conversar
  *           con la versión publicada y armar el borrador siguiente.
+ *  Etapa 5: el widget pegado en un sitio de prueba conversa con la versión publicada y deriva; la bandeja lo ve; el
+ *           agente responde y le llega al widget; condiciones con aviso y con «Acepto»; ráfaga en solo menús; pausa.
+ *  Etapa 6: alerta de derivada sin respuesta, revisión por muestreo, exportar y borrar los datos de un contacto.
  *
  * Necesita el build (pnpm build). Levanta `next start` en un puerto propio y lo apaga al terminar.
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
@@ -232,6 +235,135 @@ try {
   await ed.waitForSelector('.react-flow__node');
   prueba('después de publicar, el borrador nuevo (v2) parte de lo publicado', (await ed.textContent('main')).includes('Borrador v2'));
   prueba('etapa 4 sin errores en la página', !ed.errores.length && !bot2.errores.length, [...ed.errores, ...bot2.errores].join(' · '));
+
+  // ── Etapa 5 ─────────────────────────────────────────────────────────────────────────────────
+  console.log('\nEtapa 5: canal web\n');
+  const BOT_WEB = `${CAMPANA}/bot-demo-3`;
+  const ciudadano = await navegador.newContext({ viewport: { width: 390, height: 800 } });
+  const sitio = await ciudadano.newPage();
+  const erroresSitio = [];
+  sitio.on('pageerror', (e) => erroresSitio.push(String(e.message).slice(0, 160)));
+  await sitio.goto(`${BASE}/publico/prueba?bot=p5v9c3h7pa`);
+  await sitio.click('#botmaker-widget button');
+  const marco = sitio.frameLocator('#botmaker-widget iframe');
+  await marco.locator('.pub-opcion', { hasText: 'Hablar con alguien' }).waitFor({ timeout: 15000 });
+  const primero = await marco.locator('.pub-chat__mensajes').textContent();
+  prueba('el widget pegado en un sitio abre la conversación: aviso de IA con las condiciones, bienvenida y menú', primero.includes('asistente virtual con inteligencia artificial') && primero.includes('Leer las condiciones') && primero.includes('Ana Lucía Ríos'), primero.slice(0, 200));
+  await marco.locator('.pub-opcion', { hasText: 'Hablar con alguien' }).click();
+  await marco.locator('.pub-nota').waitFor({ timeout: 15000 });
+  prueba('pedir hablar con alguien deriva al equipo y el widget lo dice', (await marco.locator('.pub-nota').textContent()).includes('equipo'));
+  await marco.locator('input[aria-label="Mensaje"]').fill('Es por una reunión en mi barrio');
+  await marco.locator('button:has-text("Enviar")').click();
+  await sitio.waitForTimeout(800);
+
+  const agente = await como(navegador, 'p-andres', 390);
+  await agente.goto(`${CAMPANA}/bandeja?estado=derivada&bot=bot-demo-3`);
+  const filasDerivadas = agente.locator('table.tabla tbody tr');
+  prueba('la conversación del widget aparece en la bandeja como derivada', await filasDerivadas.count() >= 2 && (await agente.textContent('main')).includes('Es por una reunión en mi barrio'));
+  await agente.locator('table.tabla tbody tr', { hasText: 'Es por una reunión' }).locator('a').first().click();
+  await agente.waitForURL(/\/bandeja\/conv-/);
+  const detalle = await agente.textContent('main');
+  prueba('la conversación con el registro de decisiones de cada mensaje', detalle.includes('Por qué contestó esto') && detalle.includes('Derivada'), detalle.slice(0, 200));
+  await agente.click('button:has-text("Tomar la conversación")');
+  await agente.waitForURL(/ok=conversacion_tomada/);
+  await agente.fill('#bandeja-respuesta', 'Hola, soy Andrés del equipo. ¿En qué barrio es?');
+  await agente.click('button:has-text("Enviar")');
+  await agente.waitForURL(/ok=respuesta_enviada/);
+  await marco.locator('.pub-msj--agente').waitFor({ timeout: 12000 });
+  prueba('el agente responde como la campaña y la respuesta le llega al widget', (await marco.locator('.pub-msj--agente').textContent()).includes('soy Andrés'));
+  await agente.click('button:has-text("Devolver al bot")');
+  await agente.waitForURL(/ok=conversacion_devuelta/);
+  prueba('devolver la conversación al bot', (await agente.textContent('main')).includes('La atiende el bot'));
+
+  await sitio.goto(`${BASE}/publico/b/p5v9c3h7pa/condiciones`);
+  prueba('las condiciones del bot, con su versión', (await sitio.textContent('main')).includes('Seguir la conversación es aceptar') && (await sitio.textContent('main')).includes('Versión 1'));
+
+  // Una ráfaga desde la misma IP: pasado el límite, solo menús (sin motores).
+  let menus = 0;
+  for (let i = 0; i < 40; i++) {
+    const r = await sitio.request.post(`${BASE}/publico/api/conversar`, { data: { bot: 'p5v9c3h7pa', contacto: `rafaga-navegador-${String(i % 3).padStart(4, '0')}`, canal: 'web', id: `rafaga-${i}-${Date.now()}`, entrada: { tipo: 'texto', texto: '¿Qué propone para el transporte?' } } });
+    const j = await r.json();
+    if (j.ok && j.soloMenus) menus++;
+  }
+  prueba('una ráfaga de 40 mensajes desde una IP: pasado el límite por minuto, solo menús', menus >= 20, `solo menús: ${menus}`);
+
+  const adminWeb = bot2;
+  await adminWeb.goto(`${BOT_WEB}/canales`);
+  prueba('Canales: la página del bot y el código del widget', (await adminWeb.textContent('main')).includes('/publico/b/p5v9c3h7pa') && (await adminWeb.textContent('main')).includes('data-bot="p5v9c3h7pa"'));
+  await adminWeb.check('input[name=modoCondiciones][value=acepto]');
+  await adminWeb.click('button:has-text("Guardar el canal")');
+  await adminWeb.waitForURL(/ok=canal_guardado/);
+  const nuevoCiudadano = await (await navegador.newContext()).newPage();
+  await nuevoCiudadano.goto(`${BASE}/publico/b/p5v9c3h7pa`);
+  await nuevoCiudadano.locator('.pub-opcion', { hasText: 'Acepto' }).waitFor({ timeout: 15000 });
+  await nuevoCiudadano.locator('.pub-opcion', { hasText: 'Acepto' }).click();
+  await nuevoCiudadano.locator('.pub-opcion', { hasText: 'Propuestas' }).waitFor({ timeout: 15000 });
+  prueba('con «Acepto», las condiciones se aceptan con un botón antes de empezar', true);
+  await adminWeb.check('input[name=modoCondiciones][value=aviso]');
+  await adminWeb.click('button:has-text("Guardar el canal")');
+  await adminWeb.waitForURL(/ok=canal_guardado/);
+  await adminWeb.goto(`${BOT_WEB}/publicacion`);
+  await adminWeb.click('button:has-text("Pausar el bot")');
+  await adminWeb.waitForURL(/ok=bot_pausado/);
+  const enPausa = await (await navegador.newContext()).newPage();
+  await enPausa.goto(`${BASE}/publico/b/p5v9c3h7pa`);
+  await enPausa.locator('.pub-msj', { hasText: 'en pausa' }).waitFor({ timeout: 15000 });
+  prueba('con el bot en pausa, la página lo dice y no contesta', true);
+  await adminWeb.click('button:has-text("Reanudar el bot")');
+  await adminWeb.waitForURL(/ok=bot_reanudado/);
+  prueba('etapa 5 sin errores en la página', !erroresSitio.length && !agente.errores.length && !adminWeb.errores.length, [...erroresSitio, ...agente.errores, ...adminWeb.errores].join(' · '));
+
+  // ── Etapa 6 ─────────────────────────────────────────────────────────────────────────────────
+  console.log('\nEtapa 6: bandeja\n');
+  await agente.goto(`${CAMPANA}/bandeja`);
+  prueba('alerta de una derivada sin respuesta hace más de 2 horas', (await agente.locator('.aviso--error').textContent()).includes('Derivada sin respuesta'));
+  await ed.goto(`${CAMPANA}/bandeja/revision`);
+  const antes = await ed.locator('.bots-muestra__item').count();
+  await ed.locator('.bots-muestra__item').first().locator('button:has-text("Correcta y convertir en contenido")').click();
+  await ed.waitForURL(/ok=respuesta_convertida/);
+  prueba('revisión por muestreo: una respuesta correcta se convierte en contenido', await ed.locator('.bots-muestra__item').count() === antes - 1);
+  await bot2.goto(`${CAMPANA}/bandeja/datos?buscar=Marcos`);
+  const exportar = bot2.locator('a:has-text("Exportar (JSON)")');
+  const json = await (await bot2.request.get(`${BASE}${await exportar.getAttribute('href')}`)).json();
+  prueba('datos de un contacto: el administrador lo busca y exporta sus datos', json.contacto?.nombre === 'Marcos' && json.conversaciones?.[0]?.mensajes?.length > 0);
+  await bot2.locator('summary:has-text("Borrar sus datos")').click();
+  await bot2.fill('input[name=confirmar]', 'BORRAR');
+  await bot2.click('button:has-text("Borrar los datos")');
+  await bot2.waitForURL(/ok=contacto_borrado/);
+  prueba('borrar los datos del contacto queda en el registro de pedidos', (await bot2.textContent('main')).includes('Borró los datos') && (await bot2.textContent('main')).includes('Exportó los datos'));
+  const lectorBandeja = await como(navegador, 'p-equipo');
+  await lectorBandeja.goto(`${CAMPANA}/bandeja`);
+  prueba('el lector no entra a la bandeja', !lectorBandeja.url().includes('/bandeja'));
+  prueba('etapa 6 sin errores en la página', !agente.errores.length && !ed.errores.length && !bot2.errores.length, [...agente.errores, ...ed.errores, ...bot2.errores].join(' · '));
+
+  // ── La app pública aparte (apps/bots-publico), con su propia demo ─────────────────────────────
+  if (!process.env.URL) {
+    console.log('\nApp pública aparte (apps/bots-publico)\n');
+    const PUERTO_PUB = PUERTO + 4;
+    const pubApp = spawn('pnpm', ['exec', 'next', 'start', '-p', String(PUERTO_PUB)], {
+      cwd: `${RAIZ}apps/bots-publico`, env: { ...process.env, CAMPAIGNSUITE_DATOS: 'demo', PORT: String(PUERTO_PUB) }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    try {
+      const PUB = `http://localhost:${PUERTO_PUB}`;
+      const limite = Date.now() + 60_000;
+      while (Date.now() < limite) {
+        try { if ((await fetch(`${PUB}/widget.js`)).ok) break; } catch { /* todavía no levantó */ }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const pag = await (await fetch(`${PUB}/b/p5v9c3h7pa`)).text();
+      prueba('la página del bot publicado de la demo', pag.includes('Ana Lucía Ríos'));
+      const r = await (await fetch(`${PUB}/api/conversar`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bot: 'p5v9c3h7pa', contacto: 'app-publica-00000001', canal: 'landing', id: 'app-publica-inicio', entrada: { tipo: 'inicio' } }) })).json();
+      prueba('conversa con la versión publicada', r.ok && r.mensajes.some((m) => m.opcionesDe === 'n_menu'), JSON.stringify(r).slice(0, 200));
+      const w = await fetch(`${PUB}/widget.js`);
+      prueba('sirve el script del widget', (await w.text()).includes('botmaker-widget') && (w.headers.get('content-type') ?? '').includes('javascript'));
+      const b = await fetch(`${PUB}/b/p5v9c3h7pa`);
+      prueba('la página del bot se puede mostrar dentro del widget en cualquier sitio', (b.headers.get('content-security-policy') ?? '').includes('frame-ancestors *'));
+      prueba('las tareas de fondo piden su clave', (await fetch(`${PUB}/api/tareas`)).status === 401);
+      prueba('un bot que no está publicado no se muestra', (await (await fetch(`${PUB}/b/k7m2q9x4pa`)).text()).includes('no está disponible'));
+    } finally {
+      pubApp.kill();
+    }
+  }
 } catch (e) {
   prueba('el recorrido termina sin errores', false, e.stack ?? String(e));
 } finally {

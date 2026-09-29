@@ -35,6 +35,11 @@ import { CapaMotores } from '../motores/capa';
 import { AdaptadorSimulado } from '../motores/simulado';
 import { ejecutarAvanzarCorrida, ejecutarIniciarCorrida } from '../acciones/ejecutar-corridas';
 import { ejecutarPedirPublicacion } from '../acciones/ejecutar-publicacion';
+import { PantallaBandeja, PantallaConversacion, PantallaDatosContactos, PantallaRevision } from '../ui/bandeja';
+import { vistaBandeja, vistaConversacion, vistaDatosContactos, vistaRevision } from '../vistas/bandeja';
+import { PantallaCanales } from '../ui/canales';
+import { vistaCanales } from '../vistas/canales';
+import { puede } from '../dominio/permisos';
 import { vistaBot } from '../vistas/bot';
 import { vistaBots } from '../vistas/bots';
 import { vistaCostos } from '../vistas/costos';
@@ -155,6 +160,26 @@ async function main() {
       prueba(`publicación: el pedido con sus cambios; ${e.motores ? 'aprueba o devuelve' : 'no aprueba'}`, tiene(publicacion, 'Pedido de publicación: versión 1') && tiene(publicacion, 'Qué cambia contra lo publicado') && tiene(publicacion, 'Aprobar y publicar</button>') === e.motores);
       const copiloto = html(createElement(PantallaCopiloto, { v: (await vistaCopiloto(repo, c, 'bot-demo-2'))! }));
       prueba(`copiloto: ${e.datos ? 'el panel para pedir' : 'solo lectura'}`, tiene(copiloto, 'Pedirle al copiloto') && tiene(copiloto, 'Pedir al copiloto</button>') === e.datos && tiene(copiloto, 'lo usan el editor y el administrador') === !e.datos);
+
+      // Etapas 5 y 6: canales del bot publicado y la bandeja.
+      const canales = html(createElement(PantallaCanales, { v: (await vistaCanales(repo, c, 'bot-demo-3'))! }));
+      prueba(`canales: la página del bot y el widget; ${e.motores ? 'se configuran' : 'solo mirar'}`, tiene(canales, '/publico/b/p5v9c3h7pa') && tiene(canales, 'data-bot=&quot;p5v9c3h7pa&quot;') && tiene(canales, 'Guardar el canal</button>') === e.motores && tiene(canales, 'Publicar las condiciones</button>') === e.motores);
+      if (puede(c.rol, 'leer_conversaciones')) {
+        const bandeja = html(createElement(PantallaBandeja, { v: await vistaBandeja(repo, c) }));
+        prueba('bandeja: conversaciones, conteos y la alerta de la derivada sin respuesta', tiene(bandeja, 'Derivada sin respuesta') && tiene(bandeja, 'Rosa') && tiene(bandeja, 'Contacto '));
+        const conv = html(createElement(PantallaConversacion, { v: (await vistaConversacion(repo, c, 'conv-demo-2'))! }));
+        const atiende = puede(c.rol, 'responder_conversaciones') && !demo;
+        prueba(`conversación: el registro de decisiones; ${atiende ? 'la atiende' : 'solo mirar'}`, tiene(conv, 'Por qué contestó esto') && tiene(conv, 'Hablar con una persona') && tiene(conv, 'Tomar la conversación</button>') === atiende);
+        const revision = html(createElement(PantallaRevision, { v: await vistaRevision(repo, c) }));
+        const revisa = puede(c.rol, 'editar_borrador') && !demo;
+        prueba(`revisión por muestreo: ${revisa ? 'revisa' : 'solo mirar'}`, tiene(revision, '¿Qué proponen para el transporte?') && tiene(revision, 'Correcta y convertir en contenido</button>') === revisa);
+      } else {
+        prueba('bandeja: el lector no lee conversaciones', !puede(c.rol, 'leer_conversaciones'));
+      }
+      if (puede(c.rol, 'gestionar_datos_contactos')) {
+        const datos = html(createElement(PantallaDatosContactos, { v: await vistaDatosContactos(repo, { ...c, parametros: { buscar: 'Marcos' } }) }));
+        prueba(`datos de contactos: buscar, exportar${demo ? '' : ' y borrar'}`, tiene(datos, 'Marcos') && tiene(datos, 'Exportar (JSON)') && tiene(datos, 'Borrar los datos</button>') === !demo);
+      }
 
       const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));

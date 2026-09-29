@@ -82,3 +82,22 @@ pnpm probar:recorrido # lo que se prueba a mano en la aceptación, en el navegad
   de lo pedido (`bots_0005`).
 
 GitHub las corre en cada push, sin claves.
+
+## Canal web y bandeja (etapas 5 y 6)
+
+- **App pública** (`apps/bots-publico`, otro proyecto de Vercel): la página de cada bot (`/b/<id>`), el script del widget
+  (`/widget.js`), las rutas que conversan (`/api/conversar`, `/api/mensajes`) y las tareas de fondo (`/api/tareas`).
+  Todo sale de `canal-web/` (núcleo sin Next y manejadores de Request → Response) y de `ui/publico/`. En la demo, la
+  app del equipo monta lo mismo en `/publico`: un solo servidor, así lo que conversa el widget llega a la bandeja.
+- **Un mensaje** (`canal-web/nucleo.ts → atenderMensaje`): bot publicado con el canal prendido; conteos por IP,
+  contacto y bot (pasarse deja solo menús; el corte duro por IP y hora contesta 429); la conversación del contacto
+  (HMAC del id del navegador); condiciones (aviso o «Acepto»); si está derivada o el bot en pausa, se guarda y el bot no
+  contesta; si no, el motor de conversación con la versión publicada y se guarda el turno entero en una transacción
+  (`bots.publico_guardar_turno`, con el seq de la conversación para que dos turnos no se pisen).
+- **Datos:** `RepositorioPublico` y `RepositorioTareas` (`datos/repositorio.ts`): en la demo, el mismo repositorio en
+  memoria; con Supabase, `datos/supabase/publico-supabase.ts`, con la clave de servicio y solo `bots.publico_*` y
+  `bots.tarea_*`. La bandeja usa el repositorio del equipo: leer exige `leer_conversaciones`; atender,
+  `responder_conversaciones`; revisar la muestra, `editar_borrador`; los datos de un contacto, `gestionar_datos_contactos`.
+- **Sin textos de personas** fuera de `bots.messages.text` y de los datos del contacto: los eventos (`bots.events`)
+  pasan por `eventosDeTurno` (lista de datos permitidos por evento) y la actividad (`core.audit_log`) nunca lleva el
+  dato. El texto se vacía con `bots.tarea_borrar_vencidos` a los días de guardado del bot.

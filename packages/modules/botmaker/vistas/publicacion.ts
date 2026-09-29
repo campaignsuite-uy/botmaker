@@ -24,6 +24,8 @@ export interface Requisito {
 
 export interface VistaPublicacion extends BaseParte {
   publicada: { numero: number; acierto: string; hrefSimular: string } | null;
+  /** Pausar o reanudar (publicar): en pausa no contesta en ningún canal y lo que llega va a la bandeja. */
+  pausa: { pausado: boolean; puede: boolean } | null;
   borrador: {
     numero: number;
     requisitos: Requisito[];
@@ -110,6 +112,7 @@ export async function vistaPublicacion(repo: Repositorio, ctx: ContextoPantalla,
   return {
     ...x.comun,
     publicada: vPublicada ? { numero: vPublicada.numero, acierto: num(aciertoPublicada), hrefSimular: hrefBot(ctx, bot.id, 'simulador', { version: 'publicada' }) } : null,
+    pausa: vPublicada && (bot.estado === 'publicado' || bot.estado === 'pausado') ? { pausado: bot.estado === 'pausado', puede: puede(ctx.rol, 'publicar') && !ctx.organizacion.demo } : null,
     borrador,
     pedida,
     eventos: eventos.map((e) => ({ fecha: fechaHoraUtc(e.fecha), accion: ETIQUETA_ACCION_PUBLICACION[e.accion], version: `v${numero.get(e.versionId) ?? '?'}`, quien: nombre(e.personaId), nota: e.nota })),

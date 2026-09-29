@@ -11,6 +11,8 @@ import type { Definicion } from '../dominio/definicion';
 import type { FichaMotor } from '../dominio/motores';
 import type { Borrador, Cambio, CambioResumen, EventoPublicacion, NuevoCambio, Version, VersionCompleta } from '../dominio/versiones';
 import type { Corrida, ResultadoCaso, ResumenCorrida } from '../dominio/corridas';
+import type { Alerta, Canal, Condiciones, Contacto, Conversacion, EstadoConversacion, EventoAnalitica, Mensaje, ModoCondiciones, PedidoDatos } from '../dominio/conversaciones';
+import type { Decision, Sesion } from '../dominio/motor';
 import type {
   Bot, CambiosBot, CampanaBots, EleccionMotores, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolModulo, Topes, UsoMotor,
 } from '../dominio/tipos';
@@ -83,6 +85,41 @@ export interface Repositorio {
   devolverPublicacion(versionId: string, nota: string, por: string): Promise<void>;
   eventosPublicacion(botId: string): Promise<EventoPublicacion[]>;
 
+  /** Pausar o reanudar el bot (publicar): en pausa no contesta en ningún canal y todo va a la bandeja. */
+  pausarBot(botId: string, pausar: boolean, por: string): Promise<void>;
+
+  // ── Canal web y condiciones (etapa 5) ─────────────────────────────────────────────────────────
+
+  canalWeb(botId: string): Promise<CanalWeb>;
+  /** Prender o apagar el canal web y cómo se aceptan las condiciones (configurar_canales). */
+  guardarCanalWeb(botId: string, canal: CanalWeb, por: string): Promise<void>;
+  /** Las condiciones del bot, de la versión más nueva a la más vieja. */
+  condiciones(botId: string): Promise<Condiciones[]>;
+  /** Publica una versión nueva de las condiciones (configurar_canales). Devuelve su número. */
+  publicarCondiciones(botId: string, texto: string, por: string): Promise<number>;
+
+  // ── Bandeja (etapa 6) ─────────────────────────────────────────────────────────────────────────
+
+  conversaciones(campanaId: string, filtro?: FiltroConversaciones): Promise<FilaConversacion[]>;
+  conversacion(conversacionId: string): Promise<ConversacionCompleta | null>;
+  /** Una persona del equipo toma la conversación: el bot deja de contestar en ella (responder_conversaciones). */
+  tomarConversacion(conversacionId: string, por: string): Promise<void>;
+  /** Responder como la campaña. Devuelve el número del mensaje. */
+  responderConversacion(conversacionId: string, texto: string, por: string): Promise<number>;
+  /** Devolver al bot: guarda lo que dijo el bot al volver (el turno de devolverAlBot) y la deja atendida por el bot. */
+  devolverConversacion(conversacionId: string, turno: TurnoDevuelto, por: string): Promise<void>;
+  cerrarConversacion(conversacionId: string, por: string): Promise<void>;
+  alertas(campanaId: string, opciones?: { abiertas?: boolean }): Promise<Alerta[]>;
+  /** Las respuestas con base que entraron en la muestra, con su revisión si la tienen. */
+  muestra(campanaId: string, opciones?: { pendientes?: boolean; limite?: number }): Promise<FilaMuestra[]>;
+  revisarRespuesta(conversacionId: string, n: number, veredicto: 'correcta' | 'incorrecta', convertida: boolean, por: string): Promise<void>;
+  /** Buscar contactos por nombre, dato o texto de sus mensajes (gestionar_datos_contactos). */
+  buscarContactos(campanaId: string, texto: string, por: string): Promise<FilaContacto[]>;
+  exportarContacto(contactoId: string, por: string): Promise<ExportacionContacto>;
+  /** Borra los datos del contacto y el texto de sus mensajes; quedan los eventos, que no tienen textos. */
+  borrarContacto(contactoId: string, nota: string, por: string): Promise<void>;
+  pedidosDatos(campanaId: string): Promise<PedidoDatos[]>;
+
   /** El rol de un integrante de la campaña en BotMaker (null = sin acceso). */
   asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void>;
 
@@ -102,3 +139,128 @@ export interface Repositorio {
 }
 
 export type { CampanaBots };
+
+export interface CanalWeb {
+  activo: boolean;
+  modoCondiciones: ModoCondiciones;
+}
+
+export interface FiltroConversaciones {
+  botId?: string;
+  estado?: EstadoConversacion | 'abiertas';
+  canal?: Canal;
+  /** Nombre o dato del contacto. */
+  buscar?: string;
+  /** Solo las asignadas a esta persona. */
+  asignadaA?: string;
+  limite?: number;
+}
+
+export interface FilaConversacion {
+  conversacion: Conversacion;
+  contacto: Pick<Contacto, 'id' | 'nombre' | 'borradoEn'>;
+  /** El último mensaje (su texto, o null si se borró). */
+  ultimo: Pick<Mensaje, 'autor' | 'texto' | 'creadoEn'> | null;
+  mensajes: number;
+}
+
+export interface ConversacionCompleta {
+  conversacion: Conversacion;
+  contacto: Contacto;
+  mensajes: Mensaje[];
+}
+
+export interface TurnoDevuelto {
+  mensajes: { texto: string; cajaId: string | null; datos: Mensaje['datos'] }[];
+  sesion: Sesion;
+  decision: Decision;
+  cajaActual: string | null;
+  eventos: EventoAnalitica[];
+}
+
+export interface FilaMuestra {
+  conversacionId: string;
+  botId: string;
+  n: number;
+  pregunta: string | null;
+  respuesta: string | null;
+  secciones: string[];
+  fecha: string;
+  veredicto: 'correcta' | 'incorrecta' | null;
+  convertida: boolean;
+  revisadaPor: string | null;
+}
+
+export interface FilaContacto {
+  contacto: Contacto;
+  conversaciones: number;
+  ultima: string | null;
+}
+
+export interface ExportacionContacto {
+  contacto: Contacto;
+  conversaciones: { conversacion: Omit<Conversacion, 'sesion'>; mensajes: Mensaje[] }[];
+  exportadoEn: string;
+}
+
+// ── App pública (etapa 5): sin sesión de persona; en Supabase, solo funciones bots.publico_* ─────
+
+export interface BotPublico {
+  bot: Bot;
+  campana: { nombre: string; zonaHoraria: string };
+  /** La versión publicada con su definición (null si el bot no tiene). */
+  version: { id: string; numero: number; definicion: unknown } | null;
+  publicadoDesde: string | null;
+  organizacionDemo: boolean;
+  canal: CanalWeb;
+  condiciones: { numero: number; texto: string } | null;
+}
+
+export interface TurnoGuardado {
+  /** Lo que mandó la persona (null en el inicio de la conversación). */
+  entrante: { tipo: Mensaje['tipo']; texto: string; datos: Mensaje['datos']; idCanal: string | null } | null;
+  salientes: { autor: 'bot' | 'sistema'; texto: string; cajaId: string | null; datos: Mensaje['datos'] }[];
+  decision: Decision | null;
+  sesion: Sesion;
+  estado: EstadoConversacion;
+  cajaActual: string | null;
+  versionId: string | null;
+  eventos: EventoAnalitica[];
+  derivacion: { motivo: string; cajaId: string | null } | null;
+  /** Las variables del contacto que se guardaron en este turno (contacto.nombre…). */
+  datosContacto: Record<string, string>;
+  /** El primer mensaje del bot es una respuesta con base que entra en la revisión por muestreo. */
+  muestra: boolean;
+  ahora: string;
+}
+
+/** La app pública también llama a los motores (en vivo): necesita lo mismo que la capa, sin sesión de persona. */
+export type RepositorioCapaPublica = Pick<Repositorio, 'topesBot' | 'fichas' | 'motoresDeBot' | 'gastoBot' | 'registrarLlamada'>;
+
+export interface RepositorioPublico extends RepositorioCapaPublica {
+  botPublico(idPublico: string): Promise<BotPublico | null>;
+  /** La conversación abierta (no cerrada) más nueva del contacto con el bot, sin crear nada. */
+  buscarConversacion(botId: string, contactoHash: string): Promise<{ conversacion: Conversacion; contacto: Contacto } | null>;
+  /** Suma uno a cada conteo (ventanas fijas) y devuelve cómo quedó cada uno. */
+  contar(claves: readonly { clave: string; ventanaSegundos: number }[], ahora: Date): Promise<number[]>;
+  /**
+   * La conversación abierta del contacto con el bot, o una nueva (y el contacto, si es la primera vez). La que atendía
+   * el bot y lleva más de LIMITES_WEB.minutosSesion sin mensajes se cierra y empieza otra; una derivada o en atención sigue.
+   * Con `verificadoAhora`, el contacto pasó la verificación anti-robots recién; la conversación queda verificada si el
+   * contacto se verificó en las últimas LIMITES_WEB.horasVerificacion horas.
+   */
+  abrirConversacion(p: { botId: string; contactoHash: string; canal: Canal; verificadoAhora: boolean; ahora: Date }): Promise<{ conversacion: Conversacion; contacto: Contacto; nueva: boolean }>;
+  mensajes(conversacionId: string, desde: number): Promise<Mensaje[]>;
+  mensajePorIdCanal(conversacionId: string, idCanal: string): Promise<Mensaje | null>;
+  /** Guarda un turno si la conversación sigue en `seqEsperada` (si no, ErrorDatos 'conversacion_cambio'). Devuelve los mensajes nuevos. */
+  guardarTurno(conversacionId: string, seqEsperada: number, t: TurnoGuardado): Promise<Mensaje[]>;
+  aceptarCondiciones(contactoId: string, numero: number, ahora: Date): Promise<void>;
+}
+
+/** Tareas de fondo (sin persona): las llama un cron con clave o pg_cron. */
+export interface RepositorioTareas {
+  /** Abre las alertas que correspondan y cierra las que ya no. */
+  revisarAlertas(ahora: Date): Promise<{ abiertas: number; cerradas: number }>;
+  /** Vacía el texto de los mensajes vencidos según los días de guardado de cada bot. Devuelve cuántos. */
+  borrarVencidos(ahora: Date): Promise<number>;
+}
