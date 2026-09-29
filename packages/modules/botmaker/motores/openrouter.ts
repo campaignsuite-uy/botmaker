@@ -183,10 +183,17 @@ export class AdaptadorOpenRouter implements Adaptador {
     return /response_format|json_schema|structured|no endpoints found|parameter|temperature/i.test(JSON.stringify(r.cuerpo?.error ?? ''));
   }
 
-  /** El error del proveedor, corto y sin citas largas: por si algún proveedor repite parte del pedido en su mensaje. */
+  /**
+   * El error del proveedor, corto y sin citas largas: por si algún proveedor repite parte del pedido en su mensaje.
+   * Cuando OpenRouter dice solo «Provider returned error», lo que sirve está en metadata.raw (así se vio el freno de
+   * Mistral en la prueba de motores).
+   */
   private mensajeError(r: RespuestaHttp): string {
     const e = r.cuerpo?.error;
-    const m = String(e?.message ?? 'sin detalle').replace(/(["'`«]).{20,}?\1/g, '[…]').slice(0, 160);
+    const base = String(e?.message ?? 'sin detalle');
+    const crudo = typeof e?.metadata?.raw === 'string' ? e.metadata.raw : '';
+    const texto = crudo && /provider returned error/i.test(base) ? `${String(e?.metadata?.provider_name ?? 'el proveedor')}: ${crudo}` : base;
+    const m = texto.replace(/(["'`«]).{20,}?\1/g, '[…]').replace(/[:,]?\s*https?:\/\/\S+/g, '').slice(0, 160);
     return `HTTP ${r.status}: ${m}`;
   }
 }

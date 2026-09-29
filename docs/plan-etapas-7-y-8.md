@@ -16,10 +16,12 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   - Migración `bots_0010_analitica.sql`.
   - Pruebas: 281 unitarias, 78 de base, 202 de pantallas, 385 de celular y 91 del recorrido.
 - **Sentry (8.03):** hecho y apagado hasta que haya cuenta (`SENTRY_DSN`); la prueba de cierre es `/api/probar-sentry`.
+- **Respuestas grabadas (1.07):** hechas. `motores/respuestas-openrouter.ts` con los casos de la prueba de motores (los
+  mensajes de error, tal cual; los cuerpos, con la forma de OpenRouter) y `motores/openrouter-grabadas.test.ts`. El
+  adaptador ahora muestra el motivo de «Provider returned error» (el freno de Mistral estaba en `metadata.raw`).
 - **Lo que sigue, en orden:**
-  1. Respuestas grabadas (1.07).
-  2. Semilla de demo para Supabase.
-  3. Manual (8.06).
+  1. Semilla de demo para Supabase.
+  2. Manual (8.06).
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
