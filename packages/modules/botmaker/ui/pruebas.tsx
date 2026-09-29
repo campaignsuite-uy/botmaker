@@ -104,7 +104,7 @@ export function PantallaCorrida({ v }: { v: VistaCorrida }) {
   return (
     <>
       <EncabezadoBot e={v.base.encabezado} />
-      <Caja titulo={`Corrida del ${v.corrida.fecha} (UTC)`} nota={`${v.corrida.version} · ${v.corrida.estadoTexto} · ${v.corrida.avance}`} accion={{ texto: 'Volver a Pruebas', href: v.hrefPruebas }}>
+      <Caja titulo={`Corrida del ${v.corrida.fecha}`} nota={`${v.corrida.version} · ${v.corrida.estadoTexto} · ${v.corrida.avance}`} accion={{ texto: 'Volver a Pruebas', href: v.hrefPruebas }}>
         <p className="texto-chico secundario">{v.corrida.etiqueta}</p>
         <div className="bots-resumen">
           {v.resumen.map((r) => (

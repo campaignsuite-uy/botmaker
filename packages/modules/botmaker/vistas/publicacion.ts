@@ -79,7 +79,7 @@ export async function vistaPublicacion(repo: Repositorio, ctx: ContextoPantalla,
     const baja = acierto !== null && aciertoPublicada !== null && aciertoPublicada - acierto >= BAJA_MAXIMA_ACIERTO;
     const requisitos: Requisito[] = [
       { texto: 'El validador no marca errores', ok: errores === 0, detalle: errores ? `${errores} ${errores === 1 ? 'error' : 'errores'}: se ven en Flujos` : 'sin errores', href: errores ? hrefBot(ctx, bot.id, 'flujos') : null },
-      { texto: 'Las pruebas corrieron sobre el último cambio', ok: !!corrida, detalle: corrida ? `corrida del ${fechaHoraUtc(corrida.creadaEn)} (UTC)` : `falta correrlas sobre el cambio ${b.seq}`, href: hrefBot(ctx, bot.id, corrida ? `pruebas/${corrida.id}` : 'pruebas') },
+      { texto: 'Las pruebas corrieron sobre el último cambio', ok: !!corrida, detalle: corrida ? `corrida del ${fechaHoraUtc(corrida.creadaEn)}` : `falta correrlas sobre el cambio ${b.seq}`, href: hrefBot(ctx, bot.id, corrida ? `pruebas/${corrida.id}` : 'pruebas') },
       {
         texto: `El acierto no baja ${BAJA_MAXIMA_ACIERTO} puntos o más contra la publicada`,
         ok: !baja,

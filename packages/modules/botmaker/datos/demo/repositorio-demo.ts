@@ -753,7 +753,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
         const ms = this.e.mensajes.get(c.id) ?? [];
         const u = ms.at(-1);
         return {
-          conversacion: structuredClone(c), contacto: { id: ct.id, nombre: ct.nombre, borradoEn: ct.borradoEn },
+          conversacion: structuredClone(c), contacto: { id: ct.id, nombre: ct.nombre, nombrePerfil: ct.nombrePerfil ?? null, borradoEn: ct.borradoEn },
           ultimo: u ? { autor: u.autor, texto: u.texto, creadoEn: u.creadoEn } : null, mensajes: ms.length,
         };
       });
@@ -1296,6 +1296,14 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       }),
     ];
     c.plantillasRevisadasEn = iso;
+  }
+
+  /** Solo la demo: los bots con WhatsApp conectado (para el teléfono de prueba). */
+  canalesWhatsappDemo(): { idPublico: string; nombre: string; numero: string | null; estado: EstadoCanal }[] {
+    return this.e.wa.canales.flatMap((c) => {
+      const b = this.e.bots.find((x) => x.id === c.botId);
+      return b ? [{ idPublico: b.idPublico, nombre: b.nombre, numero: c.numero, estado: c.estado }] : [];
+    });
   }
 
   /** Solo la demo: simula que pasaron 24 horas desde el último mensaje de la persona (para probar las plantillas). */

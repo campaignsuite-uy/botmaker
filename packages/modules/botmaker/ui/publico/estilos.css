@@ -44,3 +44,48 @@
 .pub-condiciones p { overflow-wrap: anywhere; }
 .pub-condiciones a { color: var(--pub-acento); }
 .pub-codigo { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; padding: 10px; border: 1px solid var(--pub-linea); background: var(--pub-caja); }
+
+/* Teléfono de prueba (solo la demo): el teléfono a la izquierda y los controles a la derecha; en el celular, uno abajo del otro. */
+.tel-pagina {
+  --tel-fondo: #efeae2; --tel-caja: #ffffff; --tel-texto: #111b21; --tel-suave: #667781; --tel-linea: #d1d7db; --tel-propio: #d9fdd3; --tel-acento: #027eb5;
+  min-height: 100vh; min-height: 100dvh; display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; padding: 16px;
+  background: #f0f2f5; color: var(--tel-texto); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.4; box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  .tel-pagina { --tel-fondo: #0b141a; --tel-caja: #202c33; --tel-texto: #e9edef; --tel-suave: #8696a0; --tel-linea: #2a3942; --tel-propio: #005c4b; --tel-acento: #53bdeb; background: #111b21; }
+}
+.tel { width: 100%; max-width: 400px; height: min(760px, calc(100dvh - 32px)); display: flex; flex-direction: column; border: 1px solid var(--tel-linea); border-radius: 20px; overflow: hidden; background: var(--tel-fondo); }
+.tel__cabecera { padding: 12px 16px; background: var(--tel-caja); border-bottom: 1px solid var(--tel-linea); }
+.tel__nombre { font-weight: 600; }
+.tel__sub { font-size: 12px; color: var(--tel-suave); }
+.tel__mensajes { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.tel__vacio { color: var(--tel-suave); text-align: center; font-size: 13px; }
+.tel__burbuja { align-self: flex-start; max-width: 85%; padding: 6px 10px 4px; border-radius: 10px; background: var(--tel-caja); overflow-wrap: anywhere; }
+.tel__burbuja--propia { align-self: flex-end; background: var(--tel-propio); }
+.tel__burbuja--plantilla { border: 1px dashed var(--tel-suave); }
+.tel__etiqueta { font-size: 11px; color: var(--tel-suave); text-transform: uppercase; letter-spacing: 0.04em; }
+.tel__texto { white-space: pre-wrap; }
+.tel__hora { font-size: 11px; color: var(--tel-suave); text-align: right; }
+.tel__botones { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.tel__boton, .tel__fila { width: 100%; padding: 8px; border: 0; border-top: 1px solid var(--tel-linea); background: transparent; color: var(--tel-acento); font: inherit; cursor: pointer; text-align: center; }
+.tel__boton:disabled, .tel__fila:disabled { opacity: 0.5; cursor: default; }
+.tel__lista { list-style: none; margin: 0; padding: 0; }
+.tel__fila { display: flex; flex-direction: column; align-items: flex-start; text-align: left; color: var(--tel-texto); }
+.tel__desc { font-size: 12px; color: var(--tel-suave); }
+.tel__aviso { margin: 0 12px 8px; padding: 8px 10px; border-radius: 8px; background: var(--tel-caja); font-size: 13px; }
+.tel__entrada { display: flex; gap: 8px; padding: 8px; background: var(--tel-caja); border-top: 1px solid var(--tel-linea); }
+.tel__campo { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 20px; border: 1px solid var(--tel-linea); background: var(--tel-fondo); color: var(--tel-texto); font: inherit; }
+.tel__enviar { padding: 10px 14px; border-radius: 20px; border: 0; background: var(--tel-acento); color: #ffffff; font: inherit; cursor: pointer; }
+.tel__enviar:disabled { opacity: 0.5; cursor: default; }
+.tel-controles { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.tel-controles h1 { font-size: 20px; margin: 0; }
+.tel-controles p { margin: 0; color: var(--tel-suave); font-size: 14px; }
+.tel-campo { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--tel-suave); }
+.tel-campo input, .tel-campo select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--tel-linea); background: var(--tel-caja); color: var(--tel-texto); font: inherit; }
+.tel-datos { margin: 0; display: grid; gap: 4px; font-size: 13px; }
+.tel-datos div { display: flex; gap: 8px; }
+.tel-datos dt { color: var(--tel-suave); min-width: 150px; }
+.tel-datos dd { margin: 0; }
+.tel-acciones { display: flex; flex-direction: column; gap: 6px; }
+.tel-acciones button { padding: 9px 12px; border-radius: 8px; border: 1px solid var(--tel-linea); background: var(--tel-caja); color: var(--tel-texto); font: inherit; cursor: pointer; text-align: left; }
+.tel-acciones button:disabled { opacity: 0.5; cursor: default; }

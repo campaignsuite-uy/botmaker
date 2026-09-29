@@ -15,7 +15,8 @@
     "./ui/publico/estilos.css": "./ui/publico/estilos.css",
     "./ui/*": "./ui/*.tsx",
     "./acciones/*": "./acciones/*.ts",
-    "./canal-web/*": "./canal-web/*.ts"
+    "./canal-web/*": "./canal-web/*.ts",
+    "./canal-whatsapp/*": "./canal-whatsapp/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -21,7 +21,7 @@ export type Entregar = (url: string, encabezados: Record<string, string>, cuerpo
 
 interface CuentaSim {
   revocada: boolean;
-  webhook: { url: string; encabezados: Record<string, string> } | null;
+  webhook: { url: string; encabezados: Record<string, string>; desde: number } | null;
   plantillas: (PlantillaMeta & { creadaMs: number })[];
 }
 
@@ -58,7 +58,7 @@ export class Simulador360 implements Cliente360 {
   constructor(opciones: { demo?: { urlAviso: string } } = {}) {
     if (opciones.demo) {
       this.cuentas.set(CLAVE_DEMO, {
-        revocada: false, webhook: { url: opciones.demo.urlAviso, encabezados: { [ENCABEZADO_SECRETO]: SECRETO_DEMO } },
+        revocada: false, webhook: { url: opciones.demo.urlAviso, encabezados: { [ENCABEZADO_SECRETO]: SECRETO_DEMO }, desde: 0 },
         plantillas: PLANTILLAS_DEMO.map((p) => ({ ...structuredClone(p), creadaMs: 0 })),
       });
     }
@@ -87,7 +87,7 @@ export class Simulador360 implements Cliente360 {
   async configurarWebhook(clave: string, url: string, encabezados: Record<string, string>): Promise<ResultadoCliente<true>> {
     const c = this.cuenta(clave);
     if (!c) return this.sinClave();
-    c.webhook = { url, encabezados: { ...encabezados } };
+    c.webhook = { url, encabezados: { ...encabezados }, desde: this.siguiente++ };
     return { ok: true, valor: true };
   }
 
@@ -150,10 +150,13 @@ export class Simulador360 implements Cliente360 {
 
   // ── El teléfono de prueba ─────────────────────────────────────────────────────────────────────
 
-  /** La clave cuyo aviso va a este bot (por el final de la dirección: /api/whatsapp/<id público>). */
+  /** La clave cuyo aviso va a este bot (por el final de la dirección: /api/whatsapp/<id público>); la última configurada. */
   claveDeBot(idPublico: string): string | null {
-    for (const [clave, c] of this.cuentas) if (c.webhook?.url.endsWith(`/api/whatsapp/${idPublico}`)) return clave;
-    return null;
+    let mejor: { clave: string; desde: number } | null = null;
+    for (const [clave, c] of this.cuentas) {
+      if (c.webhook?.url.endsWith(`/api/whatsapp/${idPublico}`) && (!mejor || c.webhook.desde > mejor.desde)) mejor = { clave, desde: c.webhook.desde };
+    }
+    return mejor?.clave ?? null;
   }
 
   estaRevocada(clave: string): boolean {

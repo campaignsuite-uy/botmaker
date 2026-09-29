@@ -179,7 +179,7 @@ export interface FiltroConversaciones {
 
 export interface FilaConversacion {
   conversacion: Conversacion;
-  contacto: Pick<Contacto, 'id' | 'nombre' | 'borradoEn'>;
+  contacto: Pick<Contacto, 'id' | 'nombre' | 'borradoEn' | 'nombrePerfil'>;
   /** El último mensaje (su texto, o null si se borró). */
   ultimo: Pick<Mensaje, 'autor' | 'texto' | 'creadoEn'> | null;
   mensajes: number;

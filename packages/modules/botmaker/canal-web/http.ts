@@ -8,6 +8,9 @@ import { ejecutarTareas } from '../acciones/ejecutar-bandeja';
 import { atenderMensaje, consultarMensajes, type RespuestaWeb } from './nucleo';
 import { hashConClave, ipDe, turnstileConfigurado, verificarTurnstile } from './servidor';
 import { scriptWidget } from './widget';
+import { tareasWhatsapp } from '../canal-whatsapp/nucleo';
+import { entornoWhatsapp } from '../canal-whatsapp/servidor';
+import { prepararSimulado } from '../canal-whatsapp/http';
 
 const SIN_CACHE = { 'Cache-Control': 'no-store' };
 
@@ -50,12 +53,17 @@ export function manejarWidget(base: string): Response {
 }
 
 /**
- * Tareas de fondo (alertas y borrado por vencimiento). Las llama un cron con la clave BOTS_TAREAS_SECRET en el encabezado
- * Authorization: Bearer … (el cron de Vercel manda CRON_SECRET así). Sin clave configurada, no corre.
+ * Tareas de fondo (alertas, borrado por vencimiento y WhatsApp: lo atascado, los reintentos y las plantillas). Las llama
+ * un cron con la clave BOTS_TAREAS_SECRET en el encabezado Authorization: Bearer … (el cron de Vercel manda CRON_SECRET
+ * así; pg_cron con pg_net, cada minuto). Sin clave configurada, no corre.
  */
-export async function manejarTareas(req: Request): Promise<Response> {
+export async function manejarTareas(req: Request, base = ''): Promise<Response> {
   const clave = process.env.BOTS_TAREAS_SECRET || process.env.CRON_SECRET;
   if (!clave || req.headers.get('authorization') !== `Bearer ${clave}`) return new Response('No autorizado.', { status: 401 });
-  const r = await ejecutarTareas(obtenerRepositorioPublico(), new Date());
-  return Response.json(r, { headers: SIN_CACHE });
+  const repo = obtenerRepositorioPublico();
+  const r = await ejecutarTareas(repo, new Date());
+  // WhatsApp: lo que quedó sin procesar, los reintentos de envío y el estado de las plantillas.
+  prepararSimulado(base);
+  const whatsapp = await tareasWhatsapp(repo, entornoWhatsapp(repo, base));
+  return Response.json({ ...r, whatsapp }, { headers: SIN_CACHE });
 }

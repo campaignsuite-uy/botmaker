@@ -12,6 +12,7 @@ export function PantallaBot({ v }: { v: VistaBot }) {
     <>
       <EncabezadoBot e={v.encabezado} bajada={b.resumen} />
       <MensajeAccion m={v.mensaje} />
+      {v.avisoWhatsapp ? <div className="aviso" role="note"><strong>WhatsApp conectado.</strong> {v.avisoWhatsapp.texto} <a href={v.avisoWhatsapp.href}>Ver el canal</a></div> : null}
 
       <Caja id="datos" titulo="Datos del bot" nota={`Dirección pública: ${b.idPublico}`}>
         {v.datos.editable ? (

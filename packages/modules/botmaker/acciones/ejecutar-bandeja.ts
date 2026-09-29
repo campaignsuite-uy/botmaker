@@ -13,6 +13,7 @@ import type { RepositorioTareas } from '../datos/repositorio';
 import { dentroDeHorarioPorDefecto, eventosDeTurno, MODOS_CONDICIONES, type ModoCondiciones } from '../dominio/conversaciones';
 import { validarDefinicion } from '../dominio/definicion';
 import { devolverAlBot } from '../dominio/motor';
+import { aWhatsapp } from '../dominio/whatsapp';
 import { puede, type Accion } from '../dominio/permisos';
 import type { CapaMotores } from '../motores/capa';
 import { serviciosDeCapa } from '../motores/servicios';
@@ -73,7 +74,10 @@ export async function ejecutarDevolver(c: ContextoNucleo & { campana: { nombre: 
   }));
   try {
     await c.repo.devolverConversacion(e.conversacionId, {
-      mensajes: t.mensajes.map((m) => ({ texto: m.texto, cajaId: m.cajaId, datos: m.opciones?.length ? { opciones: m.opciones, modo: m.modo ?? 'botones', ...(m.opcionesDe ? { opcionesDe: m.opcionesDe } : {}) } : null })),
+      mensajes: t.mensajes.map((m) => ({
+        texto: m.texto, cajaId: m.cajaId, datos: m.opciones?.length ? { opciones: m.opciones, modo: m.modo ?? 'botones', ...(m.opcionesDe ? { opcionesDe: m.opcionesDe } : {}) } : null,
+        ...(conv.canal === 'whatsapp' ? { envios: aWhatsapp(m, bot.trato) } : {}),
+      })),
       sesion: t.sesion, decision: t.decision, cajaActual: t.decision.recorrido.at(-1) ?? null,
       eventos: eventosDeTurno({ entrada: { tipo: 'inicio' }, eventos: t.eventos, decision: t.decision, soloMenus: false }),
     }, c.personaId);

@@ -60,7 +60,7 @@ export function PantallaPublicacion({ v }: { v: VistaPublicacion }) {
       </Caja>
 
       {v.pedida ? (
-        <Caja titulo={`Pedido de publicación: versión ${v.pedida.numero}`} nota={`lo pidió ${v.pedida.pidio} el ${v.pedida.fecha} (UTC)`} accion={v.pedida.hrefCorrida ? { texto: 'Ver la corrida', href: v.pedida.hrefCorrida } : undefined}>
+        <Caja titulo={`Pedido de publicación: versión ${v.pedida.numero}`} nota={`lo pidió ${v.pedida.pidio} el ${v.pedida.fecha}`} accion={v.pedida.hrefCorrida ? { texto: 'Ver la corrida', href: v.pedida.hrefCorrida } : undefined}>
           {v.pedida.nota ? <blockquote className="bots-nota">{v.pedida.nota}</blockquote> : null}
           {v.pedida.corrida.length ? (
             <div className="bots-resumen">
@@ -134,7 +134,7 @@ export function PantallaPublicacion({ v }: { v: VistaPublicacion }) {
         <details className="bots-fila-detalle">
           <summary>Versiones ({v.versiones.length})</summary>
           <ul className="bots-diferencias">
-            {v.versiones.map((x) => <li key={x.numero}>v{x.numero} · {x.estado}{x.publicada ? ' (la que conversa)' : ''} · creada el {x.fecha} (UTC)</li>)}
+            {v.versiones.map((x) => <li key={x.numero}>v{x.numero} · {x.estado}{x.publicada ? ' (la que conversa)' : ''} · creada el {x.fecha}</li>)}
           </ul>
         </details>
       </Caja>

@@ -15,6 +15,7 @@ import {
 } from './ejecutar-bandeja';
 import type { Salida } from './ejecutar-bots';
 import { accesoAccion, conMensaje } from './mensajes';
+import { enviarWhatsappDespues } from './envio';
 
 async function correr(fd: FormData, accion: Accion, f: (c: Awaited<ReturnType<typeof contexto>>) => Promise<Salida>): Promise<never> {
   const volver = rutaVolver(fd);
@@ -35,10 +36,12 @@ export async function tomarConversacion(fd: FormData): Promise<void> {
 }
 
 export async function responderConversacion(fd: FormData): Promise<void> {
+  enviarWhatsappDespues(texto(fd, 'conversacionId'));
   await correr(fd, 'responder_conversaciones', (c) => ejecutarResponder(c, { conversacionId: texto(fd, 'conversacionId'), texto: String(fd.get('texto') ?? '') }));
 }
 
 export async function devolverConversacion(fd: FormData): Promise<void> {
+  enviarWhatsappDespues(texto(fd, 'conversacionId'));
   await correr(fd, 'responder_conversaciones', (c) => ejecutarDevolver(c, capaMotores(c.repo), { conversacionId: texto(fd, 'conversacionId') }));
 }
 

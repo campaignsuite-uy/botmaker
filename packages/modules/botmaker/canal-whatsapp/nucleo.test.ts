@@ -87,6 +87,8 @@ describe('WhatsApp: una conversación', () => {
     expect(recibido[0]).toBe('> Hola');
     expect(recibido[1]).toMatch(/^Está conversando con un asistente virtual[\s\S]*Condiciones del asistente: \/publico\/b\/p5v9c3h7pa\/condiciones/);
     expect(recibido.length).toBeGreaterThan(2);
+    // Empezó con un saludo: el bot se presenta como en la web.
+    expect(recibido.some((t) => /asistente virtual de Ana Lucía Ríos/.test(t))).toBe(true);
     const c = await conversacionDe();
     expect(c.conversacion.canal).toBe('whatsapp');
     expect(c.contacto).toMatchObject({ telefono: TELEFONO, nombrePerfil: 'Pedro del Teléfono', condicionesVersion: 1 });

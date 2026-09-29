@@ -17,6 +17,7 @@ import {
 import { exigeAvisoIa } from '../dominio/avisos';
 import { validarDefinicion } from '../dominio/definicion';
 import { turno, type Entrada } from '../dominio/motor';
+import { reglaAntesDelMotor } from '../dominio/reglas';
 import { aWhatsapp, idOpcion, ventanaHasta, type EntranteWhatsapp, type MensajeWhatsapp } from '../dominio/whatsapp';
 import { ErrorDatos } from '../datos/errores';
 import type { CanalWhatsappPublico, EnvioPendiente, RepositorioPublico, RepositorioWhatsapp, TurnoGuardado } from '../datos/repositorio';
@@ -186,6 +187,12 @@ async function atender(repo: RepoWhatsapp, entorno: EntornoWhatsapp, canal: Cana
       eventos: eventoTexto, derivacion: aviso ? { motivo: 'Bot en pausa', cajaId: null } : null, datosContacto: {}, muestra: false, ahora: iso, ventanaHasta: ventana,
     });
     return;
+  }
+
+  // Una conversación nueva que empieza con un saludo («Hola»): el bot se presenta como en la web (bienvenida y menú).
+  if ((nueva || c.seq === 0) && entrada.tipo === 'texto') {
+    const regla = reglaAntesDelMotor(entrada.texto);
+    if (regla?.intencion === 'cortesia' && regla.momento === 'inicio') entrada = { tipo: 'inicio' };
   }
 
   const soloMenus = limites.soloMenus;

@@ -164,7 +164,19 @@ async function main() {
       // Etapas 5 y 6: canales del bot publicado y la bandeja.
       const canales = html(createElement(PantallaCanales, { v: (await vistaCanales(repo, c, 'bot-demo-3'))! }));
       prueba(`canales: la página del bot y el widget; ${e.motores ? 'se configuran' : 'solo mirar'}`, tiene(canales, '/publico/b/p5v9c3h7pa') && tiene(canales, 'data-bot=&quot;p5v9c3h7pa&quot;') && tiene(canales, 'Guardar el canal</button>') === e.motores && tiene(canales, 'Publicar las condiciones</button>') === e.motores);
+      // Etapa 7: WhatsApp en Canales (salud, aviso de política y plantillas) y en la ficha del bot.
+      prueba(`whatsapp: salud, aviso de política y plantillas; ${e.motores ? 'se conecta y se crean plantillas' : 'solo mirar'}`,
+        tiene(canales, 'Política de WhatsApp') && tiene(canales, 'Salud de los últimos 7 días') && tiene(canales, 'retomar_consulta') && tiene(canales, 'En revisión')
+        && tiene(canales, 'teléfono de prueba') && tiene(canales, 'name="clave"') === e.motores && tiene(canales, 'Mandar a aprobar</button>') === e.motores
+        && tiene(canales, 'Apagar WhatsApp</button>') === e.motores && tiene(canales, 'Actualizar los estados</button>'));
+      const ficha = html(createElement(PantallaBot, { v: (await vistaBot(repo, c, 'bot-demo-3'))! }));
+      prueba('whatsapp: la ficha del bot avisa la política', tiene(ficha, 'WhatsApp conectado.') && tiene(ficha, 'no admite partidos, candidatos ni campañas'));
       if (puede(c.rol, 'leer_conversaciones')) {
+        const marta = html(createElement(PantallaConversacion, { v: (await vistaConversacion(repo, c, 'conv-demo-5'))! }));
+        const atiendeWa = puede(c.rol, 'responder_conversaciones') && !demo;
+        prueba(`whatsapp: la ventana cerrada solo deja plantillas; ${atiendeWa ? 'elige y completa una' : 'solo mirar'}`,
+          tiene(marta, 'solo deja escribirle con una plantilla') && tiene(marta, 'WhatsApp: Leído') && !tiene(marta, 'Responder como la campaña')
+          && tiene(marta, 'Mandar la plantilla</button>') === atiendeWa && tiene(marta, '+50761234567') === atiendeWa && tiene(marta, 'Marta G.'));
         const bandeja = html(createElement(PantallaBandeja, { v: await vistaBandeja(repo, c) }));
         prueba('bandeja: conversaciones, conteos y la alerta de la derivada sin respuesta', tiene(bandeja, 'Derivada sin respuesta') && tiene(bandeja, 'Rosa') && tiene(bandeja, 'Contacto '));
         const conv = html(createElement(PantallaConversacion, { v: (await vistaConversacion(repo, c, 'conv-demo-2'))! }));

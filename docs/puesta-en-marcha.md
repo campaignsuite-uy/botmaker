@@ -144,3 +144,41 @@ SQL Editor:
 select cron.schedule('bots-alertas', '*/10 * * * *', $$select bots.tarea_revisar_alertas(now())$$);
 select cron.schedule('bots-borrado', '20 6 * * *', $$select bots.tarea_borrar_vencidos(now())$$);
 ```
+
+## 9. WhatsApp (etapa 7): el número de la campaña con 360dialog
+
+Sin cuentas se prueba entero en la demo: 360dialog simulado y un teléfono de prueba en
+http://localhost:3000/publico/telefono (o http://localhost:3100/telefono con `pnpm dev:publico`). La guía de pruebas de
+aceptación dice qué probar.
+
+Con la cuenta de prueba de 360dialog (tarea 7.01):
+
+1. En el panel de 360dialog, con el número de prueba ya conectado: **API keys → Generate** y copiá la clave. No la
+   pegues en ningún chat, correo ni documento.
+2. En Vercel, la app pública tiene que estar en su dirección con https y la app del equipo tiene que saberla:
+   `BOTS_URL_PUBLICA` (en la Mac, `scripts/cargar-variable.sh BOTS_URL_PUBLICA`). 360dialog avisa cada mensaje a
+   `<BOTS_URL_PUBLICA>/api/whatsapp/<id público del bot>`.
+3. En BotMaker, **Canales → WhatsApp** (administrador): pegá la clave en el campo de contraseña y el número como lo ve la
+   gente, y **Conectar WhatsApp**. BotMaker la prueba con 360dialog, le indica adónde avisar con una contraseña propia
+   del bot y la guarda en Vault. No se vuelve a mostrar.
+4. Escribile al número desde un teléfono: el bot contesta y la conversación aparece en la bandeja como WhatsApp.
+
+Variables (nombres en los `.env.ejemplo`):
+
+- `BOTS_WHATSAPP_SIMULADO`: vacío = simulado en la demo y real con Supabase; `1` siempre simulado; `0` siempre real.
+- `BOTS_URL_PUBLICA` en la app del equipo (ya se usaba para el widget).
+
+Reintentos, lo que quedó sin procesar y el estado de las plantillas: la tarea `/api/tareas` de la app pública. Con
+Supabase, pg_cron la llama cada minuto con pg_net (Database → Extensions → pg_net). La clave de tareas va en Vault, no en
+el SQL:
+
+```sql
+-- Una sola vez: guardar la clave de tareas (la misma que BOTS_TAREAS_SECRET o CRON_SECRET) en Vault, desde el panel
+-- (Project Settings → Vault → Add new secret, nombre "bots_tareas").
+select cron.schedule('bots-whatsapp', '* * * * *', $$
+  select net.http_get(
+    url := '<BOTS_URL_PUBLICA>/api/tareas',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'bots_tareas'))
+  )
+$$);
+```

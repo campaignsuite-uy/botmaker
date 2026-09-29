@@ -516,6 +516,34 @@ begin
     ) c), '[]'::jsonb);
 end $$;
 
+-- La bandeja: el contacto trae su nombre de perfil de WhatsApp (se muestra si no dio su nombre) y se busca por él.
+create or replace function bots.bandeja_conversaciones(campana uuid, filtro jsonb) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  buscar text := nullif(trim(filtro ->> 'buscar'), '');
+begin
+  perform bots.exigir(campana, 'leer_conversaciones');
+  return coalesce((
+    select jsonb_agg(fila order by (fila -> 'conversacion' ->> 'actualizadaEn') desc)
+    from (
+      select jsonb_build_object(
+        'conversacion', bots.json_conversacion(s),
+        'contacto', jsonb_build_object('id', c.id, 'nombre', c.name, 'nombrePerfil', c.profile_name, 'borradoEn', c.deleted_at),
+        'ultimo', (select jsonb_build_object('autor', m.author, 'texto', m.text, 'creadoEn', m.created_at) from bots.messages m where m.session_id = s.id order by m.n desc limit 1),
+        'mensajes', s.seq) as fila
+      from bots.sessions s
+      join bots.contacts c on c.id = s.contact_id
+      where s.campaign_id = campana
+        and (filtro ->> 'bot' is null or s.bot_id = (filtro ->> 'bot')::uuid)
+        and (filtro ->> 'canal' is null or s.channel_kind = filtro ->> 'canal')
+        and (filtro ->> 'asignada' is null or s.assigned_to = (filtro ->> 'asignada')::uuid)
+        and (filtro ->> 'estado' is null or (filtro ->> 'estado' = 'abiertas' and s.state in ('derivada', 'en_atencion')) or s.state = filtro ->> 'estado')
+        and (buscar is null or c.name ilike '%' || buscar || '%' or c.profile_name ilike '%' || buscar || '%' or c.data::text ilike '%' || buscar || '%')
+      order by s.updated_at desc
+      limit least(coalesce((filtro ->> 'limite')::integer, 100), 2000)
+    ) x), '[]'::jsonb);
+end $$;
+
 -- ── Funciones de la app pública (solo la clave de servicio) ─────────────────────────────────────
 
 -- Guarda un turno: además de lo de antes, en WhatsApp encola lo que sale y abre la ventana de 24 horas.

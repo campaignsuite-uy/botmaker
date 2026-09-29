@@ -1,6 +1,6 @@
 /**
  * Prueba de recorrido en el navegador: lo que Joaquín prueba a mano en las pruebas de aceptación, hecho por Playwright
- * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2 a 6.
+ * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2 a 7.
  *
  *  Etapa 2: crear un bot con la plantilla, agregar y conectar una caja en el editor, editarla y deshacer, recorrerlo en
  *           el simulador con botones y texto, exportar e importar el YAML; el lector ve todo sin poder tocar.
@@ -12,6 +12,9 @@
  *  Etapa 5: el widget pegado en un sitio de prueba conversa con la versión publicada y deriva; la bandeja lo ve; el
  *           agente responde y le llega al widget; condiciones con aviso y con «Acepto»; ráfaga en solo menús; pausa.
  *  Etapa 6: alerta de derivada sin respuesta, revisión por muestreo, exportar y borrar los datos de un contacto.
+ *  Etapa 7: WhatsApp con 360dialog simulado y el teléfono de prueba: conversar con botones y listas, derivar, responder
+ *           desde la bandeja, un reintento descartado, la ventana de 24 horas y las plantillas (crear, aprobar, mandar),
+ *           una clave que deja de valer (canal desconectado y alerta) y reconectar.
  *
  * Necesita el build (pnpm build). Levanta `next start` en un puerto propio y lo apaga al terminar.
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
@@ -336,6 +339,95 @@ try {
   prueba('el lector no entra a la bandeja', !lectorBandeja.url().includes('/bandeja'));
   prueba('etapa 6 sin errores en la página', !agente.errores.length && !ed.errores.length && !bot2.errores.length, [...agente.errores, ...ed.errores, ...bot2.errores].join(' · '));
 
+  // ── Etapa 7 ─────────────────────────────────────────────────────────────────────────────────
+  console.log('\nEtapa 7: WhatsApp (360dialog simulado)\n');
+  const tel = await como(navegador, 'p-equipo', 1200);
+  const burbujasBot = () => tel.locator('.tel__burbuja:not(.tel__burbuja--propia)');
+  async function telEscribir(texto) {
+    const n = await burbujasBot().count();
+    await tel.fill('input[aria-label="Mensaje"]', texto);
+    await tel.click('.tel__entrada button:has-text("Enviar")');
+    await tel.waitForFunction((k) => document.querySelectorAll('.tel__burbuja:not(.tel__burbuja--propia)').length > k, n, { timeout: 15000 });
+  }
+  await tel.goto(`${BASE}/publico/telefono?bot=p5v9c3h7pa`);
+  await tel.waitForSelector('.tel-campo select option', { state: 'attached' });
+  await tel.fill('.tel-campo input[inputmode="tel"]', '+507 6555-0001');
+  await tel.fill('.tel-campo input[maxlength="60"]', 'Vecina de Chilibre');
+  await telEscribir('Hola');
+  const primeras = (await burbujasBot().allTextContents()).join(' ');
+  prueba('el teléfono de prueba escribe al WhatsApp del bot: contesta con el aviso, las condiciones y el menú', primeras.includes('Está conversando') && primeras.includes('Condiciones del asistente') && await tel.locator('.tel__boton:has-text("Ver opciones")').count() > 0, primeras.slice(0, 200));
+  let n7 = await burbujasBot().count();
+  await tel.locator('.tel__boton:has-text("Ver opciones")').last().click();
+  await tel.locator('.tel__fila:has-text("Quién es")').click();
+  await tel.waitForFunction((k) => document.querySelectorAll('.tel__burbuja:not(.tel__burbuja--propia)').length > k, n7, { timeout: 15000 });
+  prueba('tocar una fila de la lista sigue esa opción', (await burbujasBot().last().textContent()).length > 0 && await tel.locator('.tel__burbuja--propia:has-text("Quién es")').count() === 1);
+  await telEscribir('Quiero hablar con alguien del equipo');
+  prueba('pedir hablar con alguien deriva la conversación', (await tel.textContent('.tel-datos')).includes('derivada'));
+  await agente.goto(`${CAMPANA}/bandeja?buscar=Vecina`);
+  await agente.locator('a:has-text("Vecina de Chilibre")').first().click();
+  await agente.waitForURL(/\/bandeja\/conv-/);
+  const convWa = agente.url().split('?')[0];
+  let textoConv = await agente.textContent('main');
+  prueba('la bandeja muestra la conversación de WhatsApp con el número, el perfil, la ventana abierta y los estados', textoConv.includes('+50765550001') && textoConv.includes('Vecina de Chilibre') && textoConv.includes('Ventana de 24 horas abierta') && textoConv.includes('WhatsApp: Leído'));
+  await agente.click('button:has-text("Tomar la conversación")');
+  await agente.waitForURL(/ok=conversacion_tomada/);
+  await agente.fill('#bandeja-respuesta', 'Hola, soy Andrés, del equipo. ¿En qué la ayudo?');
+  await agente.click('button:has-text("Enviar")');
+  await agente.waitForURL(/ok=respuesta_enviada/);
+  await tel.waitForSelector('.tel__burbuja:has-text("soy Andrés")', { timeout: 15000 });
+  prueba('el agente responde desde la bandeja y le llega por WhatsApp', true);
+  await tel.click('button:has-text("Reenviar el último (reintento)")');
+  await tel.waitForSelector('.tel__aviso:has-text("descartó por repetido")');
+  await tel.click('button:has-text("Que pasen 24 horas")');
+  await tel.waitForSelector('.tel__aviso:has-text("pasaron 24 horas")');
+  await agente.goto(convWa);
+  textoConv = await agente.textContent('main');
+  prueba('pasadas 24 horas, la bandeja solo deja escribir con una plantilla', textoConv.includes('solo deja escribirle con una plantilla') && await agente.locator('#bandeja-respuesta').count() === 0 && await agente.locator('#bandeja-plantilla').count() === 1);
+  await agente.fill('#valor-1', 'Vecina');
+  await agente.fill('#valor-2', 'la visita a Chilibre');
+  await agente.click('button:has-text("Mandar la plantilla")');
+  await agente.waitForURL(/ok=plantilla_enviada/);
+  await tel.waitForSelector('.tel__burbuja--plantilla:has-text("la visita a Chilibre")', { timeout: 15000 });
+  prueba('la plantilla sale con sus espacios completos y le llega a la persona', true);
+  const admin = await como(navegador, 'p-joaquin');
+  await admin.goto(`${CAMPANA}/bot-demo-3/canales`);
+  await admin.click('summary:has-text("Nueva plantilla")');
+  await admin.fill('#pl-nombre', 'seguimiento_recorrido');
+  await admin.click('button:has-text("Mandar a aprobar")');
+  await admin.waitForURL(/ok=plantilla_creada/);
+  prueba('el administrador crea una plantilla: queda en revisión', (await admin.locator('.bots-plantilla:has-text("seguimiento_recorrido")').textContent()).includes('En revisión'));
+  await tel.click('button:has-text("Que Meta decida las plantillas")');
+  await tel.waitForSelector('.tel__aviso:has-text("Meta decidió")');
+  await admin.click('button:has-text("Actualizar los estados")');
+  await admin.waitForURL(/ok=plantillas_revisadas/);
+  prueba('Meta la aprueba y el estado se actualiza', (await admin.locator('.bots-plantilla:has-text("seguimiento_recorrido")').textContent()).includes('Aprobada'));
+  await tel.click('button:has-text("Revocar la clave (360dialog)")');
+  await tel.waitForSelector('.tel__aviso:has-text("dejó de valer")');
+  await tel.fill('.tel-campo input[inputmode="tel"]', '+507 6555-0002');
+  await tel.fill('input[aria-label="Mensaje"]', 'Hola');
+  await tel.click('.tel__entrada button:has-text("Enviar")');
+  await tel.waitForFunction(() => document.querySelectorAll('.tel__burbuja--propia').length >= 1);
+  await admin.goto(`${CAMPANA}/bot-demo-3/canales`);
+  prueba('una clave que dejó de valer: el canal queda desconectado', (await admin.textContent('main')).includes('El canal está desconectado'));
+  await admin.goto(`${CAMPANA}/bandeja`);
+  prueba('y la bandeja muestra la alerta', (await admin.textContent('main')).includes('Canal desconectado'));
+  await tel.click('button:has-text("Devolver la clave")');
+  await admin.goto(`${CAMPANA}/bot-demo-3/canales`);
+  await admin.fill('#wa-clave', 'otra-clave-de-prueba-del-recorrido');
+  await admin.fill('#wa-numero', '+507 6000-0101');
+  await admin.click('button:has-text("Reconectar con esta clave")');
+  await admin.waitForURL(/ok=whatsapp_conectado/);
+  const tras = await admin.textContent('main');
+  prueba('reconectar con otra clave deja el canal conectado y la clave no se muestra', !tras.includes('El canal está desconectado') && !tras.includes('otra-clave-de-prueba-del-recorrido') && !(await admin.content()).includes('otra-clave-de-prueba-del-recorrido'));
+  await admin.goto(`${CAMPANA}/bandeja`);
+  prueba('la alerta de canal desconectado se cierra', !(await admin.textContent('main')).includes('Canal desconectado'));
+  await tel.fill('.tel-campo input[inputmode="tel"]', '+507 6555-0003');
+  await telEscribir('Hola');
+  prueba('con la clave nueva, el bot vuelve a contestar por WhatsApp', (await burbujasBot().allTextContents()).join(' ').includes('Está conversando'));
+  await admin.goto(`${CAMPANA}/bot-demo-3`);
+  prueba('la ficha del bot avisa la política de WhatsApp', (await admin.textContent('main')).includes('no admite partidos, candidatos ni campañas'));
+  prueba('etapa 7 sin errores en la página', !tel.errores.length && !agente.errores.length && !admin.errores.length, [...tel.errores, ...agente.errores, ...admin.errores].join(' · '));
+
   // ── La app pública aparte (apps/bots-publico), con su propia demo ─────────────────────────────
   if (!process.env.URL) {
     console.log('\nApp pública aparte (apps/bots-publico)\n');
@@ -360,6 +452,19 @@ try {
       prueba('la página del bot se puede mostrar dentro del widget en cualquier sitio', (b.headers.get('content-security-policy') ?? '').includes('frame-ancestors *'));
       prueba('las tareas de fondo piden su clave', (await fetch(`${PUB}/api/tareas`)).status === 401);
       prueba('un bot que no está publicado no se muestra', (await (await fetch(`${PUB}/b/k7m2q9x4pa`)).text()).includes('no está disponible'));
+      const avisoMal = await fetch(`${PUB}/api/whatsapp/p5v9c3h7pa`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"entry": []}' });
+      prueba('el aviso de WhatsApp sin la contraseña del canal no entra', avisoMal.status === 401);
+      const aviso = {
+        object: 'whatsapp_business_account',
+        entry: [{ changes: [{ field: 'messages', value: { metadata: { display_phone_number: '+507 6000-0101' }, contacts: [{ profile: { name: 'Prueba' }, wa_id: '50760000123' }], messages: [{ from: '50760000123', id: 'wamid.recorrido.1', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Hola' } }] } }] }],
+      };
+      const t0 = performance.now();
+      const avisoBien = await fetch(`${PUB}/api/whatsapp/p5v9c3h7pa`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-botmaker-secreto': 'secreto-del-aviso-de-la-demo' }, body: JSON.stringify(aviso) });
+      const ms = performance.now() - t0;
+      prueba(`el aviso de 360dialog se contesta enseguida y se procesa después (${Math.round(ms)} ms; meta: 500)`, avisoBien.status === 200 && ms < 500);
+      await new Promise((r) => setTimeout(r, 1500));
+      const telPub = await (await fetch(`${PUB}/api/telefono?bot=p5v9c3h7pa&telefono=50760000123`)).json();
+      prueba('lo procesó aparte: el bot contestó por WhatsApp (teléfono de prueba de la app pública)', telPub.mensajes?.some((m) => m.sentido === 'para'), JSON.stringify(telPub).slice(0, 200));
     } finally {
       pubApp.kill();
     }
