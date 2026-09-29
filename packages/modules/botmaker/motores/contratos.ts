@@ -113,9 +113,18 @@ export const contratoResponder = {
 
 export interface EntradaCopiloto {
   pedido: string;
-  /** El borrador del bot (la definición, etapa 2). */
-  borrador: unknown;
+  /** Qué clase de pedido es (dominio/copiloto.ts): cambia la guía de las instrucciones. Sin modo, un cambio puntual. */
+  modo?: 'cambios' | 'armar' | 'frases' | 'revision';
+  /** El borrador en forma legible, con direcciones e ids (dominio/copiloto.ts → borradorLegible). */
+  borrador: string;
+  /** Lo que marca el validador del borrador (errores y avisos), para que el copiloto lo tenga en cuenta. */
+  avisos?: string[];
   material?: SeccionMaterial[];
+  /**
+   * La definición entera: solo la usa el motor simulado (que resuelve por reglas). Las instrucciones de los motores
+   * reales llevan el borrador legible, que es más corto y trae las direcciones.
+   */
+  definicion?: unknown;
 }
 
 /** Una operación propuesta sobre el borrador. `datos` va como texto JSON (modo estricto sin claves libres). */
@@ -189,7 +198,8 @@ export interface SalidaDe {
 export const MAX_TOKENS: Record<FuncionMotor, number> = {
   interpretar: 800,
   responder: 1500,
-  copiloto: 4000,
+  // Armar un bot entero son muchas operaciones: el copiloto tiene más margen de salida.
+  copiloto: 12000,
 };
 
 /** Quita cercos de código (```json … ```) y el texto alrededor del primer objeto JSON. */

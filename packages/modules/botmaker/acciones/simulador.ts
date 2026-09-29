@@ -20,5 +20,6 @@ export async function turnoSimulador(p: PedidoTurno & { campanaId: string }): Pr
   return ejecutarTurnoSimulador({ repo: c.repo, rol: c.rol, personaId: c.persona.id, campanaId: String(p.campanaId), campana }, capaMotores(c.repo), {
     botId: String(p.botId), sesion: p.sesion, entrada: p.entrada, horario: p.horario === 'fuera' ? 'fuera' : 'dentro',
     variables: p.variables && typeof p.variables === 'object' ? p.variables : undefined,
+    version: p.version === 'publicada' ? 'publicada' : 'borrador',
   });
 }

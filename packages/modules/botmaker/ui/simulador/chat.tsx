@@ -62,7 +62,7 @@ export function ChatSimulador({ s }: { s: EstadoSimulador }) {
     const antes = mostrar ? [...desde.turnos, { quien: 'persona' as const, texto: mostrar }] : desde.turnos;
     setTurnos(antes);
     iniciar(async () => {
-      const r = await turnoSimulador({ campanaId: s.campanaId, botId: s.botId, sesion: desde.sesion, entrada, horario, variables });
+      const r = await turnoSimulador({ campanaId: s.campanaId, botId: s.botId, sesion: desde.sesion, entrada, horario, variables, version: s.version });
       if (!r.ok) {
         setError(textoError(r.codigo));
         return;
@@ -71,7 +71,7 @@ export function ChatSimulador({ s }: { s: EstadoSimulador }) {
       setSesion(ok.sesion);
       setTurnos([...antes, { quien: 'bot', mensajes: ok.mensajes, decision: ok.decision, eventos: ok.eventos, seq: ok.seq }]);
       if (ok.seq !== s.seq) setCambio(ok.seq);
-      guardarRecorrido(s.versionId, ok.decision.recorrido);
+      if (s.version === 'borrador') guardarRecorrido(s.versionId, ok.decision.recorrido);
     });
   };
   const reiniciar = () => enviar({ tipo: 'inicio' }, undefined, { sesion: null, turnos: [] });

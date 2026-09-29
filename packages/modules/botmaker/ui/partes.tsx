@@ -20,7 +20,7 @@ function Forma(props: { b: BaseParte; forma: string; ancla?: string; extra?: Rec
 }
 
 /** Deshacer y rehacer el último cambio del borrador (el mismo historial que el diagrama). */
-function BarraBorrador({ b }: { b: BaseParte }) {
+export function BarraBorrador({ b }: { b: BaseParte }) {
   if (!b.editable || (!b.deshacer && !b.rehacer)) return null;
   const boton = (rehacer: boolean, resumen: string | null) => (resumen ? (
     <form action={deshacerBorrador}>

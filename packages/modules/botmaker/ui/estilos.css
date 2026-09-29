@@ -205,3 +205,26 @@ textarea.bots-yaml { min-height: 520px; }
   .sim-fila { max-width: 100%; }
   .sim-decision { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Pruebas y publicación ─────────────────────────────────────────────────────────────────────── */
+.bots-avance { height: 8px; background: var(--fila-b); border: 1px solid var(--linea); }
+.bots-avance__relleno { height: 100%; background: var(--lavanda); transition: width 0.3s; }
+.bots-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.bots-requisitos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bots-requisito { display: flex; gap: 8px; font-size: 13px; }
+.bots-diferencias { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bots-diferencia__tipo { display: inline-block; min-width: 76px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+@media (max-width: 760px) {
+  .bots-resumen { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Publicación */
+.bots-nota { margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--linea); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bots-subtitulo { margin: 16px 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texto-2, inherit); }
+.bots-diferencias li { overflow-wrap: anywhere; }
+
+/* Copiloto */
+.bots-copiloto { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--linea); }
+.bots-copiloto__items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bots-copiloto__item { font-size: 13px; overflow-wrap: anywhere; }
+.bots-copiloto__item--mal { opacity: 0.75; }

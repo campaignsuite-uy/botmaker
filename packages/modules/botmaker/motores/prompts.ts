@@ -5,6 +5,7 @@
  *
  * Cambiar una instrucción cambia cómo responden todos los bots: se corre la prueba de motores antes y después.
  */
+import { AYUDA_CAJAS, MODO_COPILOTO, OPERACIONES_COPILOTO } from '../dominio/copiloto';
 import { mercado } from '../dominio/mercados';
 import type { CasoUso, Trato } from '../dominio/tipos';
 import type { EntradaCopiloto, EntradaInterpretar, EntradaResponder, Turno } from './contratos';
@@ -109,21 +110,41 @@ Responde solo con un objeto JSON con esta forma, sin texto antes ni después:
 }
 
 export function instruccionesCopiloto(c: ContextoBot, e: EntradaCopiloto): Instrucciones {
+  const modo = MODO_COPILOTO[e.modo ?? 'cambios'];
+  const catalogo = Object.entries(OPERACIONES_COPILOTO).map(([t, d]) => `- ${t}: ${d}`).join('\n');
   const material = e.material?.length
-    ? `\n\n## MATERIAL\n\n${e.material.map((s) => `### ${s.codigo} · ${s.titulo}\n${s.texto.trim()}`).join('\n\n')}`
+    ? `\n\n## MATERIAL DEL BOT\n\n${e.material.map((s) => `### ${s.codigo} · ${s.titulo}\n${s.texto.trim()}`).join('\n\n')}`
     : '';
   const sistema = `Eres el copiloto del creador de BotMaker. Ayudas al equipo de la campaña «${c.campana}» (${paisDe(c)}, bot ${c.caso === 'electoral' ? 'electoral' : 'político no electoral'} «${c.nombreBot}») a armar y cambiar su bot.
 
-Nunca publicas nada: propones operaciones sobre el borrador, y una persona del equipo decide si las aplica.
+Nunca publicas nada: propones operaciones sobre el borrador, y una persona del equipo marca cuáles aplicar. Todo se puede deshacer.
+
+## Cómo está armado un bot
+
+Flujos numerados con cajas; cada caja tiene una dirección (flujo.caja, por ejemplo 2.4) y un id (n_…). Las opciones de una caja tienen letra (2.4 › B). Las intenciones son lo que la IA reconoce en un texto libre y cada una lleva a una caja. Los textos que ve la persona están en contenidos (c_…) y las cajas los muestran. La respuesta con base contesta solo con el material del bot.
+
+## Tarea: ${modo.titulo}
+
+${modo.guia}
 
 ## Reglas
 
-1. Cada operación tiene un "tipo", sus "datos_json" (un objeto JSON escrito como texto) y una "explicacion" corta.
-2. Si un pedido nombra una caja o una opción que no existe en el borrador, no inventes: pregúntalo en "dudas".
-3. Los textos para los ciudadanos van en español de ${paisDe(c)}, ${c.trato === 'tu' ? 'tuteando' : 'de usted'}, sin emojis, cortos y sin datos que no estén en el material.
-4. Si algo no se puede hacer, dilo en "explicacion" y no propongas operaciones.
+1. Cada operación tiene un "tipo", sus "datos_json" (el objeto JSON de la operación, escrito como texto) y una "explicacion" corta para el equipo.
+2. Para nombrar una caja puedes usar su id (n_…) o su dirección ("2.4"); para una opción, la dirección con la letra ("2.4 › B").
+3. Si el pedido nombra una caja, una opción o una intención que no existe, no inventes: pregúntalo en "dudas" y no propongas esa operación.
+4. Las operaciones se aplican en orden: una puede usar lo que creó una anterior con el id que le pusiste.
+5. Una opción o una salida solo lleva a una caja de su mismo flujo; para ir a otro flujo se usa una caja ir_a_flujo.
+6. Los textos para los ciudadanos van en español de ${paisDe(c)}, ${c.trato === 'tu' ? 'tuteando' : 'de usted'}, sin emojis, cortos y sin datos que no estén en el material o en el borrador. Los botones tienen hasta 20 letras; las opciones de una lista, hasta 24.
+7. Nunca prometas en nombre del candidato lo que el material no dice. En trámites electorales (padrón, dónde votar, documentos), el bot deriva al organismo electoral.
+8. Si algo no se puede hacer, dilo en "explicacion" y no propongas operaciones.
+
+## Operaciones que podés proponer
+
+${catalogo}
+
+${AYUDA_CAJAS}
 
 Responde solo con un objeto JSON: {"operaciones": [{"tipo": "…", "datos_json": "{…}", "explicacion": "…"}], "explicacion": "…", "dudas": ["…"]}${material}`;
-  const borrador = JSON.stringify(e.borrador ?? {}, null, 2);
-  return { sistema, usuario: `BORRADOR DEL BOT:\n${borrador}\n\nPEDIDO DEL EQUIPO:\n${e.pedido}` };
+  const avisos = e.avisos?.length ? `\n\nLO QUE MARCA EL VALIDADOR:\n${e.avisos.map((a) => `- ${a}`).join('\n')}` : '';
+  return { sistema, usuario: `BORRADOR DEL BOT:\n${e.borrador}${avisos}\n\nPEDIDO DEL EQUIPO:\n${e.pedido}` };
 }

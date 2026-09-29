@@ -12,6 +12,10 @@ import type { ContextoNucleo } from './ejecutar-bots';
 import { ejecutarCambio } from './ejecutar-borrador';
 import { ejecutarAvanzarCorrida, ejecutarCancelarCorrida, ejecutarIniciarCorrida } from './ejecutar-corridas';
 import { ejecutarAprobarPublicacion, ejecutarDevolverPublicacion, ejecutarPedirPublicacion } from './ejecutar-publicacion';
+import { ejecutarTurnoSimulador } from './ejecutar-simulador';
+import type { ContextoPantalla } from '../ui/contexto';
+import { vistaPublicacion } from '../vistas/publicacion';
+import { vistaSimulador } from '../vistas/simulador';
 
 const CAMPANA = 'c-pa-2029';
 let repo: RepositorioDemo;
@@ -149,5 +153,52 @@ describe('publicación', () => {
       'cambiado intención Agenda: ahora va a 2.2',
     ]));
     expect(diferencias(null, r.definicion).filter((x) => x.parte === 'caja').every((x) => x.tipo === 'agregado')).toBe(true);
+  });
+
+  it('la pantalla de Publicación: requisitos, pedido con cambios y corrida, historial', async () => {
+    const pantalla = (p: string, parametros: Record<string, string> = {}): ContextoPantalla => {
+      const n = nucleoMemoria();
+      const x = n.personas.find((y) => y.id === p)!;
+      return {
+        persona: { id: x.id, nombre: x.nombre, iniciales: x.iniciales }, organizacion: { slug: 'otro-camino', nombre: 'Movimiento Otro Camino', demo: false },
+        campana: { id: CAMPANA, organizacionId: 'org-moca', slug: 'pa-2029', nombre: 'Generales 2029', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
+        rol: rolEfectivo(n, p, CAMPANA)!, base: '/otro-camino/pa-2029/bots', plataforma: { inicio: '/otro-camino/pa-2029', configuracion: null }, nucleo: n, parametros,
+      };
+    };
+    let v = (await vistaPublicacion(repo, pantalla('p-lucia'), 'bot-demo-1'))!;
+    expect(v.publicada).toBeNull();
+    expect(v.borrador!.requisitos.map((r) => r.ok)).toEqual([true, false, true]);
+    expect(v.borrador!.puedePedir).toBe(false);
+    await correrTodo('p-lucia', 'bot-demo-1');
+    v = (await vistaPublicacion(repo, pantalla('p-lucia'), 'bot-demo-1'))!;
+    expect(v.borrador!.listo && v.borrador!.puedePedir).toBe(true);
+    expect((await vistaPublicacion(repo, pantalla('p-equipo'), 'bot-demo-1'))!.borrador!.puedePedir).toBe(false);
+    await ejecutarPedirPublicacion(como('p-lucia'), { botId: 'bot-demo-1', seq: 0, nota: 'Primera versión' });
+    v = (await vistaPublicacion(repo, pantalla('p-joaquin'), 'bot-demo-1'))!;
+    expect(v.borrador).toBeNull();
+    expect(v.pedida).toMatchObject({ numero: 1, nota: 'Primera versión', puedeResolver: true });
+    expect(v.pedida!.pidio).toMatch(/Luc/);
+    expect(v.pedida!.cambios.some((d) => d.tipo === 'agregado' && d.parte === 'caja' && d.donde === '1.2')).toBe(true);
+    expect(v.pedida!.corrida[0]!.etiqueta).toBe('Acierto de intenciones');
+    expect((await vistaPublicacion(repo, pantalla('p-lucia'), 'bot-demo-1'))!.pedida!.puedeResolver).toBe(false);
+    // Mientras se revisa, el borrador nuevo parte de lo pedido.
+    await repo.crearBorrador('bot-demo-1', null, 'p-lucia');
+    const vs = await repo.versiones('bot-demo-1');
+    expect(vs.find((x) => x.numero === 2)!.basadaEn).toBe(vs.find((x) => x.numero === 1)!.id);
+    await ejecutarAprobarPublicacion(como('p-joaquin'), { botId: 'bot-demo-1', versionId: v.pedida!.versionId, nota: 'Bien' });
+    v = (await vistaPublicacion(repo, pantalla('p-lucia'), 'bot-demo-1'))!;
+    expect(v.publicada).toMatchObject({ numero: 1 });
+    expect(v.borrador!.numero).toBe(2);
+    expect(v.borrador!.cambios).toEqual([]);
+    expect(v.eventos.map((e) => `${e.accion} ${e.version}`)).toEqual(['Aprobó y publicó v1', 'Pidió publicar v1']);
+    // El simulador conversa con la versión publicada a pedido.
+    const s = (await vistaSimulador(repo, pantalla('p-lucia', { version: 'publicada' }), 'bot-demo-1'))!;
+    expect(s.simulador).toMatchObject({ version: 'publicada', numero: 1 });
+    expect(s.otra!.texto).toBe('Conversar con el borrador');
+    const capa = new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true });
+    const t = await ejecutarTurnoSimulador(como('p-lucia'), capa, { botId: 'bot-demo-1', sesion: null, entrada: { tipo: 'inicio' }, horario: 'dentro', version: 'publicada' });
+    expect(t.ok && t.numero).toBe(1);
+    const sin = await ejecutarTurnoSimulador(como('p-lucia'), capa, { botId: 'bot-demo-2', sesion: null, entrada: { tipo: 'inicio' }, horario: 'dentro', version: 'publicada' });
+    expect(!sin.ok && sin.codigo).toBe('sin_publicada');
   });
 });

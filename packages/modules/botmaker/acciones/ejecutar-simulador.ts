@@ -10,6 +10,19 @@ import type { CapaMotores } from '../motores/capa';
 import { serviciosDeCapa } from '../motores/servicios';
 import type { ContextoNucleo } from './ejecutar-bots';
 import { leerBorrador } from './ejecutar-borrador';
+import type { Repositorio } from '../datos/repositorio';
+import { validarDefinicion, type Definicion } from '../dominio/definicion';
+import type { Bot } from '../dominio/tipos';
+
+/** La versión publicada con su definición validada (misma forma que leerBorrador para el turno). */
+export async function leerPublicada(repo: Repositorio, bot: Pick<Bot, 'versionPublicadaId'>): Promise<{ borrador: { seq: number; numero: number }; definicion: Definicion } | { codigo: string }> {
+  if (!bot.versionPublicadaId) return { codigo: 'sin_publicada' };
+  const v = await repo.version(bot.versionPublicadaId);
+  if (!v) return { codigo: 'sin_publicada' };
+  const d = validarDefinicion(v.definicion);
+  if (!d.ok) return { codigo: 'borrador_invalido' };
+  return { borrador: { seq: v.seq, numero: v.numero }, definicion: d.definicion };
+}
 
 const esquemaSesion = z.object({
   espera: z.union([
@@ -38,6 +51,8 @@ export interface PedidoTurno {
   horario: 'dentro' | 'fuera';
   /** Variables del contacto fijadas a mano (contacto.nombre…). */
   variables?: Record<string, string>;
+  /** Con qué versión conversar: el borrador (por omisión) o la publicada. */
+  version?: 'borrador' | 'publicada';
 }
 
 export type ResultadoSimulador = ({ ok: true; seq: number; numero: number } & ResultadoTurno) | { ok: false; codigo: string };
@@ -46,7 +61,7 @@ export async function ejecutarTurnoSimulador(c: ContextoNucleo & { campana: { no
   if (!puede(c.rol, 'correr_pruebas')) return { ok: false, codigo: 'sin_permiso' };
   const bot = await c.repo.bot(String(p.botId));
   if (!bot || bot.campanaId !== c.campanaId) return { ok: false, codigo: 'no_existe' };
-  const l = await leerBorrador(c.repo, bot.id);
+  const l = p.version === 'publicada' ? await leerPublicada(c.repo, bot) : await leerBorrador(c.repo, bot.id);
   if ('codigo' in l) return { ok: false, codigo: l.codigo };
   const e = esquemaEntrada.safeParse(p.entrada);
   if (!e.success) return { ok: false, codigo: 'datos' };

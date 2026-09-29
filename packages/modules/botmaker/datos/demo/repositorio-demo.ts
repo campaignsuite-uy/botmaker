@@ -262,8 +262,9 @@ export class RepositorioDemo implements Repositorio {
     if (ya) return ya.id;
     let base: VersionDemo | undefined;
     if (!definicion) {
-      base = this.e.versiones.find((x) => x.id === b.versionPublicadaId)
-        ?? this.e.versiones.filter((x) => x.botId === botId).sort((x, y) => y.numero - x.numero)[0];
+      // Como bots_0005: primero lo pedido para publicar, después lo publicado, después la última.
+      const delBot = this.e.versiones.filter((x) => x.botId === botId).sort((x, y) => y.numero - x.numero);
+      base = delBot.find((x) => x.estado === 'pedida') ?? this.e.versiones.find((x) => x.id === b.versionPublicadaId) ?? delBot[0];
       if (!base) throw new ErrorDatos('sin_version', 'El bot no tiene una versión de la que partir.');
     }
     return this.agregarVersion(b, definicion ?? base!.definicion, base?.id ?? null, por).id;

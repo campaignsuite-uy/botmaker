@@ -644,6 +644,25 @@ async function main() {
     const e3 = await error(() => comoServicio(db, (tx) => tx.query(`update bots.publication_events set note = 'x' where bot_id = $1`, [botP])));
     afirmar(e3 && /permission denied|solo admite agregar/.test(e3), `Se pudo cambiar un evento: ${e3}`);
   });
+  await prueba('con un pedido pendiente, el borrador nuevo parte de lo pedido (no de lo publicado)', async () => {
+    const botQ = await comoPersona(db, P.editor, (tx) => crearConPlantilla(tx, 'Pedido pendiente'));
+    const v1 = (await uno<{ id: string }>(db, `select id from bots.versions where bot_id = $1`, [botQ]))!.id;
+    await correr(P.editor, v1, 90);
+    await comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 0, '')`, [v1]));
+    await comoPersona(db, P.adminCamp, (tx) => tx.query(`select bots.aprobar_publicacion($1, '')`, [v1]));
+    const v2 = (await comoPersona(db, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, null) as id`, [botQ])))!.id;
+    const pedida = { ...plantilla, contenidos: plantilla.contenidos.map((c, i) => (i ? c : { ...c, texto: 'Lo que se pidió publicar.' })) };
+    await comoPersona(db, P.editor, (tx) => guardar(tx, v2, 0, { definicion: pedida }));
+    await correr(P.editor, v2, 90);
+    await comoPersona(db, P.editor, (tx) => tx.query(`select bots.pedir_publicacion($1, 1, '')`, [v2]));
+    const v3 = (await comoPersona(db, P.editor, (tx) => uno<{ id: string }>(tx, `select bots.crear_borrador($1, null) as id`, [botQ])))!.id;
+    const r = await uno<{ based_on_id: string; iguales: boolean }>(db, `select n.based_on_id, n.definition = p.definition as iguales from bots.versions n, bots.versions p where n.id = $1 and p.id = $2`, [v3, v2]);
+    afirmar(r?.based_on_id === v2 && r.iguales, `El borrador nuevo parte de: ${JSON.stringify(r)}`);
+    // Devolver el pedido con otro borrador abierto lo deja como "devuelta" (no puede haber dos borradores).
+    await comoPersona(db, P.adminCamp, (tx) => tx.query(`select bots.devolver_publicacion($1, 'Falta el menú')`, [v2]));
+    const e = await uno<{ status: string }>(db, `select status from bots.versions where id = $1`, [v2]);
+    afirmar(e?.status === 'devuelta', JSON.stringify(e));
+  });
   await prueba('repositorio de Supabase: corridas, resultados y publicación con códigos de error', async () => {
     const r = repoDe(P.editor);
     const b = (await r.borrador(botP))!;

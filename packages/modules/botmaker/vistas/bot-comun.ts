@@ -10,7 +10,7 @@ import type { Bot, EstadoBot } from '../dominio/tipos';
 import { pilasDeshacer, type Borrador } from '../dominio/versiones';
 import { ruta, type ContextoPantalla } from '../ui/contexto';
 
-export type PestanaBot = 'flujos' | 'contenidos' | 'material' | 'intenciones' | 'variables' | 'simulador' | 'yaml' | 'ajustes';
+export type PestanaBot = 'flujos' | 'contenidos' | 'material' | 'intenciones' | 'variables' | 'simulador' | 'pruebas' | 'publicacion' | 'copiloto' | 'yaml' | 'ajustes';
 
 export const PESTANAS_BOT: { id: PestanaBot; texto: string; seccion: string }[] = [
   { id: 'flujos', texto: 'Flujos', seccion: 'flujos' },
@@ -19,6 +19,9 @@ export const PESTANAS_BOT: { id: PestanaBot; texto: string; seccion: string }[] 
   { id: 'intenciones', texto: 'Intenciones y temas', seccion: 'intenciones' },
   { id: 'variables', texto: 'Variables y datos', seccion: 'variables' },
   { id: 'simulador', texto: 'Simulador', seccion: 'simulador' },
+  { id: 'copiloto', texto: 'Copiloto', seccion: 'copiloto' },
+  { id: 'pruebas', texto: 'Pruebas', seccion: 'pruebas' },
+  { id: 'publicacion', texto: 'Publicación', seccion: 'publicacion' },
   { id: 'yaml', texto: 'YAML', seccion: 'yaml' },
   { id: 'ajustes', texto: 'Ajustes', seccion: '' },
 ];

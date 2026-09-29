@@ -24,7 +24,7 @@ export function PantallaFlujos({ v }: { v: VistaEditor }) {
             <form action={crearBorrador} className="pila bots-form">
               <Ocultos campanaId={v.campanaId} volver={v.volver} extra={{ botId: v.armar.botId }} />
               {v.armar.conVersiones ? (
-                <p className="texto-chico">El borrador nuevo copia la versión publicada (o la última).</p>
+                <p className="texto-chico">El borrador nuevo copia la versión pedida para publicar, si hay una; si no, la publicada (o la última).</p>
               ) : (
                 <>
                   <p className="texto-chico">Se arma con la plantilla política: 5 flujos (Inicio, Consultas, Sumarse y aportar, Atención y Datos personales) y 23 intenciones. Después se cambia todo.</p>

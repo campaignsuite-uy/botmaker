@@ -64,6 +64,21 @@ pnpm db:probar      # base en PGlite: migraciones, matriz, fichas, reglas por fi
 pnpm probar         # cada pantalla con cada persona de la demo
 pnpm build
 pnpm probar:celular # todas las pantallas a 360 y 390 px (necesita el build)
+pnpm probar:recorrido # lo que se prueba a mano en la aceptación, en el navegador contra la demo (necesita el build)
 ```
+
+## Copiloto, pruebas y publicación (etapa 4)
+
+- **Copiloto** (`dominio/copiloto.ts`, `acciones/ejecutar-copiloto.ts`): el motor recibe el borrador legible (cada caja
+  con su dirección y su id), el catálogo de operaciones que puede proponer y lo que marca el validador. Lo que devuelve
+  se revisa operación por operación contra el borrador (`revisarPropuesta`: direcciones a ids, validación, se prueba en
+  orden) y la persona marca qué aplicar: un cambio de origen `copiloto` que se deshace entero. Si el borrador cambió
+  desde la propuesta, no se aplica. El motor simulado entiende por reglas unos pocos pedidos, para la demo y las pruebas.
+- **Corridas** (`acciones/ejecutar-corridas.ts`): el navegador pide tandas de 12 casos (3 en paralelo) hasta terminar;
+  si el borrador cambia en el medio, la corrida se cancela. Sin juez en la app: el juez está en `pnpm motores:responder`.
+- **Publicación** (`acciones/ejecutar-publicacion.ts`, `bots.pedir_publicacion` y compañía): pedir exige una corrida
+  terminada sobre el último cambio, no bajar 2 puntos de acierto contra la publicada y ningún error del validador.
+  Aprobar y devolver son del administrador; devolver pide comentario. Con un pedido pendiente, el borrador nuevo parte
+  de lo pedido (`bots_0005`).
 
 GitHub las corre en cada push, sin claves.

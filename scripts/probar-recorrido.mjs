@@ -1,11 +1,14 @@
 /**
  * Prueba de recorrido en el navegador: lo que Joaquín prueba a mano en las pruebas de aceptación, hecho por Playwright
- * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2 y 3 (y la 4 cuando esté).
+ * contra la demo en memoria (sin cuentas ni claves). Cierra las etapas 2, 3 y 4.
  *
  *  Etapa 2: crear un bot con la plantilla, agregar y conectar una caja en el editor, editarla y deshacer, recorrerlo en
  *           el simulador con botones y texto, exportar e importar el YAML; el lector ve todo sin poder tocar.
  *  Etapa 3: cargar material, contestar con base citando secciones, derivar un trámite electoral y el corte del
  *           validador de datos a la vista en el simulador.
+ *  Etapa 4: el copiloto propone y aplica un cambio por dirección (y se deshace), correr las pruebas con los motores del
+ *           bot y con otros, comparar las dos corridas, pedir publicar, devolver sin comentario (no), aprobar, conversar
+ *           con la versión publicada y armar el borrador siguiente.
  *
  * Necesita el build (pnpm build). Levanta `next start` en un puerto propio y lo apaga al terminar.
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
@@ -160,6 +163,75 @@ try {
   await bot2.goto(`${CAMPANA}/bot-demo-2/material`);
   prueba('el bot de la demo trae el material de la prueba en 27 secciones', (await bot2.locator('.caja__titulo').first().textContent()).includes('27 secciones'));
   prueba('etapa 3 sin errores en la página', !ed.errores.length && !bot2.errores.length, [...ed.errores, ...bot2.errores].join(' · '));
+
+  // ── Etapa 4 ─────────────────────────────────────────────────────────────────────────────────
+  console.log('\nEtapa 4: copiloto, pruebas y publicación\n');
+  await ed.goto(`${CAMPANA}/nuevo`);
+  await ed.fill('#nb-nombre', 'Bot de la etapa 4');
+  await ed.fill('#nb-candidato', 'Candidata de prueba');
+  await ed.click('button:has-text("Crear bot")');
+  await ed.waitForURL(/\/flujos\?ok=bot_creado/);
+  const bot4 = ed.url().split('/flujos')[0];
+
+  await ed.goto(`${bot4}/copiloto`);
+  await ed.fill('#copiloto-pedido', 'En 1.2 agregá la opción de voluntariado');
+  await ed.click('button:has-text("Pedir al copiloto")');
+  await ed.waitForSelector('.bots-copiloto');
+  const propuesta = await ed.locator('.bots-copiloto').textContent();
+  prueba('copiloto: "en 1.2 agregá la opción de voluntariado" propone la operación con su dirección', propuesta.includes('Agregó la opción 1.2 › F'), propuesta.slice(0, 200));
+  await ed.click('button:has-text("Aplicar las 1 marcadas")');
+  await ed.waitForURL(/ok=copiloto_aplicado/);
+  prueba('copiloto: lo aplicado queda en su historial y en la barra de deshacer', (await ed.locator('.bots-diferencias').first().textContent()).includes('Agregó la opción 1.2 › F')
+    && (await ed.locator('.bots-barra-borrador').textContent()).includes('Agregó la opción 1.2 › F'));
+  await ed.click('.bots-barra-borrador button:has-text("Deshacer")');
+  await ed.waitForURL(/ok=deshecho/);
+  prueba('copiloto: lo aplicado se deshace como cualquier cambio', (await ed.locator('.bots-barra-borrador').textContent()).includes('Se puede rehacer: Agregó la opción 1.2 › F'));
+
+  await ed.goto(`${bot4}/pruebas`);
+  await ed.click('button:has-text("Correr las pruebas (46 casos)")');
+  await ed.waitForSelector('a:has-text("Ver el resultado")', { timeout: 60000 });
+  prueba('pruebas: corren los 46 casos en tandas con el avance a la vista', (await ed.locator('[role=status]').first().textContent()).includes('Terminó: 46 de 46'));
+  const primera = await ed.getAttribute('a:has-text("Ver el resultado")', 'href');
+  await ed.check('input[name=modo] >> nth=1');
+  await ed.selectOption('select[aria-label="Interpretar: principal"]', { index: 1 });
+  await ed.click('button:has-text("Correr las pruebas (46 casos)")');
+  await ed.waitForFunction((h) => { const a = [...document.querySelectorAll('a')].find((x) => x.textContent === 'Ver el resultado'); return a && a.getAttribute('href') !== h; }, primera, { timeout: 60000 });
+  await ed.goto(`${bot4}/pruebas`);
+  const marcas = ed.locator('input[name=corrida]');
+  prueba('pruebas: las dos corridas en la tabla, con sus motores', await marcas.count() === 2);
+  await marcas.nth(0).check();
+  await marcas.nth(1).check();
+  await ed.click('button:has-text("Comparar las dos marcadas")');
+  await ed.waitForURL(/comparar\?a=/);
+  const cmp = await ed.textContent('main');
+  prueba('pruebas: comparar dos corridas con motores distintos, caso por caso', cmp.includes('Comparar dos corridas') && cmp.includes('46 casos en común') && cmp.includes('Acierto de intenciones'), cmp.slice(0, 200));
+
+  await ed.goto(`${bot4}/publicacion`);
+  prueba('publicación: el borrador cumple los requisitos', (await ed.locator('.bots-requisitos').textContent()).split('✗').length === 1);
+  await ed.fill('#pub-pedido', 'Primera versión del bot de la etapa 4');
+  await ed.click('button:has-text("Pedir publicar")');
+  await ed.waitForURL(/ok=publicacion_pedida/);
+  const pedido = await ed.textContent('main');
+  prueba('publicación: la editora pide publicar y no puede aprobar', pedido.includes('Pedido de publicación: versión 1') && pedido.includes('Primera versión del bot de la etapa 4') && !pedido.includes('Aprobar y publicar'));
+  await bot2.goto(`${bot4}/publicacion`);
+  prueba('publicación: el administrador ve qué cambia, con direcciones', (await bot2.textContent('main')).includes('Qué cambia contra lo publicado') && await bot2.locator('.bots-diferencias li:has-text("1.2")').count() > 0);
+  await bot2.click('button:has-text("Devolver con el comentario")');
+  await bot2.waitForURL(/error=falta_comentario/);
+  prueba('publicación: devolver sin comentario no se puede', true);
+  await bot2.fill('#pub-nota', 'Aprobado en la prueba de recorrido');
+  await bot2.click('button:has-text("Aprobar y publicar")');
+  await bot2.waitForURL(/ok=publicacion_aprobada/);
+  const aprobado = await bot2.textContent('main');
+  prueba('publicación: el administrador aprueba y queda en el historial', aprobado.includes('Versión 1: es la que conversa') && aprobado.includes('Aprobó y publicó') && aprobado.includes('Pidió publicar'));
+  await bot2.goto(`${bot4}/simulador?version=publicada`);
+  await bot2.waitForSelector('.sim-boton');
+  prueba('el simulador conversa con la versión publicada', (await bot2.textContent('main')).includes('Versión publicada v1'));
+  await ed.goto(`${bot4}/flujos`);
+  await ed.click('button:has-text("Armar el borrador")');
+  await ed.waitForURL(/ok=borrador_creado/);
+  await ed.waitForSelector('.react-flow__node');
+  prueba('después de publicar, el borrador nuevo (v2) parte de lo publicado', (await ed.textContent('main')).includes('Borrador v2'));
+  prueba('etapa 4 sin errores en la página', !ed.errores.length && !bot2.errores.length, [...ed.errores, ...bot2.errores].join(' · '));
 } catch (e) {
   prueba('el recorrido termina sin errores', false, e.stack ?? String(e));
 } finally {

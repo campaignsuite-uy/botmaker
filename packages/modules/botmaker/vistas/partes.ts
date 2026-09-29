@@ -33,7 +33,7 @@ export interface BaseParte {
   sinBorrador: { hrefFlujos: string } | null;
 }
 
-async function base(repo: Repositorio, ctx: ContextoPantalla, botId: string, pestana: PestanaBot): Promise<{ b: BotConBorrador; comun: BaseParte } | null> {
+export async function baseParte(repo: Repositorio, ctx: ContextoPantalla, botId: string, pestana: PestanaBot): Promise<{ b: BotConBorrador; comun: BaseParte } | null> {
   const b = await cargarBot(repo, ctx, botId);
   if (!b) return null;
   const seccion = pestana === 'ajustes' ? '' : pestana;
@@ -93,7 +93,7 @@ const CLAVES_SISTEMA: Record<keyof Definicion['sistema'], string> = {
 };
 
 export async function vistaContenidos(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaContenidos | null> {
-  const x = await base(repo, ctx, botId, 'contenidos');
+  const x = await baseParte(repo, ctx, botId, 'contenidos');
   if (!x) return null;
   const def = x.b.definicion;
   const contenidos: FilaContenido[] = (def?.contenidos ?? []).map((c) => {
@@ -141,7 +141,7 @@ export interface VistaIntenciones extends BaseParte {
 }
 
 export async function vistaIntenciones(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaIntenciones | null> {
-  const x = await base(repo, ctx, botId, 'intenciones');
+  const x = await baseParte(repo, ctx, botId, 'intenciones');
   if (!x) return null;
   const def = x.b.definicion;
   if (!def) return { ...x.comun, intenciones: [], temas: [], destinos: [], opcionesTema: [] };
@@ -180,7 +180,7 @@ export interface VistaVariables extends BaseParte {
 }
 
 export async function vistaVariables(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaVariables | null> {
-  const x = await base(repo, ctx, botId, 'variables');
+  const x = await baseParte(repo, ctx, botId, 'variables');
   if (!x) return null;
   const def = x.b.definicion;
   const vacia = { candidato: '', candidatoAlias: '', partido: '', partidoAlias: '' };
@@ -223,7 +223,7 @@ export interface VistaYaml extends BaseParte {
 }
 
 export async function vistaYaml(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaYaml | null> {
-  const x = await base(repo, ctx, botId, 'yaml');
+  const x = await baseParte(repo, ctx, botId, 'yaml');
   if (!x) return null;
   const { bot, borrador, definicion } = x.b;
   const yaml = borrador && definicion ? yamlDelBorrador(bot, borrador, definicion) : '';
@@ -247,7 +247,7 @@ export interface VistaMaterial extends BaseParte {
 }
 
 export async function vistaMaterial(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaMaterial | null> {
-  const x = await base(repo, ctx, botId, 'material');
+  const x = await baseParte(repo, ctx, botId, 'material');
   if (!x) return null;
   const def = x.b.definicion;
   const secciones = def?.material ?? [];

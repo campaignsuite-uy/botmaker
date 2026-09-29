@@ -128,6 +128,13 @@ export function operacionesDeForma(fd: FormData, def: Definicion): ResultadoForm
       };
     case 'seccion_quitar':
       return { ops: [{ tipo: 'quitar_seccion', seccion: texto(fd, 'seccion') }] };
+    case 'casos_cargar': {
+      const t = String(fd.get('texto') ?? '');
+      if (!t.trim()) return { codigo: 'casos_invalidos' };
+      return { ops: [{ tipo: 'cargar_casos', texto: t, reemplazar: texto(fd, 'reemplazar') === 'si' }] };
+    }
+    case 'caso_quitar':
+      return { ops: [{ tipo: 'quitar_caso', caso: texto(fd, 'caso') }] };
     case 'contacto':
       return { ops: [{ tipo: 'editar_contacto', consultas: canal(fd, 'consultas'), aportes: canal(fd, 'aportes') }] };
     case 'sistema': {

@@ -10,7 +10,7 @@ export function PantallaSimulador({ v }: { v: VistaSimulador }) {
     <>
       <EncabezadoBot e={v.encabezado} bajada="Conversar con el borrador mientras se arma, con los mismos motores que producción. Debajo de cada respuesta, por qué salió." />
       {v.simulador ? (
-        <Caja titulo={`Borrador v${v.simulador.numero}`} nota="la versión publicada se prueba acá cuando exista (etapa 4)">
+        <Caja titulo={v.simulador.version === 'publicada' ? `Versión publicada v${v.simulador.numero}` : `Borrador v${v.simulador.numero}`} nota={v.simulador.version === 'publicada' ? 'la que conversa en los canales' : undefined} accion={v.otra ?? undefined}>
           <ChatSimulador s={v.simulador} />
         </Caja>
       ) : (

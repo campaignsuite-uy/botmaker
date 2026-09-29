@@ -126,7 +126,7 @@ export async function ejecutarDeshacer(c: ContextoNucleo, e: { botId: string; se
 }
 
 /**
- * Arma el borrador de un bot que no tiene: copia la versión publicada (o la última) o, si el bot no tiene ninguna
+ * Arma el borrador de un bot que no tiene: copia (en este orden) la versión pedida, la publicada o la última; si el bot no tiene ninguna
  * (los creados antes de las versiones), lo arma con la plantilla política y el candidato del formulario.
  */
 export async function ejecutarCrearBorrador(c: ContextoNucleo, e: { botId: string; candidato: string; partido: string }): Promise<Salida> {

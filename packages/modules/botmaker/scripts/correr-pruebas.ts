@@ -25,6 +25,16 @@ import { PantallaContenidos, PantallaIntenciones, PantallaMaterial, PantallaVari
 import { vistaContenidos, vistaIntenciones, vistaMaterial, vistaVariables, vistaYaml } from '../vistas/partes';
 import { PantallaSimulador } from '../ui/simulador';
 import { vistaSimulador } from '../vistas/simulador';
+import { PantallaComparar, PantallaCorrida, PantallaPruebas } from '../ui/pruebas';
+import { vistaComparar, vistaCorrida, vistaPruebas } from '../vistas/pruebas';
+import { PantallaPublicacion } from '../ui/publicacion';
+import { vistaPublicacion } from '../vistas/publicacion';
+import { PantallaCopiloto } from '../ui/copiloto';
+import { vistaCopiloto } from '../vistas/copiloto';
+import { CapaMotores } from '../motores/capa';
+import { AdaptadorSimulado } from '../motores/simulado';
+import { ejecutarAvanzarCorrida, ejecutarIniciarCorrida } from '../acciones/ejecutar-corridas';
+import { ejecutarPedirPublicacion } from '../acciones/ejecutar-publicacion';
 import { vistaBot } from '../vistas/bot';
 import { vistaBots } from '../vistas/bots';
 import { vistaCostos } from '../vistas/costos';
@@ -125,6 +135,26 @@ async function main() {
 
       const simulador = html(createElement(PantallaSimulador, { v: (await vistaSimulador(repo, c, 'bot-demo-1'))! }));
       prueba(`simulador: ${e.datos ? 'el chat' : 'no lo usa (tiene costo)'}`, tiene(simulador, 'sim-controles') === e.datos && tiene(simulador, 'lo usan el editor y el administrador') === !e.datos);
+
+      // Etapa 4: una corrida terminada (la corre la editora, así hay qué ver con cualquier persona), comparar y publicar.
+      const lucia = { repo, rol: rolEfectivo(nucleoMemoria(), 'p-lucia', 'c-pa-2029'), personaId: 'p-lucia', campanaId: 'c-pa-2029', campana: { nombre: 'Generales 2029' } };
+      const capa = () => new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true });
+      const i = await ejecutarIniciarCorrida(lucia, { botId: 'bot-demo-1' });
+      for (let k = 0; k < 50 && i.corridaId; k++) if ((await ejecutarAvanzarCorrida(lucia, capa, { corridaId: i.corridaId })).terminada) break;
+      const pruebas = html(createElement(PantallaPruebas, { v: (await vistaPruebas(repo, c, 'bot-demo-1'))! }));
+      prueba(`pruebas: casos y corridas; ${e.datos ? 'corre y carga casos' : 'solo mirar'}`, tiene(pruebas, 'Casos de prueba (46)') && tiene(pruebas, 'Comparar las dos marcadas') && tiene(pruebas, 'Cargar casos</button>') === e.datos && tiene(pruebas, 'las corren el editor y el administrador') === !e.datos);
+      prueba(`pruebas: el costo ${e.costos ? 'a la vista' : 'oculto'}`, tiene(pruebas, '<th>Costo</th>') === e.costos);
+      const corrida = html(createElement(PantallaCorrida, { v: (await vistaCorrida(repo, c, 'bot-demo-1', i.corridaId!))! }));
+      prueba('pruebas: una corrida con su resumen y cada caso', tiene(corrida, 'Acierto de intenciones') && tiene(corrida, 'Ver solo los que fallaron') && tiene(corrida, 'c001'));
+      const comparar = html(createElement(PantallaComparar, { v: (await vistaComparar(repo, { ...c, parametros: { a: i.corridaId!, b: i.corridaId! } }, 'bot-demo-1'))! }));
+      prueba('pruebas: comparar dos corridas', tiene(comparar, 'Comparar dos corridas') && tiene(comparar, 'Mejoran en B (0)') && tiene(comparar, '46 casos en común'));
+      let publicacion = html(createElement(PantallaPublicacion, { v: (await vistaPublicacion(repo, c, 'bot-demo-1'))! }));
+      prueba(`publicación: requisitos; ${e.datos ? 'pide publicar' : 'no pide'}`, tiene(publicacion, 'Las pruebas corrieron sobre el último cambio') && tiene(publicacion, 'Pedir publicar</button>') === e.datos);
+      await ejecutarPedirPublicacion(lucia, { botId: 'bot-demo-1', seq: 0, nota: 'Primera versión' });
+      publicacion = html(createElement(PantallaPublicacion, { v: (await vistaPublicacion(repo, c, 'bot-demo-1'))! }));
+      prueba(`publicación: el pedido con sus cambios; ${e.motores ? 'aprueba o devuelve' : 'no aprueba'}`, tiene(publicacion, 'Pedido de publicación: versión 1') && tiene(publicacion, 'Qué cambia contra lo publicado') && tiene(publicacion, 'Aprobar y publicar</button>') === e.motores);
+      const copiloto = html(createElement(PantallaCopiloto, { v: (await vistaCopiloto(repo, c, 'bot-demo-2'))! }));
+      prueba(`copiloto: ${e.datos ? 'el panel para pedir' : 'solo lectura'}`, tiene(copiloto, 'Pedirle al copiloto') && tiene(copiloto, 'Pedir al copiloto</button>') === e.datos && tiene(copiloto, 'lo usan el editor y el administrador') === !e.datos);
 
       const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));

@@ -32,6 +32,6 @@ export const ENTRADA_PRUEBA: { [F in FuncionMotor]: EntradaDe[F] } = {
   },
   copiloto: {
     pedido: 'Proponé un mensaje de bienvenida corto para el bot.',
-    borrador: { flujos: [] },
+    borrador: '## Flujo 1 [f_inicio] Inicio (empieza en 1.1 [n_bienvenida])\n1.1 [n_bienvenida] Mensaje · Bienvenida: c_bienvenida «Hola.» → fin',
   },
 };
