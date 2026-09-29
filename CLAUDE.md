@@ -9,6 +9,8 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 - Resultado de la prueba de motores: https://claude.ai/code/artifact/12653699-1f3d-4a3c-8985-6ea5b9aa281d
 - Pruebas de aceptación de las etapas 2 a 8: https://claude.ai/code/artifact/eb2284e1-de5d-41af-be0b-1c99d8c072f2
 - Manual para el equipo de campaña (8.06): https://claude.ai/code/artifact/22ed80b7-30a4-4800-8239-bb44794a2fea
+- Lista guiada para poner en marcha las cuentas (Supabase, Google, Vercel y el resto):
+  https://claude.ai/code/artifact/baf3585d-8ffd-4a10-834f-c24ac9e2e473
 - Guía de desarrollo: `docs/guia-desarrollo.md`. Puesta en marcha: `docs/puesta-en-marcha.md`.
 - Hoja de ruta de las etapas 7 y 8 hasta Supabase (dónde quedó y qué sigue): `docs/plan-etapas-7-y-8.md`.
 
