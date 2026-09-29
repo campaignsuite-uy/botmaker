@@ -15,17 +15,19 @@ import {
 } from '../../dominio/versiones';
 import type { Corrida, ResultadoCaso, ResumenCorrida } from '../../dominio/corridas';
 import { FICHAS_MOTORES, MOTORES_POR_DEFECTO, fichaMotor, type FichaMotor } from '../../dominio/motores';
-import { exigir, type Accion } from '../../dominio/permisos';
+import { exigir, puede, type Accion } from '../../dominio/permisos';
 import type {
   Bot, CambiosBot, EleccionMotores, FuncionMotor, GastoDia, LlamadaMotor, MotorFuncion, NuevaLlamada, NuevoBot, RolEfectivo, RolModulo, Topes, UsoMotor,
 } from '../../dominio/tipos';
 import { PRODUCTO } from '../../dominio/tipos';
 import { ErrorDatos } from '../errores';
 import type {
-  BotPublico, CanalWeb, CanalWhatsapp, CanalWhatsappPublico, ConexionWhatsapp, ConversacionCompleta, EntradaWebhook, EnvioPendiente, ExportacionContacto,
-  FilaContacto, FilaConversacion, FiltroConversaciones, FiltroLlamadas, FilaMuestra, PlantillaEnviada, PlantillaGuardada, Repositorio, RepositorioPublico,
-  RepositorioTareas, RepositorioWhatsapp, ResultadoEnvio, SaludCanal, TurnoDevuelto, TurnoGuardado,
+  BotPublico, CanalWeb, CanalWhatsapp, CanalWhatsappPublico, ConexionWhatsapp, ConversacionCompleta, EntradaWebhook, EnvioPendiente, ExportacionBase,
+  ExportacionContacto, FichaContacto, FilaBaseContacto, FilaContacto, FilaConversacion, FiltroContactos, FiltroConversaciones, FiltroLlamadas, FilaMuestra,
+  PaginaContactos, PlantillaEnviada, PlantillaGuardada, Repositorio, RepositorioPublico, RepositorioTareas, RepositorioWhatsapp, ResultadoEnvio, SaludCanal,
+  TurnoDevuelto, TurnoGuardado,
 } from '../repositorio';
+import { claveConsulta, consultasDeEventos } from '../../dominio/contactos';
 import {
   estadoSiguiente, mensajePlantilla, ventanaAbierta, type EstadoCanal, type EstadoEnvio, type MensajeWhatsapp, type Plantilla,
 } from '../../dominio/whatsapp';
@@ -61,6 +63,7 @@ interface EstadoDemo {
   alertas: Alerta[];
   revisiones: Map<string, { veredicto: 'correcta' | 'incorrecta'; convertida: boolean; por: string; fecha: string }>;
   pedidos: PedidoDatos[];
+  exportaciones: ExportacionBase[];
   siguienteId: number;
   // Etapa 7: WhatsApp.
   wa: {
@@ -164,11 +167,12 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       contactos: c?.contactos ?? [],
       conversaciones: c?.conversaciones ?? [],
       mensajes: c?.mensajes ?? new Map(),
-      analitica: [],
+      analitica: c?.analitica ?? [],
       conteos: new Map(),
       alertas: [],
       revisiones: new Map(),
       pedidos: [],
+      exportaciones: [],
       siguienteId: 100,
       wa: {
         canales: c ? [{
@@ -974,6 +978,68 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
 
   async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {
     return this.e.pedidos.filter((p) => p.campanaId === campanaId).reverse().sort((a, b) => b.hechoEn.localeCompare(a.hechoEn)).map((p) => ({ ...p }));
+  }
+
+  // ── Base de contactos (7.06) ──────────────────────────────────────────────────────────────────
+
+  /** Una fila de la base: el número solo para quien atiende (como json_contacto en la base). */
+  private filaBase(ct: Contacto, verNumero: boolean): FilaBaseContacto {
+    const cs = this.e.conversaciones.filter((c) => c.contactoId === ct.id);
+    const ids = new Set(cs.map((c) => c.id));
+    // De un contacto borrado a pedido no se muestra lo que consultó (los eventos quedan, sin nada que los una a la persona).
+    const consultas = ct.borradoEn ? [] : consultasDeEventos(this.e.analitica.filter((a) => ids.has(a.conversacionId)).map((a) => ({ nombre: a.nombre, cajaId: a.cajaId, datos: a.datos, fecha: a.fecha })));
+    const contacto = structuredClone(ct);
+    if (!verNumero) contacto.telefono = null;
+    return {
+      contacto, conversaciones: cs.length, consultas,
+      primera: cs.map((c) => c.iniciadaEn).sort().at(0) ?? null,
+      ultima: cs.map((c) => c.actualizadaEn).sort().at(-1) ?? null,
+    };
+  }
+
+  private filtrarBase(campanaId: string, f: Omit<FiltroContactos, 'limite' | 'desde'>, verNumero: boolean): FilaBaseContacto[] {
+    const q = (f.buscar ?? '').trim().toLowerCase();
+    const digitos = q.replace(/\D/g, '');
+    const consulta = f.consulta ? claveConsulta(f.consulta) : null;
+    return this.e.contactos
+      .filter((ct) => ct.campanaId === campanaId && !ct.borradoEn && (!f.botId || ct.botId === f.botId) && (!f.canal || ct.canal === f.canal))
+      .filter((ct) => !q || [ct.nombre ?? '', ct.nombrePerfil ?? '', ...Object.values(ct.datos)].some((x) => x.toLowerCase().includes(q))
+        || (verNumero && digitos.length >= 4 && (ct.telefono ?? '').includes(digitos)))
+      .map((ct) => this.filaBase(ct, verNumero))
+      .filter((x) => !consulta || x.consultas.some((c) => claveConsulta(c) === consulta))
+      .sort((a, b) => (b.ultima ?? '').localeCompare(a.ultima ?? '') || a.contacto.id.localeCompare(b.contacto.id));
+  }
+
+  async baseContactos(campanaId: string, filtro: FiltroContactos, por: string): Promise<PaginaContactos> {
+    this.exigir(campanaId, por, 'leer_conversaciones');
+    const todas = this.filtrarBase(campanaId, filtro, puede(this.rol(campanaId, por), 'responder_conversaciones'));
+    const desde = Math.max(0, Math.floor(filtro.desde ?? 0));
+    const limite = Math.min(200, Math.max(1, Math.floor(filtro.limite ?? 50)));
+    return { total: todas.length, filas: todas.slice(desde, desde + limite) };
+  }
+
+  async fichaContacto(contactoId: string, por: string): Promise<FichaContacto | null> {
+    const ct = this.e.contactos.find((x) => x.id === contactoId);
+    if (!ct || !puede(this.rol(ct.campanaId, por), 'leer_conversaciones')) return null;
+    const fila = this.filaBase(ct, puede(this.rol(ct.campanaId, por), 'responder_conversaciones'));
+    const lista = this.e.conversaciones.filter((c) => c.contactoId === ct.id).sort((a, b) => b.iniciadaEn.localeCompare(a.iniciadaEn))
+      .map((c) => ({ id: c.id, estado: c.estado, canal: c.canal, iniciadaEn: c.iniciadaEn, actualizadaEn: c.actualizadaEn, mensajes: c.seq, asignadaA: c.asignadaA }));
+    return { ...fila, lista };
+  }
+
+  async exportarBaseContactos(campanaId: string, filtro: Omit<FiltroContactos, 'limite' | 'desde'>, por: string): Promise<FilaBaseContacto[]> {
+    this.exigir(campanaId, por, 'gestionar_datos_contactos');
+    const filas = this.filtrarBase(campanaId, filtro, true);
+    this.e.exportaciones.push({
+      id: this.nuevoId('ex'), campanaId, botId: filtro.botId ?? null, canal: filtro.canal ?? null, consulta: filtro.consulta ? claveConsulta(filtro.consulta) : null,
+      conBusqueda: !!filtro.buscar?.trim(), cantidad: filas.length, hechoPor: por, hechoEn: new Date().toISOString(),
+    });
+    return filas;
+  }
+
+  async exportacionesBase(campanaId: string, por: string): Promise<ExportacionBase[]> {
+    this.exigir(campanaId, por, 'gestionar_datos_contactos');
+    return this.e.exportaciones.filter((x) => x.campanaId === campanaId).slice().reverse().map((x) => ({ ...x }));
   }
 
   async borrarVencidos(ahora: Date): Promise<number> {

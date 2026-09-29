@@ -33,6 +33,7 @@ import { enviarPendientes, recibirWebhook, sincronizarPlantillas, type EntornoWh
 import { Simulador360 } from '../../modules/botmaker/canal-whatsapp/simulado.ts';
 import { sha256 } from '../../modules/botmaker/canal-whatsapp/webhook.ts';
 import { leerPlantilla } from '../../modules/botmaker/dominio/whatsapp.ts';
+import { consultasDeEventos, type ConsultaContacto } from '../../modules/botmaker/dominio/contactos.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -1050,6 +1051,122 @@ async function main() {
     await repoDe(P.adminCamp).borrarContacto(c.id, 'Lo pidió', P.adminCamp);
     const d = await uno<{ phone: string | null; profile_name: string | null }>(db, `select phone, profile_name from bots.contacts where id = $1`, [c.id]);
     afirmar(d && d.phone === null && d.profile_name === null, JSON.stringify(d));
+  });
+
+  console.log('\nBase de contactos (bots_0009)');
+  const turnoCon = (texto: string, idCanal: string, ahora: string, eventos: { nombre: string; cajaId: string | null; datos: Record<string, unknown> }[], datosContacto: Record<string, string> = {}) => ({
+    entrante: { tipo: 'texto' as const, texto, datos: null, idCanal }, salientes: [{ autor: 'bot' as const, texto: 'Respuesta', cajaId: 'n_consulta', datos: null }],
+    decision: { recorrido: ['n_consulta'], costoUsd: 0 }, sesion: { espera: null, variables: datosContacto, estado: 'bot' as const, turnos: [], iniciada: true },
+    estado: 'bot' as const, cajaActual: 'n_consulta', versionId: null, eventos: eventos as never, derivacion: null, datosContacto, muestra: false, ahora,
+  });
+  const TEL_BASE = '50769990001';
+  let ctLucia = '';
+  let ctWa = '';
+  await prueba('lo que consultó: el SQL da lo mismo que el código sobre los mismos eventos', async () => {
+    const a = await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: true, ahora: new Date('2026-10-02T10:00:00Z') });
+    ctLucia = a.contacto.id;
+    await pub.guardarTurno(a.conversacion.id, 0, turnoCon('Hola', 'b-1', '2026-10-02T10:00:00Z', [
+      { nombre: 'interpretado', cajaId: 'n_interpretar', datos: { intencion: 'propuesta', tema: 'agua' } },
+      { nombre: 'interpretado', cajaId: 'n_interpretar', datos: { intencion: 'cortesia', tema: 'ninguno' } },
+      { nombre: 'opcion_elegida', cajaId: 'n_menu', datos: { letra: 'A' } },
+    ], { 'contacto.nombre': 'Lucía Pérez', 'contacto.zona': 'Chilibre' }));
+    // Casos de borde, directo en la tabla: valores que no son texto, vacíos, sin caja, empates de cantidad y de hora.
+    const sesion2 = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: false, ahora: new Date('2026-10-02T11:00:00Z') })).conversacion.id;
+    const ev = (sesionId: string, nombre: string, caja: string | null, datos: unknown, hora: string) =>
+      db.query(`insert into bots.events (campaign_id, bot_id, channel_kind, session_id, name, box_id, data, occurred_at) values ($1, $2, 'web', $3, $4, $5, $6::jsonb, $7)`, [CAMP_A, botP, sesionId, nombre, caja, JSON.stringify(datos), hora]);
+    const s1 = a.conversacion.id;
+    await ev(s1, 'interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'transporte' }, '2026-10-02T10:05:00Z');
+    await ev(s1, 'interpretado', null, { intencion: 'fuera_de_tema' }, '2026-10-02T10:06:00Z');
+    await ev(s1, 'interpretado', null, { intencion: '', tema: null }, '2026-10-02T10:07:00Z');
+    await ev(s1, 'interpretado', null, { intencion: 5, tema: ['agua'] }, '2026-10-02T10:08:00Z');
+    await ev(s1, 'opcion_elegida', null, { letra: 'B' }, '2026-10-02T10:09:00Z');
+    await ev(s1, 'opcion_elegida', 'n_menu', { letra: '' }, '2026-10-02T10:09:00Z');
+    await ev(s1, 'opcion_elegida', 'n_menu', { letra: 3 }, '2026-10-02T10:09:00Z');
+    await ev(sesion2, 'opcion_elegida', 'n_menu', { letra: 'A' }, '2026-10-02T11:01:00Z');
+    await ev(sesion2, 'opcion_elegida', 'n_masayuda', { letra: 'B' }, '2026-10-02T11:30:00Z');
+    await ev(sesion2, 'interpretado', null, { intencion: 'agenda', tema: 'vivienda' }, '2026-10-02T11:30:00Z');
+    await ev(sesion2, 'respondido_con_base', 'n_consulta', { secciones: ['S01'] }, '2026-10-02T11:31:00Z');
+    await ev(convWeb, 'interpretado', null, { intencion: 'propuesta', tema: 'salud' }, '2026-10-02T11:32:00Z');
+    const eventos = await filas<{ nombre: string; cajaId: string | null; datos: Record<string, unknown>; fecha: string }>(db,
+      `select e.name as nombre, e.box_id as "cajaId", e.data as datos, e.occurred_at as fecha from bots.events e join bots.sessions s on s.id = e.session_id where s.contact_id = $1`, [ctLucia]);
+    const norm = (xs: ConsultaContacto[]) => xs.map((x) => ({ ...x, ultima: new Date(x.ultima).toISOString() }));
+    const codigo = norm(consultasDeEventos(eventos.map((e) => ({ ...e, fecha: new Date(e.fecha).toISOString() }))));
+    const base = norm((await uno<{ c: ConsultaContacto[] }>(db, `select bots.consultas_contacto($1) as c`, [ctLucia]))!.c);
+    afirmar(JSON.stringify(base) === JSON.stringify(codigo), `SQL: ${JSON.stringify(base)}\nTS:  ${JSON.stringify(codigo)}`);
+    afirmar(base.map((x) => `${x.tipo}:${x.clave}:${x.veces}`).join() === 'opcion:n_menu|A:2,intencion:propuesta:2,intencion:agenda:1,opcion:n_masayuda|B:1,tema:vivienda:1,tema:transporte:1,tema:agua:1', base.map((x) => `${x.tipo}:${x.clave}:${x.veces}`).join());
+    const e = await error(() => comoPersona(db, P.adminCamp, (tx) => tx.query(`select bots.consultas_contacto($1)`, [ctLucia])));
+    afirmar(e && /permission denied/.test(e), `Una persona llamó a consultas_contacto: ${e}`);
+  });
+  await prueba('la base: la leen administradora, agente y editor; el número solo quien atiende; el lector y el ajeno no', async () => {
+    const w = await pub.abrirConversacion({ botId: botP, contactoHash: hmac(`contacto:${botP}:wa:${TEL_BASE}`), canal: 'whatsapp', verificadoAhora: true, ahora: new Date('2026-10-03T09:00:00Z') });
+    ctWa = w.contacto.id;
+    await pub.guardarTelefono(ctWa, TEL_BASE, 'Julio M.');
+    await pub.guardarTurno(w.conversacion.id, 0, turnoCon('¿Cuándo viene?', 'wa-b-1', '2026-10-03T09:00:00Z', [{ nombre: 'interpretado', cajaId: null, datos: { intencion: 'agenda', tema: 'ninguno' } }]));
+    const ag = await repoDe(P.agente).baseContactos(CAMP_A, {}, P.agente);
+    const julio = ag.filas.find((f) => f.contacto.id === ctWa);
+    afirmar(ag.total === ag.filas.length && ag.filas[0]!.contacto.id === ctWa && julio?.contacto.telefono === TEL_BASE && julio.contacto.nombrePerfil === 'Julio M.', JSON.stringify(ag.filas.map((f) => [f.contacto.id, f.contacto.telefono, f.ultima])));
+    afirmar(!ag.filas.some((f) => f.contacto.borradoEn), 'Aparecen contactos borrados');
+    const lucia = ag.filas.find((f) => f.contacto.id === ctLucia)!;
+    afirmar(lucia.conversaciones === 2 && lucia.contacto.datos['contacto.zona'] === 'Chilibre' && lucia.primera && lucia.consultas.length === 7, JSON.stringify(lucia));
+    const ed = await repoDe(P.editor).baseContactos(CAMP_A, {}, P.editor);
+    afirmar(ed.total === ag.total && ed.filas.every((f) => !f.contacto.telefono), 'El editor ve números');
+    afirmar((await repoDe(P.editor).baseContactos(CAMP_A, { buscar: '9990001' }, P.editor)).total === 0, 'El editor busca por número');
+    afirmar((await repoDe(P.agente).baseContactos(CAMP_A, { buscar: '+507 6999-0001' }, P.agente)).filas[0]?.contacto.id === ctWa, 'El agente no encuentra por número');
+    for (const p of [P.lector, P.ajeno]) {
+      try {
+        await repoDe(p).baseContactos(CAMP_A, {}, p);
+        throw new Error(`${p} leyó la base`);
+      } catch (x) {
+        afirmar(x instanceof ErrorDatos && x.codigo === 'sin_permiso', `Dio: ${(x as Error).message}`);
+      }
+    }
+  });
+  await prueba('la base: filtros por bot, canal, texto y consulta, y de a una página', async () => {
+    const r = repoDe(P.adminCamp);
+    const n = (f: Parameters<typeof r.baseContactos>[1]) => r.baseContactos(CAMP_A, f, P.adminCamp).then((x) => x.filas.map((y) => y.contacto.id));
+    afirmar((await n({ canal: 'whatsapp' })).join() === ctWa, 'canal');
+    afirmar((await n({ buscar: 'lucía' })).join() === ctLucia && (await n({ buscar: 'chilib' })).join() === ctLucia && (await n({ buscar: 'Julio' })).join() === ctWa, 'texto');
+    afirmar((await n({ buscar: '%' })).length === 0 && (await n({ buscar: '_' })).length === 0, 'Los comodines de LIKE no se escapan');
+    afirmar((await n({ consulta: { tipo: 'tema', clave: 'vivienda' } })).join() === ctLucia, 'consulta tema');
+    afirmar((await n({ consulta: { tipo: 'intencion', clave: 'agenda' } })).sort().join() === [ctLucia, ctWa].sort().join(), 'consulta intención');
+    afirmar((await n({ consulta: { tipo: 'opcion', clave: 'n_menu|A' } })).join() === ctLucia, 'consulta opción');
+    afirmar((await n({ botId: U(999) })).length === 0 && (await n({ botId: 'no-es-un-id' })).length === 0, 'bot');
+    const todas = await r.baseContactos(CAMP_A, {}, P.adminCamp);
+    const pag = await r.baseContactos(CAMP_A, { limite: 1, desde: 1 }, P.adminCamp);
+    afirmar(pag.total === todas.total && pag.filas.length === 1 && pag.filas[0]!.contacto.id === todas.filas[1]!.contacto.id, 'página');
+  });
+  await prueba('la ficha: conversaciones y consultas para quien lee conversaciones; el lector no', async () => {
+    const f = await repoDe(P.agente).fichaContacto(ctLucia, P.agente);
+    afirmar(f && f.lista.length === 2 && f.lista[0]!.iniciadaEn >= f.lista[1]!.iniciadaEn && f.consultas[0]!.clave === 'n_menu|A' && f.contacto.nombre === 'Lucía Pérez', JSON.stringify(f));
+    afirmar((await repoDe(P.editor).fichaContacto(ctWa, P.editor))?.contacto.telefono == null, 'El editor ve el número en la ficha');
+    afirmar((await repoDe(P.lector).fichaContacto(ctLucia, P.lector)) === null && (await repoDe(P.ajeno).fichaContacto(ctLucia, P.ajeno)) === null, 'El lector o el ajeno ven la ficha');
+  });
+  await prueba('descargar la base: solo el administrador; queda registrado sin el texto buscado ni los datos', async () => {
+    try {
+      await repoDe(P.agente).exportarBaseContactos(CAMP_A, {}, P.agente);
+      throw new Error('El agente descargó la base');
+    } catch (x) {
+      afirmar(x instanceof ErrorDatos && x.codigo === 'sin_permiso', `Dio: ${(x as Error).message}`);
+    }
+    const a = repoDe(P.adminCamp);
+    const todo = await a.exportarBaseContactos(CAMP_A, { botId: botP }, P.adminCamp);
+    afirmar(todo.length === (await a.baseContactos(CAMP_A, {}, P.adminCamp)).total && todo.some((f) => f.contacto.telefono === TEL_BASE), 'Descarga incompleta');
+    const buscada = await a.exportarBaseContactos(CAMP_A, { buscar: 'Lucía', consulta: { tipo: 'tema', clave: 'agua' } }, P.adminCamp);
+    afirmar(buscada.length === 1, `buscada: ${buscada.length}`);
+    const reg = await a.exportacionesBase(CAMP_A, P.adminCamp);
+    afirmar(reg.length === 2 && reg[0]!.conBusqueda && reg[0]!.consulta === 'tema:agua' && reg[0]!.cantidad === 1 && reg[1]!.botId === botP && reg[1]!.hechoPor === P.adminCamp, JSON.stringify(reg));
+    afirmar(await cuenta(db, `select count(*) as n from bots.contact_exports where row_to_json(contact_exports)::text like '%Lucía%'`) === 0, 'El registro tiene el texto buscado');
+    afirmar(await cuenta(db, `select count(*) as n from core.audit_log where action = 'bots.base_contactos' and detail::text not like '%Lucía%' and detail::text not like '%${TEL_BASE}%'`) === 2, 'actividad');
+    afirmar(await comoPersona(db, P.agente, (tx) => cuenta(tx, `select count(*) as n from bots.contact_exports`)) === 0, 'El agente ve las descargas');
+    const e = await error(() => comoServicio(db, (tx) => tx.query(`update bots.contact_exports set row_count = 0`)));
+    afirmar(e && /permission denied|solo admite agregar/.test(e), `Se cambió una descarga: ${e}`);
+  });
+  await prueba('un contacto borrado a pedido sale de la base y su ficha no muestra lo que consultó', async () => {
+    await repoDe(P.adminCamp).borrarContacto(ctLucia, 'Lo pidió', P.adminCamp);
+    afirmar(!(await repoDe(P.agente).baseContactos(CAMP_A, {}, P.agente)).filas.some((f) => f.contacto.id === ctLucia), 'Sigue en la base');
+    const f = await repoDe(P.agente).fichaContacto(ctLucia, P.agente);
+    afirmar(f?.contacto.borradoEn && f.consultas.length === 0 && f.contacto.nombre === null, JSON.stringify(f));
+    afirmar(await cuenta(db, `select count(*) as n from bots.events e join bots.sessions s on s.id = e.session_id where s.contact_id = $1`, [ctLucia]) > 0, 'Se borraron los eventos');
   });
 
   console.log('\nMigración 0002 sobre una base con bots de la 0001');

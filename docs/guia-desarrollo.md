@@ -130,3 +130,25 @@ GitHub las corre en cada push, sin claves.
 - **Pruebas:** `canal-whatsapp/nucleo.test.ts` (con el simulado), la sección WhatsApp de `pnpm db:probar` (Vault
   simulado en PGlite), `pnpm probar` (pantallas) y la etapa 7 de `pnpm probar:recorrido` (el teléfono de prueba en el
   navegador).
+
+## Base de contactos (7.06)
+
+- **Qué es:** la pantalla Contactos (menú Conversaciones) lista quién le escribió a cada bot de la campaña, con los datos
+  que dio y lo que consultó; cada contacto tiene su ficha con sus conversaciones. Cada bot tiene su base: un contacto es
+  de un bot y no se mezcla con los de otro.
+- **Lo que consultó** sale de `bots.events`, que no tienen textos y no vencen: la intención y el tema del evento
+  `interpretado` y la caja y la letra de `opcion_elegida`. Sin cortesía, lo que no se entiende, lo ajeno a la campaña,
+  los intentos de manipular ni el tema «ninguno». El cálculo es `consultasDeEventos` (`dominio/contactos.ts`) en la
+  demo y `bots.consultas_contacto` en la base; `pnpm db:probar` controla que den lo mismo sobre los mismos eventos. Si
+  se cambia uno, se cambia el otro.
+- **Quién ve qué:** la base y la ficha, quienes leen conversaciones. El número, solo quienes atienden (lo esconde la
+  vista y la base ni lo devuelve), y solo ellos buscan por número. Un contacto borrado a pedido sale de la base y su
+  ficha no muestra lo que consultó.
+- **Descarga:** CSV (UTF-8 con BOM, una columna por dato) con el filtro de la pantalla; solo el administrador
+  (`gestionar_datos_contactos`). Queda en `bots.contact_exports` (quién, cuándo, el filtro sin el texto buscado y
+  cuántos) y en la actividad. Las celdas que empiezan con `=`, `+`, `-` o `@` llevan un apóstrofo (inyección de
+  fórmulas en planillas), salvo un número de teléfono con `+`.
+- **Base:** `bots_0009_contactos.sql` (`base_contactos`, `ficha_contacto`, `exportar_base_contactos`,
+  `exportaciones_base` y el índice de eventos por conversación).
+- **Pruebas:** `dominio/contactos.test.ts`, la sección «Base de contactos» de `pnpm db:probar`, las pantallas de
+  `pnpm probar` y el tramo «base de contactos» de `pnpm probar:recorrido`.

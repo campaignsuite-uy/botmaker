@@ -4,7 +4,9 @@
  * de 2 horas sin respuesta (abre una alerta), una en atención y una cerrada. Todo es inventado.
  */
 import { aplicarOperacion } from '../../dominio/operaciones';
-import { condicionesPorDefecto, type Condiciones, type Contacto, type Conversacion, type Mensaje } from '../../dominio/conversaciones';
+import {
+  condicionesPorDefecto, type Canal, type Condiciones, type Contacto, type Conversacion, type EventoAnalitica, type Mensaje, type NombreEvento,
+} from '../../dominio/conversaciones';
 import { MOTORES_POR_DEFECTO } from '../../dominio/motores';
 import { sesionNueva } from '../../dominio/motor';
 import { plantillaPolitica } from '../../dominio/plantilla-politica';
@@ -47,8 +49,12 @@ export interface CanalWhatsappSemilla {
   plantillas: Plantilla[];
 }
 
+/** Un evento de analítica guardado, como los guarda el repositorio de la demo. */
+export type EventoSemilla = EventoAnalitica & { botId: string; versionId: string | null; canal: Canal; conversacionId: string; contactoHash: string; fecha: string };
+
 interface SemillaCanal {
   whatsapp: CanalWhatsappSemilla;
+  analitica: EventoSemilla[];
   bot: Bot;
   motores: MotorFuncion[];
   version: Version & { definicion: unknown };
@@ -164,6 +170,44 @@ export function semillaCanal(ahora: Date): SemillaCanal {
   });
   for (const m of mensajes.get('conv-demo-5') ?? []) if (m.autor !== 'contacto') m.envio = 'leido';
 
+  // Los eventos de analítica de esas conversaciones, como los habría dejado el motor (sin textos): con ellos la base de
+  // contactos muestra qué consultó cada uno. [mensaje, evento, caja, datos]: la hora es la del mensaje.
+  const analitica: EventoSemilla[] = [];
+  const eventos = (convId: string, lista: [number, NombreEvento, string | null, EventoAnalitica['datos']?][]) => {
+    const c = conversaciones.find((x) => x.id === convId)!;
+    const ct = contactos.find((x) => x.id === c.contactoId)!;
+    const ms = mensajes.get(convId)!;
+    for (const [n, nombre, cajaId, datos = {}] of lista) {
+      analitica.push({ nombre, cajaId, datos, botId: bot.id, versionId: version.id, canal: c.canal, conversacionId: c.id, contactoHash: ct.hash, fecha: ms[n - 1]!.creadoEn });
+    }
+  };
+  const motor = 'gemini-3.1-flash-lite';
+  eventos('conv-demo-1', [
+    [1, 'sesion_iniciada', null], [1, 'condiciones_aceptadas', null], [2, 'caja_mostrada', 'n_bienvenida'], [3, 'caja_mostrada', 'n_menu'],
+    [4, 'texto_recibido', null, { largo: 33, tipo: 'texto' }], [5, 'interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'transporte', lectura: 'coinciden', motor }],
+    [5, 'respondido_con_base', 'n_consulta', { secciones: ['S02'], completa: true, paso_validador: true, motor }], [6, 'caja_mostrada', 'n_masayuda'],
+  ]);
+  eventos('conv-demo-2', [
+    [1, 'sesion_iniciada', null], [1, 'caja_mostrada', 'n_bienvenida'], [2, 'caja_mostrada', 'n_menu'], [3, 'texto_recibido', null, { largo: 64, tipo: 'texto' }],
+    [4, 'interpretado', 'n_interpretar', { intencion: 'hablar_con_persona', tema: 'ninguno', lectura: 'coinciden', motor }], [4, 'derivada', 'n_derivar', { motivo: 'Pidió hablar con el equipo' }],
+  ]);
+  eventos('conv-demo-3', [
+    [1, 'sesion_iniciada', null], [1, 'caja_mostrada', 'n_bienvenida'], [2, 'texto_recibido', null, { largo: 38, tipo: 'texto' }],
+    [3, 'interpretado', 'n_interpretar', { intencion: 'voluntariado', tema: 'ninguno', motor }], [3, 'caja_mostrada', 'n_sumate'], [4, 'texto_recibido', null, { largo: 4, tipo: 'texto' }],
+    [5, 'dato_guardado', 'n_sumate', { variable: 'contacto.nombre' }], [5, 'caja_mostrada', 'n_zona'], [6, 'texto_recibido', null, { largo: 16, tipo: 'texto' }],
+    [7, 'caja_mostrada', 'n_sumado'], [7, 'derivada', 'n_sumado', { motivo: 'Quiere sumarse como voluntario' }],
+  ]);
+  eventos('conv-demo-4', [
+    [1, 'sesion_iniciada', null], [1, 'caja_mostrada', 'n_bienvenida'], [2, 'texto_recibido', null, { largo: 43, tipo: 'texto' }],
+    [3, 'interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'agua', motor }], [3, 'respondido_con_base', 'n_consulta', { secciones: ['S03'], completa: true, paso_validador: true, motor }],
+    [4, 'texto_recibido', null, { largo: 7, tipo: 'texto' }], [5, 'regla', 'n_cierre', { regla: 'cortesia', intencion: 'cortesia' }],
+  ]);
+  eventos('conv-demo-5', [
+    [1, 'sesion_iniciada', null], [2, 'texto_recibido', null, { largo: 55, tipo: 'texto' }],
+    [3, 'interpretado', 'n_interpretar', { intencion: 'agenda', tema: 'ninguno', motor }], [3, 'derivada', 'n_derivar', { motivo: 'Consulta de agenda sin dato' }],
+    [5, 'texto_recibido', null, { largo: 13, tipo: 'texto' }],
+  ]);
+
   const condiciones: Condiciones[] = [{
     botId: bot.id, numero: 1, texto: condicionesPorDefecto({ mercado: 'PA', candidato: CANDIDATA_DEMO, trato: 'usted', dias: 90 }), publicadasEn: hace(12 * 1440), publicadasPor: 'p-joaquin',
   }];
@@ -172,5 +216,5 @@ export function semillaCanal(ahora: Date): SemillaCanal {
     conectadoEn: hace(3 * 1440), secretoHash: sha256(SECRETO_DEMO), clave: CLAVE_DEMO,
     plantillas: PLANTILLAS_DEMO.map((p) => leerPlantilla(p)).filter((p): p is Plantilla => !!p),
   };
-  return { whatsapp, bot, motores: MOTORES_POR_DEFECTO.map((m) => ({ ...m })), version, contactos, conversaciones, mensajes, condiciones, publicadoDesde: hace(10 * 1440) };
+  return { whatsapp, analitica, bot, motores: MOTORES_POR_DEFECTO.map((m) => ({ ...m })), version, contactos, conversaciones, mensajes, condiciones, publicadoDesde: hace(10 * 1440) };
 }

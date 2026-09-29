@@ -20,8 +20,9 @@ import type {
 import type { Alerta, Condiciones, PedidoDatos } from '../../dominio/conversaciones';
 import { ErrorDatos, errorDeBase } from '../errores';
 import type {
-  CanalWeb, CanalWhatsapp, ConexionWhatsapp, ConversacionCompleta, ExportacionContacto, FilaContacto, FilaConversacion, FilaMuestra, FiltroConversaciones,
-  FiltroLlamadas, PlantillaEnviada, PlantillaGuardada, Repositorio, TurnoDevuelto,
+  CanalWeb, CanalWhatsapp, ConexionWhatsapp, ConversacionCompleta, ExportacionBase, ExportacionContacto, FichaContacto, FilaBaseContacto, FilaContacto,
+  FilaConversacion, FilaMuestra, FiltroContactos, FiltroConversaciones, FiltroLlamadas, PaginaContactos, PlantillaEnviada, PlantillaGuardada, Repositorio,
+  TurnoDevuelto,
 } from '../repositorio';
 import type { Plantilla } from '../../dominio/whatsapp';
 import * as M from './mapeo';
@@ -428,6 +429,28 @@ export class RepositorioSupabase implements Repositorio {
   async quitarPlantilla(botId: string, nombre: string, _por: string): Promise<void> {
     const b = await this.bots_();
     datos(await b.rpc('quitar_plantilla', { bot: botId, nombre }), 'quitar la plantilla');
+  }
+
+  // ── Base de contactos (7.06) ──────────────────────────────────────────────────────────────────
+
+  async baseContactos(campanaId: string, filtro: FiltroContactos, _por: string): Promise<PaginaContactos> {
+    const b = await this.bots_();
+    return datos(await b.rpc('base_contactos', { campana: campanaId, filtro }), 'leer la base de contactos') as PaginaContactos;
+  }
+
+  async fichaContacto(contactoId: string, _por: string): Promise<FichaContacto | null> {
+    const b = await this.bots_();
+    return datos(await b.rpc('ficha_contacto', { contacto: contactoId }), 'leer el contacto') as FichaContacto | null;
+  }
+
+  async exportarBaseContactos(campanaId: string, filtro: Omit<FiltroContactos, 'limite' | 'desde'>, _por: string): Promise<FilaBaseContacto[]> {
+    const b = await this.bots_();
+    return datos(await b.rpc('exportar_base_contactos', { campana: campanaId, filtro }), 'exportar la base de contactos') as FilaBaseContacto[];
+  }
+
+  async exportacionesBase(campanaId: string, _por: string): Promise<ExportacionBase[]> {
+    const b = await this.bots_();
+    return datos(await b.rpc('exportaciones_base', { campana: campanaId }), 'leer las descargas de la base') as ExportacionBase[];
   }
 
   async pedidosDatos(campanaId: string): Promise<PedidoDatos[]> {

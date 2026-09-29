@@ -9,13 +9,15 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   una cuenta real (7.01 y 7.05).
   - Tareas: 7.02, 7.03, 7.04 y 7.07.
   - Pruebas: 261 unitarias, 68 de base, 175 de pantallas, 334 de celular y 76 del recorrido.
+- **Base de contactos (7.06):** hecha, con la pantalla Contactos, la ficha de cada contacto y la descarga en CSV.
+  - Migración `bots_0009_contactos.sql`.
+  - Pruebas: 270 unitarias, 74 de base, 192 de pantallas, 370 de celular y 85 del recorrido.
 - **Lo que sigue, en orden:**
-  1. Base de contactos (7.06).
-  2. Analítica (8.01).
-  3. Sentry (8.03).
-  4. Respuestas grabadas (1.07).
-  5. Semilla de demo para Supabase.
-  6. Manual (8.06).
+  1. Analítica (8.01).
+  2. Sentry (8.03).
+  3. Respuestas grabadas (1.07).
+  4. Semilla de demo para Supabase.
+  5. Manual (8.06).
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
@@ -36,7 +38,8 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
    - Si el proceso se corta, lo retoma la tarea de fondo: no se pierden mensajes.
 3. **Proceso**:
    - Es el mismo motor que la web (`atenderWhatsapp`, espejo de `canal-web/nucleo.ts`).
-   - El contacto es el HMAC del número. El número va aparte, en `bots.contact_addresses`, sin acceso para las personas.
+   - El contacto es el HMAC del número. El número y el nombre de perfil van en `bots.contacts` (`phone` y
+     `profile_name`); el número solo lo ve quien atiende.
    - Límites por contacto y por bot. Sin IP ni Turnstile: WhatsApp ya verifica el número.
    - Condiciones: el aviso lleva la dirección en texto; el modo «acepto», un botón.
    - Con el bot en pausa, o si la conversación la atiende el equipo, se guarda el mensaje y el bot no contesta.
@@ -81,8 +84,7 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
     `last_inbound_at`, `last_error`, `last_error_at`.
 - **`bots.sessions`**: `window_expires_at`.
 - **Tablas nuevas**:
-  - `bots.contact_addresses`: el número de cada contacto de WhatsApp. RLS sin políticas para personas. Se borra al
-    borrar el contacto y cuando vence el guardado del bot.
+  - El número no tuvo tabla aparte: quedó en `bots.contacts` (ver «Cómo cambia el diseño», más abajo).
   - `bots.channel_inbox`: `(channel_id, key)` como clave primaria. `payload` se vacía al procesar. Se limpia a los 8 días.
   - `bots.outbound`: `(session_id, n, part)`, con `status`, `provider_id` único, `attempts`, `next_attempt_at` y
     `last_error`.
@@ -106,7 +108,7 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   - `publico_recibir`
   - `publico_entradas_pendientes`
   - `publico_entrada_procesada`
-  - `publico_guardar_direccion`
+  - `publico_guardar_telefono`
   - `publico_tomar_envios`: `for update skip locked`.
   - `publico_resultado_envio`
   - `publico_aplicar_estado`
@@ -154,6 +156,22 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   - `puesta-en-marcha.md`, sección 9: 360dialog con la cuenta de la campaña
   - `.env.ejemplo`: `BOTS_WHATSAPP_SIMULADO`
 
+### 7.06 Base de contactos (hecha)
+
+- **Pantalla Contactos** (menú Conversaciones): quién le escribió a cada bot, con el nombre, el nombre de perfil, el
+  número (solo para quien atiende), el canal, las conversaciones (la primera y la última), los datos que dio y lo que
+  consultó. Filtros: bot, canal, lo que consultó y texto (nombre, dato o, para quien atiende, número). De a 50.
+- **Lo que consultó**: sale de los eventos, que no tienen textos y no vencen. Temas y consultas (intenciones) que
+  interpretó el motor y opciones de menú que eligió; sin saludos, lo que no se entiende, lo ajeno ni el tema «ninguno».
+  Cada cosa lleva a los demás que consultaron lo mismo.
+- **Ficha de cada contacto**: sus datos, lo que consultó (con cuántas veces y la última), sus conversaciones con
+  enlace a la bandeja y, para el administrador, exportar sus datos o borrarlos si lo pide.
+- **Descargar la base**: CSV con el filtro de la pantalla, solo el administrador. Queda registrado (quién, cuándo, el
+  filtro sin el texto buscado y cuántos) y aparece en la misma pantalla.
+- **Base:** `bots_0009_contactos.sql`, con 6 pruebas nuevas en `pnpm db:probar`, entre ellas que el SQL y el código
+  calculan lo mismo.
+- **La bandeja** enlaza a la ficha desde cada conversación.
+
 ## Etapa 8, lo que se hace sin cuentas
 
 ### 8.01 Analítica
@@ -161,7 +179,7 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Eventos**: ya se guardan en `bots.events`, sin textos. Falta agregarlos y mostrarlos.
 - **Agregados**:
   - Tabla `bots.stats_hourly`: bot, canal, versión, hora, nombre, caja, clave y cantidad.
-  - La llena la tarea `bots.tarea_agregar_analitica` (`bots_0009_analitica.sql`).
+  - La llena la tarea `bots.tarea_agregar_analitica` (`bots_0010_analitica.sql`: la 0009 es la base de contactos).
   - Suma también lo que sale de cada conversación terminada, con 30 minutos sin mensajes:
     - el abandono en la última caja que mostró el bot;
     - el recorrido de las primeras cajas;
@@ -219,7 +237,7 @@ Con Joaquín:
   - Lo legal lo averigua Joaquín aparte.
   - Lo que consultó queda para siempre como temas e intenciones. El texto se borra a los días de guardado del bot
     (90 por defecto).
-  - Pendiente menor: quién exporta. Propuesta: solo el administrador.
+  - Quién descarga la base: quedó solo el administrador (la propuesta). Falta que Joaquín lo confirme.
 - **Gestor de plantillas (7.07):** entra a la v1, aunque la definición lo dejaba afuera.
   - BotMaker crea las plantillas (nombre, categoría, idioma, texto con espacios y ejemplos).
   - Las manda a aprobar a Meta con `POST /message_templates` de 360dialog.

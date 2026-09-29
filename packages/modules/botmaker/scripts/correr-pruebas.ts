@@ -37,6 +37,8 @@ import { ejecutarAvanzarCorrida, ejecutarIniciarCorrida } from '../acciones/ejec
 import { ejecutarPedirPublicacion } from '../acciones/ejecutar-publicacion';
 import { PantallaBandeja, PantallaConversacion, PantallaDatosContactos, PantallaRevision } from '../ui/bandeja';
 import { vistaBandeja, vistaConversacion, vistaDatosContactos, vistaRevision } from '../vistas/bandeja';
+import { PantallaContactos, PantallaFichaContacto } from '../ui/contactos';
+import { vistaContactos, vistaFichaContacto } from '../vistas/contactos';
 import { PantallaCanales } from '../ui/canales';
 import { vistaCanales } from '../vistas/canales';
 import { puede } from '../dominio/permisos';
@@ -106,6 +108,7 @@ async function main() {
     try {
       const marco = html(createElement(Marco, { ctx: c, datos: await datosMarco(repo, c), children: createElement('p', null, 'contenido') }));
       prueba('marco: menú de BotMaker y costos solo si los ve', tiene(marco, 'BotMaker') && tiene(marco, '/bots/costos') === e.costos);
+      prueba('marco: «Contactos» para quien lee conversaciones', tiene(marco, '/bots/contactos') === puede(c.rol, 'leer_conversaciones'));
 
       const lista = html(createElement(PantallaBots, { v: await vistaBots(repo, c) }));
       prueba('bots: la lista con los dos bots', tiene(lista, 'Asistente de la campaña') && tiene(lista, 'Consultas del partido'));
@@ -182,6 +185,19 @@ async function main() {
         const conv = html(createElement(PantallaConversacion, { v: (await vistaConversacion(repo, c, 'conv-demo-2'))! }));
         const atiende = puede(c.rol, 'responder_conversaciones') && !demo;
         prueba(`conversación: el registro de decisiones; ${atiende ? 'la atiende' : 'solo mirar'}`, tiene(conv, 'Por qué contestó esto') && tiene(conv, 'Hablar con una persona') && tiene(conv, 'Tomar la conversación</button>') === atiende);
+        // Etapa 7 (7.06): la base de contactos, filtrada por lo que consultaron, y la ficha de un contacto.
+        const verNumero = puede(c.rol, 'responder_conversaciones');
+        const descarga = puede(c.rol, 'gestionar_datos_contactos');
+        const base = html(createElement(PantallaContactos, { v: await vistaContactos(repo, c) }));
+        prueba(`contactos: la base con lo que consultó cada uno; ${verNumero ? 'con el número' : 'sin el número'}; ${descarga ? 'se descarga' : 'no se descarga'}`,
+          tiene(base, '5 contactos.') && tiene(base, 'Marta G.') && tiene(base, '>Transporte<') && tiene(base, '>Voluntariado<') && tiene(base, 'zona: Arraiján')
+          && !tiene(base, '>Cortesía<') && tiene(base, '+50761234567') === verNumero && tiene(base, 'Descargar (CSV)') === descarga);
+        const filtrada = html(createElement(PantallaContactos, { v: await vistaContactos(repo, { ...c, parametros: { consulta: 'tema:agua' } }) }));
+        prueba('contactos: filtrar por lo que consultó', tiene(filtrada, '1 contacto consultó por «Agua».') && tiene(filtrada, 'Marcos') && !tiene(filtrada, 'Marta G.'));
+        const fichaContacto = html(createElement(PantallaFichaContacto, { v: (await vistaFichaContacto(repo, c, 'ct-demo-5'))! }));
+        prueba(`contactos: la ficha con lo que consultó y sus conversaciones; ${descarga ? 'con los pedidos de datos' : 'sin los pedidos'}`,
+          tiene(fichaContacto, '>Agenda<') && tiene(fichaContacto, 'En atención') && tiene(fichaContacto, '/bots/bandeja/conv-demo-5') && tiene(fichaContacto, '+50761234567') === verNumero
+          && tiene(fichaContacto, 'Exportar sus datos (JSON)') === descarga && tiene(fichaContacto, 'Borrar los datos</button>') === (descarga && !demo));
         const revision = html(createElement(PantallaRevision, { v: await vistaRevision(repo, c) }));
         const revisa = puede(c.rol, 'editar_borrador') && !demo;
         prueba(`revisión por muestreo: ${revisa ? 'revisa' : 'solo mirar'}`, tiene(revision, '¿Qué proponen para el transporte?') && tiene(revision, 'Correcta y convertir en contenido</button>') === revisa);
