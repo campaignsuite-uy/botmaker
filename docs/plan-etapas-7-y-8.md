@@ -136,6 +136,7 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   - `/api/whatsapp/[bot]` en las dos apps
   - `/publico/telefono` y `/publico/api/telefono`, solo en la demo
   - `/api/tareas` procesa lo atascado y reintenta envíos
+- [ ] Gestor de plantillas (7.07): crear, mandar a aprobar, seguir el estado y borrar; el simulado aprueba o rechaza
 - [ ] Pantallas:
   - Canales, sección WhatsApp: conectar, prender o apagar, salud, consumo y aviso
   - Bandeja: ventana, estados, plantillas
@@ -210,43 +211,50 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 
 Con Joaquín:
 
-- **Nombre de perfil de WhatsApp:** se guarda y se muestra en la bandeja. Lo ve quien atiende conversaciones.
-- **Número de la persona:** se guarda y lo ve el equipo que atiende (administrador y agente); no va en una tabla oculta.
-  Se borra a pedido de la persona.
-- **Base de contactos:** Joaquín quiere una base de quienes conversan con el bot. Se suma la tarea 7.06:
-  - una pantalla Contactos con nombre, número, canal, primera y última conversación, temas y datos que dio;
-  - una caja de permiso para que la campaña use esos datos fuera de la conversación, que guarda qué aceptó y cuándo;
-  - exportar para el administrador.
-- **Resuelta:** respuesta con base completa sin derivar, atendida por una persona o cierre de cortesía. Más adelante,
-  una marca «final» por caja.
+- **Nombre de perfil de WhatsApp y número:** se guardan y los ve el equipo que atiende (administrador y agente).
+- **Base de contactos (7.06):** se guardan el nombre, el número, los datos que dio y lo que consultó.
+  - Sin caja de permiso: alcanza con aceptar las condiciones del bot.
+  - Las condiciones por defecto dicen qué queda en la base.
+  - Lo legal lo averigua Joaquín aparte.
+  - Lo que consultó queda para siempre como temas e intenciones. El texto se borra a los días de guardado del bot
+    (90 por defecto).
+  - Pendiente menor: quién exporta. Propuesta: solo el administrador.
+- **Gestor de plantillas (7.07):** entra a la v1, aunque la definición lo dejaba afuera.
+  - BotMaker crea las plantillas (nombre, categoría, idioma, texto con espacios y ejemplos).
+  - Las manda a aprobar a Meta con `POST /message_templates` de 360dialog.
+  - Sigue su estado con `GET /message_templates` en la tarea programada y con un botón. 360dialog no avisa por webhook.
+  - Las borra con `DELETE /message_templates?name=…`.
+  - La bandeja ofrece solo las aprobadas y completa sus espacios, numerados (`positional`) o con nombre (`named`).
+  - En la demo, el simulado aprueba o rechaza.
+- **Resuelta:** una respuesta con base completa sin derivar, una conversación que atendió una persona o un cierre de
+  cortesía. Más adelante, una marca «final» por caja.
+- **Una dirección de aviso por bot:** cada bot con su canal, sin mezclar la información de uno con otro.
 
-Técnicas, las toma Claude:
+Técnicas: las toma Claude y quedan en la sección «Decisiones técnicas» de la guía de pruebas, para verlas juntos.
 
-- **Dirección del aviso:** una por bot (`/api/whatsapp/<id público>`), con el secreto en el encabezado.
-- **Reintentos de envío:** con cada aviso que entra y en la tarea de fondo. Con Supabase, pg_cron y pg_net cada minuto.
+- **Aviso de WhatsApp:** una dirección por bot (`/api/whatsapp/<id público>`), con el secreto en el encabezado.
+- **Mensajes que llegan:** se guardan primero y se procesan aparte; lo repetido se descarta.
+- **Reintentos de envío:** a los 30 segundos, 2 minutos, 10 minutos y 1 hora. Después de 5, «No se envió».
+  - Los dispara cada aviso que entra.
+  - También una tarea programada cada minuto, aunque no haya actividad. Con Supabase, pg_cron y pg_net.
+  - Joaquín está de acuerdo.
+- **Clave de 360dialog:** en Vault.
 - **Sentry:** cliente mínimo propio. Se pasa al SDK si hacen falta los errores del navegador.
-
-Siguen pendientes:
-
-- **Plantillas:** la bandeja completa las variables numeradas y las con nombre. Las de encabezado con imagen se mandan
-  desde 360dialog hasta que haga falta.
-- **Caja de permiso** (7.06): el texto por defecto y qué roles exportan la base.
-
-Lo que Joaquín tiene que saber para decidir cómo usa la base (informar, no bloquear; no es asesoramiento legal):
-
-- **Política de WhatsApp Business:** los datos que da WhatsApp (número y nombre de perfil) solo se pueden usar para
-  atender la conversación con esa persona. Lo que la persona escribe en la conversación sí se puede usar con su permiso.
-  Para escribirle después hace falta su autorización (opt-in).
-- **Uruguay, Ley 18.331:** las preferencias políticas son datos sensibles. Guardarlas pide consentimiento expreso y por
-  escrito, y toda base de datos se inscribe ante la URCDP.
-- **Panamá, Ley 81 de 2019:** también pide consentimiento para tratar datos personales.
+- **Analítica:** agregados por hora con una tarea, con el mismo cálculo en la demo y en la base.
 
 ### Cómo cambia el diseño
 
-- El número deja de ir en `bots.contact_addresses` y pasa a `bots.contacts`, en columnas nuevas:
+- **El número:** no va en `bots.contact_addresses`. Va en `bots.contacts`, en columnas nuevas:
   - `phone`, que ven quienes atienden;
   - `profile_name`, el nombre de perfil de WhatsApp.
-- `json_contacto` los devuelve.
-- `borrar_contacto` los vacía.
-- `tarea_borrar_vencidos` no los toca: la base de contactos dura hasta que la persona pida que la borren. El texto de
-  las conversaciones sigue borrándose a los 90 días.
+- **`json_contacto`:** los devuelve.
+- **`borrar_contacto`:** los vacía.
+- **`tarea_borrar_vencidos`:** no los toca. La base dura hasta que la persona pida que la borren.
+- **Plantillas:**
+  - Tabla `bots.templates`: canal, nombre, idioma, categoría, formato, componentes, ejemplos, estado, motivo de
+    rechazo, id en 360dialog, creada y revisada.
+  - Funciones del equipo: `plantillas`, `crear_plantilla` (`configurar_canales`) y `borrar_plantilla`.
+  - Función `publico_estado_plantillas` para la tarea.
+  - El cliente de 360dialog suma `crearPlantilla` y `borrarPlantilla`.
+- **Condiciones por defecto:** suman que el nombre, el número y lo que consulta quedan en la base de contactos de la
+  campaña.
