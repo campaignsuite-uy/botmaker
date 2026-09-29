@@ -206,14 +206,47 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   - atender la bandeja
   - leer la analítica
 
-## Decisiones que salieron al diseñar (con propuesta; ninguna frena)
+## Decisiones (29/9/2026)
 
-| Tema | Propuesta |
-| --- | --- |
-| Dirección del aviso de WhatsApp | Por id público del bot (`/api/whatsapp/<id>`): un bot, un número; el secreto protege |
-| Nombre de perfil de WhatsApp | No se guarda; el nombre sale solo de una caja «pedir dato» |
-| Número de la persona | Tabla aparte, sin acceso para el equipo; se borra a pedido y al vencer el guardado del bot |
-| Reintentos de envío | Con cada aviso que entra y en la tarea de fondo; con pg_cron y pg_net, cada minuto |
-| Plantillas con variables con nombre o encabezado con imagen | Se listan pero se mandan desde 360dialog |
-| Qué cuenta como «resuelta» | Respuesta con base completa sin derivar, atendida por una persona o cierre de cortesía; una marca «final» por caja más adelante |
-| Sentry | Cliente mínimo propio en lugar del SDK: sin dependencias ni cambios de build; se cambia si hace falta |
+Con Joaquín:
+
+- **Nombre de perfil de WhatsApp:** se guarda y se muestra en la bandeja. Lo ve quien atiende conversaciones.
+- **Número de la persona:** se guarda y lo ve el equipo que atiende (administrador y agente); no va en una tabla oculta.
+  Se borra a pedido de la persona.
+- **Base de contactos:** Joaquín quiere una base de quienes conversan con el bot. Se suma la tarea 7.06:
+  - una pantalla Contactos con nombre, número, canal, primera y última conversación, temas y datos que dio;
+  - una caja de permiso para que la campaña use esos datos fuera de la conversación, que guarda qué aceptó y cuándo;
+  - exportar para el administrador.
+- **Resuelta:** respuesta con base completa sin derivar, atendida por una persona o cierre de cortesía. Más adelante,
+  una marca «final» por caja.
+
+Técnicas, las toma Claude:
+
+- **Dirección del aviso:** una por bot (`/api/whatsapp/<id público>`), con el secreto en el encabezado.
+- **Reintentos de envío:** con cada aviso que entra y en la tarea de fondo. Con Supabase, pg_cron y pg_net cada minuto.
+- **Sentry:** cliente mínimo propio. Se pasa al SDK si hacen falta los errores del navegador.
+
+Siguen pendientes:
+
+- **Plantillas:** la bandeja completa las variables numeradas y las con nombre. Las de encabezado con imagen se mandan
+  desde 360dialog hasta que haga falta.
+- **Caja de permiso** (7.06): el texto por defecto y qué roles exportan la base.
+
+Lo que Joaquín tiene que saber para decidir cómo usa la base (informar, no bloquear; no es asesoramiento legal):
+
+- **Política de WhatsApp Business:** los datos que da WhatsApp (número y nombre de perfil) solo se pueden usar para
+  atender la conversación con esa persona. Lo que la persona escribe en la conversación sí se puede usar con su permiso.
+  Para escribirle después hace falta su autorización (opt-in).
+- **Uruguay, Ley 18.331:** las preferencias políticas son datos sensibles. Guardarlas pide consentimiento expreso y por
+  escrito, y toda base de datos se inscribe ante la URCDP.
+- **Panamá, Ley 81 de 2019:** también pide consentimiento para tratar datos personales.
+
+### Cómo cambia el diseño
+
+- El número deja de ir en `bots.contact_addresses` y pasa a `bots.contacts`, en columnas nuevas:
+  - `phone`, que ven quienes atienden;
+  - `profile_name`, el nombre de perfil de WhatsApp.
+- `json_contacto` los devuelve.
+- `borrar_contacto` los vacía.
+- `tarea_borrar_vencidos` no los toca: la base de contactos dura hasta que la persona pida que la borren. El texto de
+  las conversaciones sigue borrándose a los 90 días.
