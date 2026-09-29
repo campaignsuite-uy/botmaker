@@ -96,9 +96,10 @@ describe('bandeja: datos de un contacto y borrado', () => {
     const en89 = new Date(Date.now() + 77 * 864e5);
     expect(await repo.borrarVencidos(en89)).toBe(0);
     const en100 = new Date(Date.now() + 100 * 864e5);
-    expect(await ejecutarTareas(repo, en100)).toMatchObject({ borrados: 23 });
+    expect(await ejecutarTareas(repo, en100)).toMatchObject({ borrados: 28 });
     expect((await repo.conversacion('conv-demo-4'))!.mensajes.every((m) => m.texto === null)).toBe(true);
-    expect((await repo.conversacion('conv-demo-4'))!.contacto.nombre).toBeNull();
+    // El contacto queda en la base de contactos: sus datos se borran a pedido, no por vencimiento.
+    expect((await repo.conversacion('conv-demo-4'))!.contacto.nombre).toBe('Marcos');
   });
 });
 

@@ -15,12 +15,13 @@ import { puede } from '../dominio/permisos';
 import { ruta, type ContextoPantalla } from '../ui/contexto';
 import { hrefBot } from './bot-comun';
 import { mensajeDe, type MensajePantalla } from './mensajes';
+import { ETIQUETA_ESTADO_ENVIO, ventanaAbierta, type EstadoEnvio } from '../dominio/whatsapp';
 
 const corto = (t: string | null, n = 110) => (t === null ? null : t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
-export function nombreContacto(c: Pick<Contacto, 'id' | 'nombre' | 'borradoEn'>): string {
+export function nombreContacto(c: Pick<Contacto, 'id' | 'nombre' | 'borradoEn' | 'nombrePerfil'>): string {
   if (c.borradoEn) return 'Contacto borrado';
-  return c.nombre || `Contacto ${c.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase()}`;
+  return c.nombre || c.nombrePerfil || `Contacto ${c.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase()}`;
 }
 
 const persona = (ctx: ContextoPantalla, id: string | null) => (id ? ctx.nucleo?.personas.find((p) => p.id === id)?.nombre ?? 'Alguien del equipo' : null);
@@ -103,6 +104,10 @@ export interface MensajeVista {
   /** El registro de decisiones del bot en ese turno. */
   decision: { etiqueta: string; valor: string }[] | null;
   muestra: boolean;
+  /** WhatsApp: cómo va el envío de lo que salió. */
+  envio: { estado: EstadoEnvio; texto: string } | null;
+  /** Salió con una plantilla. */
+  plantilla: string | null;
 }
 
 export interface VistaConversacion {
@@ -119,8 +124,15 @@ export interface VistaConversacion {
   asignada: string | null;
   iniciada: string;
   mensajes: MensajeVista[];
-  acciones: { tomar: boolean; responder: boolean; devolver: boolean; cerrar: boolean };
+  acciones: { tomar: boolean; responder: boolean; devolver: boolean; cerrar: boolean; plantilla: boolean };
   motivoSinAcciones: string | null;
+  /** Solo en WhatsApp: la ventana de 24 horas y las plantillas aprobadas para escribir con ella cerrada. */
+  whatsapp: {
+    ventanaAbierta: boolean;
+    ventanaTexto: string;
+    plantillas: { valor: string; nombre: string; texto: string; variables: string[] }[];
+    hrefPlantillas: string;
+  } | null;
 }
 
 export function decisionLegible(m: Pick<Mensaje, 'decision'>, def: Definicion | null, version: number | null, fichas: readonly FichaMotor[], verCostos: boolean): { etiqueta: string; valor: string }[] | null {
@@ -154,7 +166,7 @@ export async function vistaConversacion(repo: Repositorio, ctx: ContextoPantalla
   const x = await repo.conversacion(id);
   if (!x || x.conversacion.campanaId !== ctx.campana.id) return null;
   const c = x.conversacion;
-  const [bot, fichas] = await Promise.all([repo.bot(c.botId), repo.fichas()]);
+  const [bot, fichas, plantillas] = await Promise.all([repo.bot(c.botId), repo.fichas(), c.canal === 'whatsapp' ? repo.plantillas(c.botId) : Promise.resolve([])]);
   const versiones = new Map<string, { def: Definicion | null; numero: number }>();
   for (const vid of new Set(x.mensajes.map((m) => m.versionId).filter((v): v is string => !!v))) {
     const v = await repo.version(vid);
@@ -164,6 +176,8 @@ export async function vistaConversacion(repo: Repositorio, ctx: ContextoPantalla
   const verCostos = puede(ctx.rol, 'ver_costos');
   const atiende = puede(ctx.rol, 'responder_conversaciones') && !ctx.organizacion.demo;
   const abierta = c.estado === 'derivada' || c.estado === 'en_atencion';
+  const wa = c.canal === 'whatsapp';
+  const ventana = wa && ventanaAbierta(c.ventanaHasta, new Date());
   const quien: Record<Mensaje['autor'], (m: Mensaje) => string> = {
     contacto: () => nombreContacto(x.contacto), bot: () => 'Bot', sistema: () => 'Aviso automático', agente: (m) => persona(ctx, m.personaId) ?? 'Equipo',
   };
@@ -175,15 +189,20 @@ export async function vistaConversacion(repo: Repositorio, ctx: ContextoPantalla
     volver: ruta(ctx, `bandeja/${encodeURIComponent(c.id)}`),
     contacto: {
       nombre: nombreContacto(x.contacto),
-      datos: Object.entries(x.contacto.datos).map(([k, v]) => ({ etiqueta: k.replace(/^contacto\./, ''), valor: v })),
+      datos: [
+        // El número solo para quien atiende (en Supabase, la base ni lo devuelve a los demás).
+        ...(x.contacto.telefono && puede(ctx.rol, 'responder_conversaciones') ? [{ etiqueta: 'número', valor: `+${x.contacto.telefono}` }] : []),
+        ...(x.contacto.nombrePerfil ? [{ etiqueta: 'perfil de WhatsApp', valor: x.contacto.nombrePerfil }] : []),
+        ...Object.entries(x.contacto.datos).map(([k, v]) => ({ etiqueta: k.replace(/^contacto\./, ''), valor: v })),
+      ],
       canal: ETIQUETA_CANAL[x.contacto.canal],
-      condiciones: x.contacto.condicionesVersion ? `aceptó la versión ${x.contacto.condicionesVersion}${x.contacto.condicionesAceptadasEn ? ` el ${fechaHoraUtc(x.contacto.condicionesAceptadasEn)} (UTC)` : ''}` : 'no aceptó condiciones',
+      condiciones: x.contacto.condicionesVersion ? `aceptó la versión ${x.contacto.condicionesVersion}${x.contacto.condicionesAceptadasEn ? ` el ${fechaHoraUtc(x.contacto.condicionesAceptadasEn)}` : ''}` : 'no aceptó condiciones',
       borrado: !!x.contacto.borradoEn,
     },
     bot: { nombre: bot?.nombre ?? 'Bot', href: hrefBot(ctx, c.botId, 'flujos') },
     estado: c.estado,
     estadoTexto: ETIQUETA_ESTADO_CONVERSACION[c.estado],
-    derivacion: c.derivadaEn ? `${c.motivoDerivacion || 'Derivada'} · ${fechaHoraUtc(c.derivadaEn)} (UTC)` : null,
+    derivacion: c.derivadaEn ? `${c.motivoDerivacion || 'Derivada'} · ${fechaHoraUtc(c.derivadaEn)}` : null,
     asignada: persona(ctx, c.asignadaA),
     iniciada: fechaHoraUtc(c.iniciadaEn),
     mensajes: x.mensajes.map((m) => {
@@ -191,15 +210,26 @@ export async function vistaConversacion(repo: Repositorio, ctx: ContextoPantalla
       return {
         n: m.n, autor: m.autor, quien: quien[m.autor](m), texto: m.texto, opciones: m.autor !== 'contacto' ? (m.datos?.opciones ?? []).map((o) => o.texto) : [],
         fecha: fechaHoraUtc(m.creadoEn), decision: decisionLegible(m, v?.def ?? null, v ? v.numero : null, fichas, verCostos), muestra: m.muestra,
+        envio: m.envio ? { estado: m.envio, texto: ETIQUETA_ESTADO_ENVIO[m.envio] } : null,
+        plantilla: typeof (m.datos as { plantilla?: unknown } | null)?.plantilla === 'string' ? String((m.datos as { plantilla: string }).plantilla) : null,
       };
     }),
     acciones: {
       tomar: atiende && c.estado !== 'cerrada' && c.asignadaA !== ctx.persona.id,
-      responder: atiende && abierta,
+      responder: atiende && abierta && (!wa || ventana),
       devolver: atiende && abierta,
       cerrar: atiende && c.estado !== 'cerrada',
+      plantilla: atiende && wa && !ventana && c.estado !== 'cerrada',
     },
     motivoSinAcciones: atiende ? null : 'Atienden las conversaciones el administrador y los agentes de BotMaker.',
+    whatsapp: wa ? {
+      ventanaAbierta: ventana,
+      ventanaTexto: ventana
+        ? `Ventana de 24 horas abierta hasta el ${fechaHoraUtc(c.ventanaHasta!)}: se le puede escribir libremente.`
+        : 'Pasaron más de 24 horas desde su último mensaje: WhatsApp solo deja escribirle con una plantilla aprobada.',
+      plantillas: plantillas.filter((p) => p.usable).map((p) => ({ valor: `${p.nombre}|${p.idioma}`, nombre: `${p.nombre} (${p.idioma})`, texto: p.texto, variables: p.variables })),
+      hrefPlantillas: hrefBot(ctx, c.botId, 'canales'),
+    } : null,
   };
 }
 

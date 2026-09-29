@@ -19,7 +19,7 @@ export function PantallaCopiloto({ v }: { v: VistaCopiloto }) {
       <Caja titulo="Lo que hizo el copiloto en este borrador">
         {v.historial.length ? (
           <ul className="bots-diferencias">
-            {v.historial.map((h) => <li key={h.seq}>{h.fecha} (UTC) · {h.quien} · {h.resumen}</li>)}
+            {v.historial.map((h) => <li key={h.seq}>{h.fecha} · {h.quien} · {h.resumen}</li>)}
           </ul>
         ) : <p className="texto-chico apagado">Todavía nada.</p>}
         <p className="texto-mini apagado">Cada cambio también está en el historial del borrador, con los del editor. <a href={v.hrefFlujos}>Ver en Flujos</a>.</p>

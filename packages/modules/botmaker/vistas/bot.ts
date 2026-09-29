@@ -8,6 +8,7 @@
  */
 import type { Repositorio } from '../datos/repositorio';
 import { avisosMotores, exigeAvisoIa, type AvisoMotor } from '../dominio/avisos';
+import { AVISO_POLITICA_WHATSAPP } from '../dominio/whatsapp';
 import { AVISO_IA_POR_DEFECTO, DESCRIPCION_CASO, ETIQUETA_CASO, ETIQUETA_ESTADO_BOT, ETIQUETA_TRATO, LARGO_AVISO_IA, LARGO_NOMBRE } from '../dominio/bots';
 import { decimal, diaUtc, fechaHoraUtc, inicioMesUtc, milisegundos, usd } from '../dominio/formato';
 import { MERCADOS, nombreMercado } from '../dominio/mercados';
@@ -49,6 +50,8 @@ export interface ResultadoPrueba {
 
 export interface VistaBot {
   mensaje: MensajePantalla | null;
+  /** WhatsApp conectado en un bot electoral o político: el aviso de la política de WhatsApp Business (informa, no bloquea). */
+  avisoWhatsapp: { texto: string; href: string } | null;
   campanaId: string;
   volver: string;
   hrefLista: string;
@@ -95,7 +98,7 @@ const DESCRIPCION_FUNCION: Record<FuncionMotor, string> = {
 export async function vistaBot(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaBot | null> {
   const bot = await repo.bot(botId);
   if (!bot || bot.campanaId !== ctx.campana.id) return null;
-  const [motores, fichas] = await Promise.all([repo.motoresDeBot(bot.id), repo.fichas()]);
+  const [motores, fichas, wa] = await Promise.all([repo.motoresDeBot(bot.id), repo.fichas(), repo.canalWhatsapp(bot.id)]);
   const archivado = bot.estado === 'archivado';
   const demo = !!ctx.organizacion.demo;
   const editaDatos = puede(ctx.rol, 'editar_borrador') && !archivado && !demo;
@@ -141,6 +144,7 @@ export async function vistaBot(repo: Repositorio, ctx: ContextoPantalla, botId: 
 
   return {
     mensaje: mensajeDe(p),
+    avisoWhatsapp: wa && wa.estado !== 'apagado' ? { texto: AVISO_POLITICA_WHATSAPP, href: ruta(ctx, `${bot.id}/canales`) } : null,
     campanaId: ctx.campana.id,
     volver: ruta(ctx, bot.id),
     hrefLista: ruta(ctx),

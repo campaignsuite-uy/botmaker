@@ -7,6 +7,7 @@
  * (packages/db/migraciones/bots_0006_canal_web.sql).
  */
 import type { Decision, Evento, Sesion } from './motor';
+import type { EstadoEnvio } from './whatsapp';
 import { mercado } from './mercados';
 import type { Trato } from './tipos';
 
@@ -48,6 +49,9 @@ export interface Contacto {
   creadoEn: string;
   /** Se borraron sus datos a pedido (queda el registro sin datos). */
   borradoEn: string | null;
+  /** WhatsApp: su número (solo dígitos, con el código de país) y su nombre de perfil. Los ve quien atiende. */
+  telefono?: string | null;
+  nombrePerfil?: string | null;
 }
 
 export interface Conversacion {
@@ -73,6 +77,8 @@ export interface Conversacion {
   verificada: boolean;
   /** Cantidad de mensajes: cada turno guarda con el que vio, así dos turnos a la vez no se pisan. */
   seq: number;
+  /** WhatsApp: hasta cuándo se le puede escribir sin plantilla (24 horas desde su último mensaje). */
+  ventanaHasta?: string | null;
   iniciadaEn: string;
   actualizadaEn: string;
 }
@@ -99,6 +105,8 @@ export interface Mensaje {
   /** Entra en la revisión por muestreo (respuestas con base). */
   muestra: boolean;
   creadoEn: string;
+  /** WhatsApp: cómo va el envío de este mensaje (null o ausente en la web). */
+  envio?: EstadoEnvio | null;
 }
 
 export interface Condiciones {
@@ -317,8 +325,8 @@ export function condicionesPorDefecto(p: { mercado: string; candidato: string; t
   const usted = p.trato === 'usted';
   return [
     `Este asistente es de la campaña de ${p.candidato} (${pais}). Es un programa con inteligencia artificial: puede equivocarse, y lo que dice sale del material que cargó la campaña.`,
-    `Qué guardamos: los mensajes de esta conversación y los datos que ${usted ? 'usted decida' : 'decidas'} dar (por ejemplo, un nombre o un correo). Los textos se borran a los ${p.dias} días; lo que queda después son números sin datos personales.`,
-    `Para qué: para responder, para que alguien del equipo ${usted ? 'le' : 'te'} conteste si ${usted ? 'lo pide' : 'lo pedís'}, y para mejorar el asistente. No se venden ni se ceden a terceros.`,
+    `Qué guardamos: los mensajes de esta conversación, los datos que ${usted ? 'usted decida' : 'decidas'} dar (por ejemplo, un nombre o un correo) y, si ${usted ? 'escribe' : 'escribís'} por WhatsApp, ${usted ? 'su' : 'tu'} número y ${usted ? 'su' : 'tu'} nombre de perfil. Con eso la campaña arma su base de contactos: quién escribió, qué temas consultó y qué datos dejó. El texto de los mensajes se borra a los ${p.dias} días.`,
+    `Para qué: para responder, para que alguien del equipo ${usted ? 'le' : 'te'} conteste si ${usted ? 'lo pide' : 'lo pedís'}, para mejorar el asistente y para que la campaña sepa con quién conversó. No se venden ni se ceden a terceros.`,
     `${usted ? 'Puede' : 'Podés'} pedir ver o borrar ${usted ? 'sus' : 'tus'} datos escribiendo al contacto de la campaña.`,
     `Seguir la conversación es aceptar estas condiciones.`,
   ].join('\n\n');

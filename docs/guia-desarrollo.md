@@ -101,3 +101,32 @@ GitHub las corre en cada push, sin claves.
 - **Sin textos de personas** fuera de `bots.messages.text` y de los datos del contacto: los eventos (`bots.events`)
   pasan por `eventosDeTurno` (lista de datos permitidos por evento) y la actividad (`core.audit_log`) nunca lleva el
   dato. El texto se vacía con `bots.tarea_borrar_vencidos` a los días de guardado del bot.
+
+## WhatsApp (etapa 7)
+
+- **Dónde está:** `dominio/whatsapp.ts` (formato de mensajes, ventana de 24 horas, plantillas, consumo, aviso de
+  política) y `canal-whatsapp/` (el núcleo sin Next, el cliente de 360dialog real y el simulado, y los manejadores de
+  Request → Response). Rutas: `/api/whatsapp/[bot]` en la app pública (y `/publico/api/whatsapp/[bot]` en la demo) y,
+  solo en la demo, el teléfono de prueba (`/publico/telefono` y su `/api/telefono`).
+- **Un aviso de 360dialog** (`recibirWebhook`): la dirección es una por bot; el secreto viaja en el encabezado
+  `x-botmaker-secreto` y se compara en tiempo constante con su SHA-256. Lo recibido va a la cola del canal
+  (`bots.channel_inbox`, cuya clave descarta los reintentos) y se contesta enseguida; el proceso va con `after()`. Si se
+  corta, la tarea programada lo retoma (a los 2 minutos, hasta 5 intentos).
+- **Un mensaje** (`atenderWhatsapp`): el mismo recorrido que el canal web (motor de conversación, condiciones, pausa,
+  derivadas), sin IP ni Turnstile. Lo que dice el bot se traduce con `aWhatsapp` (botones hasta 3, lista hasta 10, texto
+  largo en partes) y se encola en `bots.outbound` en la misma transacción que el turno (`publico_guardar_turno` con
+  `envios`). Cada mensaje de la persona abre la ventana de 24 horas.
+- **El envío** (`enviarPendientes`): lee la clave de Vault (`servicio_clave_whatsapp`), manda y guarda el id de
+  WhatsApp. 429, 5xx o sin respuesta: reintenta a los 30 s, 2 min, 10 min y 1 h (el orden de una conversación no se
+  rompe). 401: canal desconectado y alerta. Los estados de Meta (enviado, entregado, leído, fallido) solo avanzan y dejan
+  el evento `estado_mensaje`.
+- **La bandeja:** `responder_conversacion` exige la ventana abierta en la base; con la ventana cerrada, solo
+  `responder_con_plantilla` con una plantilla aprobada. Después de responder, la acción manda enseguida con `after()`.
+- **Plantillas:** el espejo `bots.templates` se actualiza con `GET /message_templates` (la tarea programada y el botón
+  «Actualizar los estados»): 360dialog no avisa cuando Meta decide.
+- **Contactos:** el número y el nombre de perfil de WhatsApp quedan en `bots.contacts` (decisión del 29/9: son la base de
+  contactos de la campaña; se borran a pedido, no por vencimiento). El número solo lo devuelve `json_contacto` a quien
+  atiende (`responder_conversaciones`) y no se lee directo de la tabla.
+- **Pruebas:** `canal-whatsapp/nucleo.test.ts` (con el simulado), la sección WhatsApp de `pnpm db:probar` (Vault
+  simulado en PGlite), `pnpm probar` (pantallas) y la etapa 7 de `pnpm probar:recorrido` (el teléfono de prueba en el
+  navegador).

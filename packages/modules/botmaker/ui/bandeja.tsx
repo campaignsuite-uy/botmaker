@@ -1,6 +1,7 @@
 /** Bandeja: conversaciones, una conversación con su registro de decisiones, revisión por muestreo y datos de contactos. */
 import { Caja, Encabezado, Pestanas } from '@campaignsuite/ui';
 import { borrarContacto, cerrarConversacion, devolverConversacion, responderConversacion, revisarRespuesta, tomarConversacion } from '../acciones/bandeja';
+import { ResponderConPlantilla } from './whatsapp/responder-plantilla';
 import type { VistaBandeja, VistaConversacion, VistaDatosContactos, VistaRevision } from '../vistas/bandeja';
 import { MensajeAccion, Ocultos, SoloLectura } from './piezas';
 
@@ -76,15 +77,16 @@ export function PantallaConversacion({ v }: { v: VistaConversacion }) {
   const ocultos = <Ocultos campanaId={v.campanaId} volver={v.volver} extra={{ conversacionId: v.id }} />;
   return (
     <>
-      <Encabezado ceja={<a href={v.enlaces.bandeja}>Bandeja</a>} titulo={v.contacto.nombre} enfasis={`· ${v.bot.nombre}`} bajada={`${v.contacto.canal} · empezó el ${v.iniciada} (UTC) · ${v.estadoTexto}${v.asignada ? `, atiende ${v.asignada}` : ''}`} />
+      <Encabezado ceja={<a href={v.enlaces.bandeja}>Bandeja</a>} titulo={v.contacto.nombre} enfasis={`· ${v.bot.nombre}`} bajada={`${v.contacto.canal} · empezó el ${v.iniciada} · ${v.estadoTexto}${v.asignada ? `, atiende ${v.asignada}` : ''}`} />
       <MensajeAccion m={v.mensaje} />
       <div className="bots-conversacion">
         <Caja titulo="Mensajes" className="bots-conversacion__mensajes">
           <ol className="bots-hilo">
             {v.mensajes.map((m) => (
               <li key={m.n} className={`bots-hilo__mensaje bots-hilo__mensaje--${m.autor}`}>
-                <div className="texto-mini apagado">{m.quien} · {m.fecha}{m.muestra ? ' · en la muestra' : ''}</div>
+                <div className="texto-mini apagado">{m.quien} · {m.fecha}{m.muestra ? ' · en la muestra' : ''}{m.plantilla ? ` · plantilla ${m.plantilla}` : ''}</div>
                 <div className="bots-hilo__texto">{m.texto ?? <span className="apagado">(texto borrado)</span>}</div>
+                {m.envio ? <div className={`bots-envio${m.envio.estado === 'fallido' ? ' bots-envio--fallido' : ''}`}>WhatsApp: {m.envio.texto}</div> : null}
                 {m.opciones.length ? <div className="texto-mini apagado">Opciones: {m.opciones.join(' · ')}</div> : null}
                 {m.decision ? (
                   <details className="bots-hilo__decision">
@@ -95,6 +97,8 @@ export function PantallaConversacion({ v }: { v: VistaConversacion }) {
               </li>
             ))}
           </ol>
+          {v.whatsapp ? <div className={`bots-ventana${v.whatsapp.ventanaAbierta ? '' : ' bots-ventana--cerrada'}`} role="status">{v.whatsapp.ventanaTexto}</div> : null}
+          {v.acciones.plantilla && v.whatsapp ? <ResponderConPlantilla ocultos={ocultos} plantillas={v.whatsapp.plantillas} hrefPlantillas={v.whatsapp.hrefPlantillas} /> : null}
           {v.acciones.responder ? (
             <form action={responderConversacion} className="pila bots-form">
               {ocultos}
@@ -142,7 +146,7 @@ export function PantallaRevision({ v }: { v: VistaRevision }) {
           <ul className="bots-muestra">
             {v.filas.map((f) => (
               <li key={`${f.conversacion}-${f.n}`} className="bots-muestra__item">
-                <div className="texto-mini apagado">{f.bot} · {f.fecha} (UTC) · secciones {f.secciones} · <a href={f.href}>ver la conversación</a></div>
+                <div className="texto-mini apagado">{f.bot} · {f.fecha} · secciones {f.secciones} · <a href={f.href}>ver la conversación</a></div>
                 <p className="texto-chico"><strong>Pregunta:</strong> {f.pregunta}</p>
                 <p className="texto-chico"><strong>Respuesta:</strong> {f.respuesta}</p>
                 {f.veredicto ? (
@@ -181,7 +185,7 @@ export function PantallaDatosContactos({ v }: { v: VistaDatosContactos }) {
           <ul className="bots-muestra">
             {v.resultados.map((r) => (
               <li key={r.id} className="bots-muestra__item">
-                <p className="texto-chico"><strong>{r.nombre}</strong> · {r.canal} · {r.conversaciones} {r.conversaciones === 1 ? 'conversación' : 'conversaciones'} · última {r.ultima} (UTC)</p>
+                <p className="texto-chico"><strong>{r.nombre}</strong> · {r.canal} · {r.conversaciones} {r.conversaciones === 1 ? 'conversación' : 'conversaciones'} · última {r.ultima}</p>
                 <p className="texto-mini apagado">{r.datos}</p>
                 <div className="fila">
                   <a className="boton boton--sec boton--chico" href={r.hrefExportar}>Exportar (JSON)</a>

@@ -99,7 +99,7 @@ const salida = (m: MensajeSalida): TurnoGuardado['salientes'][number] => ({
 });
 
 /** Sin motores: el motor de conversación sigue solo con menús (el aviso sinMotor y las rutas fijas). */
-function serviciosSinMotor(def: Definicion, dentro: () => boolean): Servicios {
+export function serviciosSinMotor(def: Definicion, dentro: () => boolean): Servicios {
   return {
     interpretar: async () => ({ salida: null, lectura: null, motorId: null, costoUsd: 0 }),
     responder: async () => ({ salida: null, motorId: null, costoUsd: 0 }),
@@ -108,7 +108,7 @@ function serviciosSinMotor(def: Definicion, dentro: () => boolean): Servicios {
   };
 }
 
-const TEXTO_PAUSA = 'El asistente está en pausa en este momento. El equipo de la campaña recibe este mensaje.';
+export const TEXTO_PAUSA = 'El asistente está en pausa en este momento. El equipo de la campaña recibe este mensaje.';
 
 function disponible(bp: BotPublico | null): bp is BotPublico & { version: NonNullable<BotPublico['version']> } {
   return !!bp && !!bp.version && !bp.organizacionDemo && bp.canal.activo && (bp.bot.estado === 'publicado' || bp.bot.estado === 'pausado');

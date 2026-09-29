@@ -21,6 +21,11 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (/Solo se pausa un bot publicado/.test(m)) return new ErrorDatos('no_publicado', m);
   if (/no está en pausa/.test(m)) return new ErrorDatos('no_pausado', m);
   if (/primero hay que tomar|no está derivada/.test(m)) return new ErrorDatos('no_derivada', m);
+  if (/ventana de 24 horas está cerrada/.test(m)) return new ErrorDatos('ventana_cerrada', m);
+  if (/solo para conversaciones de WhatsApp/.test(m)) return new ErrorDatos('canal_no_whatsapp', m);
+  if (/plantilla no está aprobada/.test(m)) return new ErrorDatos('plantilla_no_usable', m);
+  if (/no tiene WhatsApp conectado/.test(m)) return new ErrorDatos('sin_canal', m);
+  if (/canal está desconectado/.test(m)) return new ErrorDatos('canal_desconectado', m);
   if (/conversación está cerrada/.test(m)) return new ErrorDatos('conversacion_cerrada', m);
   if (/no está en la muestra/.test(m)) return new ErrorDatos('no_muestra', m);
   if (/No existe la conversación|No existe el contacto/.test(m)) return new ErrorDatos('no_existe', m);

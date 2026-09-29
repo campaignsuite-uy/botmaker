@@ -32,6 +32,13 @@ const OK: Record<string, string> = {
   rol_guardado: 'Listo: se guardó el rol.',
   sin_acceso: 'Listo: la persona quedó sin acceso a BotMaker.',
   prueba_ok: 'El motor respondió. El resultado está en Motores y gasto.',
+  whatsapp_conectado: 'Listo: WhatsApp quedó conectado. 360dialog avisa cada mensaje a BotMaker y la clave quedó guardada sin volver a mostrarse.',
+  whatsapp_prendido: 'Listo: WhatsApp quedó prendido.',
+  whatsapp_apagado: 'Listo: WhatsApp quedó apagado. Lo que llegue no se contesta ni se guarda.',
+  plantilla_creada: 'Listo: la plantilla se mandó a Meta. Queda en revisión; el estado se actualiza solo.',
+  plantilla_borrada: 'Listo: se borró la plantilla en 360dialog.',
+  plantillas_revisadas: 'Listo: se actualizó el estado de las plantillas.',
+  plantilla_enviada: 'Listo: la plantilla sale por WhatsApp. En la conversación se ve si llegó y si la leyó.',
 };
 
 const ERROR: Record<string, string> = {
@@ -138,6 +145,20 @@ const ERROR: Record<string, string> = {
   producto: 'BotMaker no está habilitado en esta campaña.',
   prueba_falla: 'El motor no respondió bien. El detalle está en Motores y gasto.',
   no_se_pudo: 'No se pudo guardar. Probá de nuevo; si sigue, avisale al administrador.',
+  clave_forma: 'La clave de 360dialog tiene que tener al menos 16 letras, números, guiones o guiones bajos. Copiala de nuevo del panel de 360dialog.',
+  clave_invalida: '360dialog no aceptó la clave: revisá que sea la del número de la campaña y que esté activa.',
+  d360_no_responde: '360dialog no responde. Probá de nuevo en un rato.',
+  d360_rechazo: '360dialog rechazó el pedido.',
+  numero_invalido: 'El número tiene que tener entre 7 y 15 dígitos, con el código de país (por ejemplo, +507 6000-1234).',
+  falta_url_publica: 'Falta la dirección de la app pública (BOTS_URL_PUBLICA, con https): 360dialog necesita saber adónde avisar.',
+  sin_canal: 'Este bot todavía no tiene WhatsApp conectado.',
+  canal_desconectado: 'El canal de WhatsApp está desconectado: volvé a conectarlo con una clave que funcione.',
+  plantilla_datos: 'La plantilla tiene algo para corregir.',
+  plantilla_repetida: 'Ya hay una plantilla con ese nombre e idioma.',
+  plantilla_no_usable: 'Esa plantilla no está aprobada o no se puede mandar desde la bandeja.',
+  plantilla_incompleta: 'Completá todos los espacios de la plantilla.',
+  canal_no_whatsapp: 'Las plantillas son solo para conversaciones de WhatsApp.',
+  ventana_cerrada: 'Pasaron más de 24 horas desde el último mensaje de la persona: WhatsApp solo deja escribirle con una plantilla aprobada.',
 };
 
 export interface MensajePantalla {
@@ -145,9 +166,16 @@ export interface MensajePantalla {
   texto: string;
 }
 
+const CON_DETALLE = new Set(['clave_invalida', 'd360_no_responde', 'd360_rechazo', 'plantilla_datos']);
+
 export function mensajeDe(parametros: Record<string, string | undefined>): MensajePantalla | null {
   if (parametros.ok) return { tipo: 'ok', texto: OK[parametros.ok] ?? 'Listo.' };
-  if (parametros.error) return { tipo: 'error', texto: ERROR[parametros.error] ?? ERROR.no_se_pudo! };
+  if (parametros.error) {
+    const texto = ERROR[parametros.error] ?? ERROR.no_se_pudo!;
+    // Lo que contestó 360dialog o qué corregir de una plantilla: ayuda a resolverlo sin adivinar.
+    const detalle = CON_DETALLE.has(parametros.error) && parametros.detalle ? ` ${parametros.detalle.slice(0, 200)}` : '';
+    return { tipo: 'error', texto: `${texto}${detalle}` };
+  }
   return null;
 }
 
