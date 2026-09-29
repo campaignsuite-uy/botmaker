@@ -25,8 +25,13 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Manual (8.06):** borrador en Claude Docs (https://claude.ai/code/artifact/22ed80b7-30a4-4800-8239-bb44794a2fea).
   Se prueba dándoselo a alguien que no conoce el producto.
 - **Controles en `main`:** 297 unitarias, 79 de base, 202 de pantallas, 385 de celular y 94 del recorrido.
-- **Lo que sigue: Supabase.** Todo lo que se hace sin cuentas está hecho. El próximo paso es el proyecto de Supabase de
-  desarrollo (1.10 a 1.13) y cargar la estructura, la semilla y, si se quiere, los bots de ejemplo.
+- **Lo que sigue: Supabase y Vercel.** Todo lo que se hace sin cuentas está hecho. El próximo paso es el proyecto de
+  Supabase de desarrollo (1.10 a 1.13), las dos apps en Vercel (5.01) y cargar la estructura, la semilla y, si se
+  quiere, los bots de ejemplo. Los pasos, en orden y con casillas, están en la lista guiada
+  (https://claude.ai/code/artifact/baf3585d-8ffd-4a10-834f-c24ac9e2e473); la referencia sigue en
+  `docs/puesta-en-marcha.md`.
+- **Pruebas de aceptación: con la app publicada.** Decidido con Joaquín el 29/9: se hacen en Vercel con Supabase, después
+  del paso 8 de la lista guiada, y no en la demo.
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
@@ -262,7 +267,7 @@ Con Joaquín:
   - Lo legal lo averigua Joaquín aparte.
   - Lo que consultó queda para siempre como temas e intenciones. El texto se borra a los días de guardado del bot
     (90 por defecto).
-  - Quién descarga la base: quedó solo el administrador (la propuesta). Falta que Joaquín lo confirme.
+  - Quién descarga la base: solo el administrador. Lo confirmó Joaquín el 29/9.
 - **Gestor de plantillas (7.07):** entra a la v1, aunque la definición lo dejaba afuera.
   - BotMaker crea las plantillas (nombre, categoría, idioma, texto con espacios y ejemplos).
   - Las manda a aprobar a Meta con `POST /message_templates` de 360dialog.
@@ -273,6 +278,7 @@ Con Joaquín:
 - **Resuelta:** una respuesta con base completa sin derivar, una conversación que atendió una persona o un cierre de
   cortesía. Más adelante, una marca «final» por caja.
 - **Una dirección de aviso por bot:** cada bot con su canal, sin mezclar la información de uno con otro.
+- **Pruebas de aceptación:** con la app publicada en Vercel y la base en Supabase, no en la demo.
 
 Técnicas: las toma Claude y quedan en la sección «Decisiones técnicas» de la guía de pruebas, para verlas juntos.
 

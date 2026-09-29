@@ -8,6 +8,10 @@ propios de BotMaker. En Supabase, un proyecto nuevo `botmaker-dev` y no el de AI
 desarrollo trae una copia reducida del núcleo de CampaignSuite que pisaría el real, y las pruebas no tienen que tocar
 los datos de AI Positioning. El ingreso con Google se configura de cero con el Gmail de CampaignSuite.
 
+**Lista guiada:** los mismos pasos, en orden, con casillas y con la app publicada en Vercel (así se hacen las pruebas de
+aceptación, decidido el 29/9/2026): https://claude.ai/code/artifact/baf3585d-8ffd-4a10-834f-c24ac9e2e473. Este archivo
+queda como referencia; la sección 11 es la de Vercel.
+
 **Regla de las claves:** nunca pasan por el chat, por documentos, por correos ni por archivos que se comparten. Viven en
 las variables de entorno de cada servicio y, en la Mac, en `apps/web/.env.local` (permisos 600, valores entre comillas
 dobles), que se carga con `scripts/cargar-variable.sh` sin que se vean en pantalla.
@@ -45,7 +49,8 @@ git push -u origin main
 1. En supabase.com, con la cuenta de CampaignSuite → **New project** → nombre `botmaker-dev` → región **South America
    (São Paulo)**. El plan gratis permite dos proyectos por usuario: `campaignsuite` y este. La contraseña de
    la base la guarda tu gestor de contraseñas; no se usa en la app.
-2. **Project Settings → Data API → Exposed schemas:** sumar `core` y `bots` (además de `public`) y guardar.
+2. **Database → Extensions:** activar `pg_cron` y `pg_net` (las usan las tareas de las secciones 8 y 9). Los esquemas
+   `core` y `bots` se exponen en el paso 4, cuando ya existen.
 3. **Authentication → URL Configuration:** Site URL `http://localhost:3000`; en Redirect URLs sumar
    `http://localhost:3000/auth/callback`.
 4. **Authentication → Sign In / Providers → Google:** activarlo. El Client ID y el secreto salen de Google Cloud (paso 3)
@@ -74,8 +79,11 @@ pnpm db:sql --dueno tu-correo@gmail.com
 Deja dos archivos en `packages/db/salida/` (no se suben; con `--demo`, un tercero: ver el paso 6). En Supabase →
 **SQL Editor**:
 
-1. Pegá todo `1-estructura.sql` y corrélo. Tiene que terminar sin errores.
-2. `2-semilla.sql` se corre en el paso 6, después de tu primer ingreso.
+1. Pegá todo `1-estructura.sql` y corrélo. Tiene que terminar sin errores. Para copiarlo sin abrirlo:
+   `pbcopy < packages/db/salida/1-estructura.sql`.
+2. **Project Settings → Data API → Exposed schemas:** sumar `core` y `bots` (además de `public`) y guardar. Va después
+   de la estructura porque la lista solo ofrece esquemas que ya existen.
+3. `2-semilla.sql` se corre en el paso 6, después de tu primer ingreso.
 
 ## 5. Las variables de la app
 
@@ -227,3 +235,43 @@ de Next, el método y el error con su mensaje limpio (sin correos, números, cla
    Contesta 500 y en Sentry aparece «Prueba de Sentry: error forzado desde /api/probar-sentry». Sin `SENTRY_DSN`
    contesta 409 (apagado). `pnpm probar:recorrido` hace lo mismo contra un Sentry de mentira y controla, además, que en
    todo el recorrido no haya habido errores del servidor.
+
+## 11. Vercel: las dos apps publicadas
+
+Las pruebas de aceptación se hacen con la app publicada. Dos proyectos en la misma cuenta de Vercel, los dos del mismo
+repositorio (la región, `gru1`, y los comandos están en el `vercel.json` de cada app):
+
+| Proyecto | Root Directory | Qué es |
+| --- | --- | --- |
+| `botmaker` | `apps/web` | La app del equipo. El armado corre antes los tipos y las pruebas unitarias. |
+| `botmaker-publico` | `apps/bots-publico` | El widget, la página de cada bot, WhatsApp y las tareas. |
+
+- **Autor de los commits:** el plan Hobby publica solo commits de su dueño (Vercel compara el correo del commit con la
+  cuenta de GitHub conectada o con los correos de la cuenta de Vercel). Los commits del repositorio llevan
+  `memestudiouy@gmail.com`: si la cuenta de Vercel usa otro, se agrega y se verifica en Account Settings → Emails.
+- **Sin variables**, la app del equipo en Vercel es la demo de solo lectura. Con `CAMPAIGNSUITE_DATOS=supabase` pide
+  el ingreso con Google.
+- **Variables:** en cada proyecto, Settings → Environment Variables, para Production y Preview, las claves con
+  Sensitive. Después de cambiarlas, Deployments → Redeploy: las `NEXT_PUBLIC_` quedan fijas en el armado.
+
+| Variable | botmaker | botmaker-publico |
+| --- | --- | --- |
+| `CAMPAIGNSUITE_DATOS` | `supabase` | `supabase` |
+| `CAMPAIGNSUITE_URL` | la dirección de botmaker | |
+| `BOTS_URL_PUBLICA` | la dirección de botmaker-publico | |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL | Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable (o anon) | |
+| `SUPABASE_SERVICE_ROLE_KEY` | secret (o service_role) | secret (o service_role) |
+| `BOTS_OPENROUTER_API_KEY_VIVO`, `_COPILOTO`, `_FONDO` | la clave de OpenRouter, en las tres | solo `_VIVO` |
+| Clave de tareas | `BOTS_TAREAS_SECRET` | `CRON_SECRET` (la manda el cron de Vercel) |
+| `BOTS_HASH_SECRET` | | se genera una vez y no se cambia |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | | de Cloudflare (sección 8) |
+| `SENTRY_DSN` | el DSN | el DSN |
+
+- **Claves que se inventan** (tareas y HMAC): `openssl rand -hex 32 | pbcopy` y se pegan sin que se vean. La de tareas
+  va, con el mismo valor, en `BOTS_TAREAS_SECRET`, en `CRON_SECRET`, en Vault como `bots_tareas` (sección 9) y en la Mac
+  con `pbpaste | scripts/cargar-variable.sh BOTS_TAREAS_SECRET` (para la prueba de Sentry de la sección 10). Al
+  terminar, `pbcopy < /dev/null`.
+- **Supabase → Authentication → URL Configuration:** Site URL, la dirección de botmaker; en Redirect URLs,
+  `<dirección de botmaker>/auth/callback` además de la de localhost. En Google no cambia nada.
+- **Primer ingreso:** como en la sección 6, pero en la dirección de botmaker.
