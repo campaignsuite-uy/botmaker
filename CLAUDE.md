@@ -5,6 +5,8 @@ políticos. Se construye aparte con la forma del monorepo de CampaignSuite y des
 
 - Definición de producto v1: https://claude.ai/code/artifact/28afd1f9-74eb-4d05-9a9a-fb69b38c865c
 - Plan técnico por etapas: https://claude.ai/code/artifact/9c123447-2d67-4d1a-a326-c041133168b3
+- Tablero de tareas por etapa: https://claude.ai/artifact/Gtpq4nERweRQssNV6WiC1X
+- Resultado de la prueba de motores: https://claude.ai/code/artifact/12653699-1f3d-4a3c-8985-6ea5b9aa281d
 - Guía de desarrollo: `docs/guia-desarrollo.md`. Puesta en marcha: `docs/puesta-en-marcha.md`.
 
 ## No se negocia
