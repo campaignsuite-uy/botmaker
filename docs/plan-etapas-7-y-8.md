@@ -22,7 +22,10 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Semilla de demo para Supabase:** hecha. `pnpm db:sql --demo` arma `3-semilla-demo.sql` desde las mismas funciones que
   la demo; `pnpm db:probar` la carga en PGlite y compara con la demo (bots, bandeja, base de contactos, analítica y
   costos). Sin WhatsApp (necesita una clave real). Pesa algo más de 1 MB.
-- **Lo que sigue:** el manual (8.06). Después, Supabase de desarrollo (1.10) y las cuentas.
+- **Manual (8.06):** borrador en Claude Docs (https://claude.ai/code/artifact/22ed80b7-30a4-4800-8239-bb44794a2fea).
+  Se prueba dándoselo a alguien que no conoce el producto.
+- **Lo que sigue: Supabase.** Todo lo que se hace sin cuentas está hecho. El próximo paso es el proyecto de Supabase de
+  desarrollo (1.10 a 1.13) y cargar la estructura, la semilla y, si se quiere, los bots de ejemplo.
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
