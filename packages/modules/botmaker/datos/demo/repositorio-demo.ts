@@ -29,6 +29,10 @@ import type {
 } from '../repositorio';
 import { claveConsulta, consultasDeEventos } from '../../dominio/contactos';
 import {
+  cierreDeConversacion, conversacionTerminada, horaDe, metricasDeEvento, type DatosAnalitica, type FiltroAnalitica, type ResultadoConversacion,
+} from '../../dominio/analitica';
+import { historiaAnalitica } from './semilla-analitica';
+import {
   estadoSiguiente, mensajePlantilla, ventanaAbierta, type EstadoCanal, type EstadoEnvio, type MensajeWhatsapp, type Plantilla,
 } from '../../dominio/whatsapp';
 import {
@@ -64,6 +68,8 @@ interface EstadoDemo {
   revisiones: Map<string, { veredicto: 'correcta' | 'incorrecta'; convertida: boolean; por: string; fecha: string }>;
   pedidos: PedidoDatos[];
   exportaciones: ExportacionBase[];
+  /** Conversaciones inventadas de la historia de la analítica que atendió alguien del equipo (no tienen conversación). */
+  atendidasHistoricas: Set<string>;
   siguienteId: number;
   // Etapa 7: WhatsApp.
   wa: {
@@ -147,10 +153,14 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       s.versiones.push(c.version);
     }
     const hace = (min: number) => new Date(new Date(c?.publicadoDesde ?? ahora).getTime() - min * 60_000).toISOString();
+    const historia = c ? historiaAnalitica({
+      ahora, publicadoDesde: c.publicadoDesde, botId: c.bot.id, campanaId: c.bot.campanaId, versionId: c.version.id, motores: c.motores, primerIdLlamada: s.llamadas.length + 1,
+    }) : null;
+    const llamadas = [...s.llamadas, ...(historia?.llamadas ?? [])];
     this.e = {
       bots: s.bots,
       motores: s.motores,
-      llamadas: s.llamadas,
+      llamadas,
       versiones: s.versiones,
       cambios: new Map(),
       corridas: [],
@@ -160,19 +170,20 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       ] : [],
       claves: new Map(),
       siguienteBot: s.bots.length + 1,
-      siguienteLlamada: s.llamadas.length + 1,
+      siguienteLlamada: llamadas.length + 1,
       siguienteVersion: s.versiones.length + 1,
       canales: new Map(),
       condiciones: c?.condiciones ?? [],
       contactos: c?.contactos ?? [],
       conversaciones: c?.conversaciones ?? [],
       mensajes: c?.mensajes ?? new Map(),
-      analitica: c?.analitica ?? [],
+      analitica: [...(c?.analitica ?? []), ...(historia?.eventos ?? [])],
       conteos: new Map(),
       alertas: [],
       revisiones: new Map(),
       pedidos: [],
       exportaciones: [],
+      atendidasHistoricas: new Set(historia?.atendidas ?? []),
       siguienteId: 100,
       wa: {
         canales: c ? [{
@@ -1040,6 +1051,78 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   async exportacionesBase(campanaId: string, por: string): Promise<ExportacionBase[]> {
     this.exigir(campanaId, por, 'gestionar_datos_contactos');
     return this.e.exportaciones.filter((x) => x.campanaId === campanaId).slice().reverse().map((x) => ({ ...x }));
+  }
+
+  // ── Analítica (8.01): en la demo se calcula al momento, con las mismas funciones que la tarea de la base ───────────
+
+  async analitica(campanaId: string, filtro: FiltroAnalitica, por: string): Promise<DatosAnalitica> {
+    this.exigir(campanaId, por, 'ver');
+    const ahora = new Date();
+    const bots = new Set(this.e.bots.filter((b) => b.campanaId === campanaId).map((b) => b.id));
+    const desde = Date.parse(filtro.desde);
+    const hasta = Date.parse(filtro.hasta);
+    const coincide = (x: { botId: string; canal: Canal; versionId: string | null }) =>
+      bots.has(x.botId) && (!filtro.botId || x.botId === filtro.botId) && (!filtro.canal || x.canal === filtro.canal) && (!filtro.versionId || x.versionId === filtro.versionId);
+    const enRango = (t: number) => t >= desde && t < hasta;
+
+    const metricas = new Map<string, DatosAnalitica['metricas'][number]>();
+    const porDia = new Map<string, number>();
+    const porConversacion = new Map<string, EstadoDemo['analitica']>();
+    for (const a of this.e.analitica) {
+      if (!bots.has(a.botId)) continue;
+      const lista = porConversacion.get(a.conversacionId) ?? [];
+      lista.push(a);
+      porConversacion.set(a.conversacionId, lista);
+      if (!coincide(a) || !enRango(Date.parse(horaDe(a.fecha)))) continue;
+      for (const m of metricasDeEvento(a)) {
+        const k = `${m.metrica}|${m.caja}|${m.clave}`;
+        const x = metricas.get(k);
+        if (x) x.n += 1;
+        else metricas.set(k, { ...m, n: 1 });
+        if (m.metrica === 'conversacion') porDia.set(a.fecha.slice(0, 10), (porDia.get(a.fecha.slice(0, 10)) ?? 0) + 1);
+      }
+    }
+
+    const cierres = new Map<string, DatosAnalitica['conversaciones'][number]>();
+    for (const [id, evs] of porConversacion) {
+      const c = this.e.conversaciones.find((x) => x.id === id);
+      const primero = evs[0]!;
+      const ctx = c ? { botId: c.botId, canal: c.canal, versionId: c.versionId } : primero;
+      const inicio = c?.iniciadaEn ?? primero.fecha;
+      const actividad = c ? [c.actualizadaEn, c.ultimoDelEquipo ?? ''].sort().at(-1)! : evs.at(-1)!.fecha;
+      if (!coincide(ctx) || !enRango(Date.parse(inicio)) || !conversacionTerminada(actividad, ahora)) continue;
+      const x = cierreDeConversacion(evs, !!c?.ultimoDelEquipo || this.e.atendidasHistoricas.has(id));
+      const k = `${x.resultado}|${x.ultimaCaja}|${x.recorrido}`;
+      const y = cierres.get(k);
+      if (y) y.n += 1;
+      else cierres.set(k, { ...x, n: 1 });
+    }
+
+    let costos: DatosAnalitica['costos'] = null;
+    if (puede(this.rol(campanaId, por), 'ver_costos')) {
+      const g = new Map<string, { funcion: string; motor: string; usd: number; llamadas: number }>();
+      for (const l of this.e.llamadas) {
+        if (l.uso !== 'en_vivo' || !bots.has(l.botId) || (filtro.botId && l.botId !== filtro.botId) || !enRango(Date.parse(l.fecha))) continue;
+        const k = `${l.funcion}|${l.motorId}`;
+        const x = g.get(k) ?? { funcion: l.funcion, motor: l.motorId, usd: 0, llamadas: 0 };
+        x.usd += l.costoUsd;
+        x.llamadas += 1;
+        g.set(k, x);
+      }
+      costos = [...g.values()].map((x) => ({ ...x, usd: Math.round(x.usd * 1e6) / 1e6 })).sort((a, b) => b.usd - a.usd || a.funcion.localeCompare(b.funcion));
+    }
+    const orden = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    return {
+      metricas: [...metricas.values()].sort((a, b) => orden(a.metrica, b.metrica) || orden(a.caja, b.caja) || orden(a.clave, b.clave)),
+      porDia: [...porDia].sort(([a], [b]) => orden(a, b)).map(([dia, n]) => ({ dia, n })),
+      conversaciones: [...cierres.values()].sort((a, b) => b.n - a.n || orden(a.resultado as ResultadoConversacion, b.resultado) || orden(a.recorrido, b.recorrido)),
+      costos,
+      actualizadaEn: null,
+    };
+  }
+
+  async agregarAnalitica(_ahora: Date): Promise<{ eventos: number; conversaciones: number }> {
+    return { eventos: 0, conversaciones: 0 };
   }
 
   async borrarVencidos(ahora: Date): Promise<number> {

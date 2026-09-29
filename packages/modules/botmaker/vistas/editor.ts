@@ -10,6 +10,8 @@ import { ruta, type ContextoPantalla } from '../ui/contexto';
 import { cargarBot, encabezadoBot, hrefBot, type EncabezadoBotVista } from './bot-comun';
 import { mensajeDe, type MensajePantalla } from './mensajes';
 
+import { numerosDiagrama, type NumerosDiagrama } from './analitica';
+
 export interface EstadoEditor {
   campanaId: string;
   botId: string;
@@ -26,6 +28,10 @@ export interface EstadoEditor {
   hrefContenidos: string;
   /** Avisos de los motores del bot para este caso (los da el servidor: el navegador no tiene las fichas). */
   avisosMotores: string[];
+  /** Visitas, abandono y opciones de cada caja en los últimos 30 días (null si el bot todavía no conversó). */
+  numeros: NumerosDiagrama | null;
+  /** Mostrarlos al abrir (se llega desde Analítica con ?numeros=si). */
+  numerosVisibles: boolean;
 }
 
 export interface VistaEditor {
@@ -48,7 +54,7 @@ export async function vistaEditor(repo: Repositorio, ctx: ContextoPantalla, botI
     const conVersiones = !b.borrador && (await repo.versiones(b.bot.id)).length > 0;
     return { ...comun, editor: null, problemas: b.problemas, armar: b.editable && !b.borrador ? { botId: b.bot.id, conVersiones, partido: ctx.organizacion.nombre } : null };
   }
-  const [motores, fichas] = await Promise.all([repo.motoresDeBot(b.bot.id), repo.fichas()]);
+  const [motores, fichas, numeros] = await Promise.all([repo.motoresDeBot(b.bot.id), repo.fichas(), numerosDiagrama(repo, ctx, b.bot)]);
   return {
     ...comun,
     problemas: null,
@@ -59,6 +65,7 @@ export async function vistaEditor(repo: Repositorio, ctx: ContextoPantalla, botI
       flujoInicial: ctx.parametros.flujo ?? null, cajaInicial: ctx.parametros.caja ?? null,
       hrefSimulador: hrefBot(ctx, b.bot.id, 'simulador'), hrefContenidos: hrefBot(ctx, b.bot.id, 'contenidos'),
       avisosMotores: avisosMotores(b.bot, motores, fichas).filter((a) => a.nivel === 'atencion').map((a) => a.texto),
+      numeros, numerosVisibles: !!numeros && ctx.parametros.numeros === 'si',
     },
   };
 }

@@ -152,3 +152,26 @@ GitHub las corre en cada push, sin claves.
   `exportaciones_base` y el índice de eventos por conversación).
 - **Pruebas:** `dominio/contactos.test.ts`, la sección «Base de contactos» de `pnpm db:probar`, las pantallas de
   `pnpm probar` y el tramo «base de contactos» de `pnpm probar:recorrido`.
+
+## Analítica (8.01)
+
+- **Qué es:** la pantalla Analítica (menú Conversaciones; la ven todos los que entran a BotMaker, el costo solo quien ve
+  costos): conversaciones por día, cómo terminaron, qué consultan, temas, recorridos, embudo por flujo, lo que no
+  entendió y el costo en vivo por función y motor. En el editor, «Números (30 días)» pone sobre cada caja sus visitas, el
+  abandono y el porcentaje de cada opción.
+- **De dónde sale:** de `bots.events`, sin textos. Dos cálculos, iguales en la demo y en la base
+  (`dominio/analitica.ts` ↔ `bots_0010_analitica.sql`), y `pnpm db:probar` compara los dos sobre todos los eventos:
+  - `metricasDeEvento` ↔ `bots.metricas_evento`: a qué suma cada evento; `bots.stats_hourly` guarda las sumas por bot,
+    canal, versión y hora.
+  - `cierreDeConversacion` ↔ `bots.cierre_conversacion`: resuelta, derivada o sin resolver, la última caja y el
+    recorrido de las primeras 4 cajas; `bots.session_outcomes`, a los 30 minutos sin movimiento (se recalcula si la
+    conversación sigue).
+  Si se cambia uno, se cambia el otro.
+- **La tarea:** `bots.tarea_agregar_analitica` suma de a tramos (hasta el primer evento del último minuto, así un turno
+  que tardó en confirmarse no queda afuera) y la corren pg_cron cada 10 minutos y `/api/tareas`. La demo calcula al
+  momento, con las mismas funciones.
+- **La demo** trae unas 300 conversaciones inventadas del bot publicado desde que se publicó
+  (`datos/demo/semilla-analitica.ts`): solo eventos y llamadas a motores, sin mensajes ni contactos.
+- **Pruebas:** `dominio/analitica.test.ts`, la sección «Analítica» de `pnpm db:probar`, las vistas y pantallas y la
+  etapa 8 de `pnpm probar:recorrido`.
+

@@ -12,6 +12,8 @@ import { vistaMotores } from './motores';
 import { vistaNuevoBot } from './nuevo';
 import { mensajeDe } from './mensajes';
 import { descargaContactos, vistaContactos, vistaFichaContacto } from './contactos';
+import { numerosDiagrama, periodoDe, vistaAnalitica } from './analitica';
+import { vistaEditor } from './editor';
 
 let repo: RepositorioDemo;
 beforeEach(() => {
@@ -37,11 +39,11 @@ function ctx(personaId: string, parametros: Record<string, string> = {}, demo = 
 describe('menú', () => {
   it('cada rol ve lo suyo', async () => {
     const items = async (p: string, demo = false) => (await datosMarco(repo, ctx(p, {}, demo))).grupos.flatMap((g) => g.items.map((i) => i.id));
-    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'motores', 'costos', 'equipo']);
-    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'motores', 'equipo']);
-    expect(await items('p-andres')).toEqual(['bots', 'bandeja', 'contactos', 'motores', 'equipo']);
-    expect(await items('p-equipo')).toEqual(['bots', 'motores', 'equipo']);
-    expect(await items('p-joaquin', true)).toEqual(['bots', 'bandeja', 'contactos', 'motores', 'costos', 'equipo']);
+    expect(await items('p-joaquin')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'analitica', 'motores', 'costos', 'equipo']);
+    expect(await items('p-lucia')).toEqual(['bots', 'nuevo', 'bandeja', 'contactos', 'analitica', 'motores', 'equipo']);
+    expect(await items('p-andres')).toEqual(['bots', 'bandeja', 'contactos', 'analitica', 'motores', 'equipo']);
+    expect(await items('p-equipo')).toEqual(['bots', 'analitica', 'motores', 'equipo']);
+    expect(await items('p-joaquin', true)).toEqual(['bots', 'bandeja', 'contactos', 'analitica', 'motores', 'costos', 'equipo']);
   });
 });
 
@@ -163,3 +165,50 @@ describe('base de contactos', () => {
     expect(v.descarga?.href).toBe('/otro-camino/pa-2029/bots/contactos/descargar');
   });
 });
+
+describe('analítica', () => {
+  it('arranca con el bot publicado y 30 días: conversaciones, cómo terminaron, consultas sin saludos y el embudo', async () => {
+    const v = await vistaAnalitica(repo, ctx('p-joaquin'));
+    expect(v.filtros).toMatchObject({ bot: 'bot-demo-3', periodo: '30' });
+    expect(v.vacia).toBe(false);
+    expect(v.kpis.map((k) => k.etiqueta)).toEqual(['Conversaciones', 'Resueltas', 'Derivadas al equipo', 'No entendidas']);
+    expect(Number(v.kpis[0]!.valor.replace(/\D/g, ''))).toBeGreaterThan(100);
+    expect(v.porDia).toHaveLength(30);
+    expect(v.consultas.map((c) => c.texto)).not.toContain('Cortesía');
+    expect(v.consultas[0]).toMatchObject({ texto: 'Propuesta', href: expect.stringContaining('/contactos?bot=bot-demo-3&consulta=intencion%3Apropuesta') });
+    expect(v.temas.length).toBeGreaterThan(5);
+    const menu = v.bot!.embudo[0]!.cajas.find((c) => c.direccion === '1.2')!;
+    expect(menu.nombre).toBe('Menú principal');
+    expect(menu.opciones).toMatch(/^A Propuestas: \d+ %/);
+    expect(v.bot!.recorridos[0]!.texto).toMatch(/^Bienvenida › Menú principal/);
+    expect(v.costos?.filas.length).toBeGreaterThan(0);
+  });
+
+  it('el lector la ve sin costos ni enlaces a la base de contactos; con todos los bots no hay embudo', async () => {
+    const v = await vistaAnalitica(repo, ctx('p-equipo', { bot: 'todos', periodo: '7' }));
+    expect(v.costos).toBeNull();
+    expect(v.bot).toBeNull();
+    expect(v.consultas.every((c) => !c.href)).toBe(true);
+    expect(v.porDia).toHaveLength(7);
+  });
+
+  it('fechas elegidas (días en UTC, incluido el último) y un filtro que no es de la campaña no filtra', async () => {
+    const ahora = new Date('2026-09-29T15:00:00Z');
+    expect(periodoDe({ desde: '2026-09-01', hasta: '2026-09-02' }, ahora)).toMatchObject({ desde: '2026-09-01T00:00:00.000Z', hasta: '2026-09-03T00:00:00.000Z', periodo: '' });
+    expect(periodoDe({ desde: '2026-09-05', hasta: '2026-09-02' }, ahora).periodo).toBe('30');
+    expect(periodoDe({ periodo: 'hoy' }, ahora).desde).toBe('2026-09-29T00:00:00.000Z');
+    const v = await vistaAnalitica(repo, ctx('p-lucia', { bot: 'bot-de-otra-campana', canal: 'fax' }));
+    expect(v.filtros).toMatchObject({ bot: 'bot-demo-3', canal: '' });
+  });
+
+  it('los números sobre el diagrama: visitas, abandono y opciones por caja', async () => {
+    const bot = (await repo.bot('bot-demo-3'))!;
+    const n = (await numerosDiagrama(repo, ctx('p-lucia'), bot))!;
+    expect(n.porCaja.n_menu!.opciones.A).toMatch(/^\d+ %$/);
+    expect(Number(n.porCaja.n_bienvenida!.visitas.replace(/\D/g, ''))).toBeGreaterThan(100);
+    expect(await numerosDiagrama(repo, ctx('p-lucia'), (await repo.bot('bot-demo-1'))!)).toBeNull();
+    const ed = await vistaEditor(repo, ctx('p-lucia', { numeros: 'si' }), 'bot-demo-1');
+    expect(ed?.editor).toMatchObject({ numeros: null, numerosVisibles: false });
+  });
+});
+

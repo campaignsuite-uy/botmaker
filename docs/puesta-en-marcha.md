@@ -143,7 +143,11 @@ SQL Editor:
 ```sql
 select cron.schedule('bots-alertas', '*/10 * * * *', $$select bots.tarea_revisar_alertas(now())$$);
 select cron.schedule('bots-borrado', '20 6 * * *', $$select bots.tarea_borrar_vencidos(now())$$);
+select cron.schedule('bots-analitica', '*/10 * * * *', $$select bots.tarea_agregar_analitica(now())$$);
 ```
+
+La analítica (8.01) se suma de a tramos: la pantalla Analítica muestra hasta dónde está sumado. `/api/tareas` también la
+corre, así que con la tarea de WhatsApp de cada minuto (sección 9) queda al día aunque falte `bots-analitica`.
 
 ## 9. WhatsApp (etapa 7): el número de la campaña con 360dialog
 
