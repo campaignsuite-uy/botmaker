@@ -186,3 +186,22 @@ select cron.schedule('bots-whatsapp', '* * * * *', $$
   )
 $$);
 ```
+
+## 10. Errores a Sentry (8.03)
+
+BotMaker manda los errores del servidor de las dos apps a Sentry con un cliente mínimo propio (sin el SDK). Sin
+`SENTRY_DSN` no manda nada. No manda cuerpos de pedidos, ni la dirección con sus parámetros, ni encabezados: solo la ruta
+de Next, el método y el error con su mensaje limpio (sin correos, números, claves ni valores de la base).
+
+1. En Sentry, un proyecto `botmaker` de tipo Node.js (tarea 8.02). El DSN está en Settings → Client Keys (DSN).
+2. En la computadora: `scripts/cargar-variable.sh SENTRY_DSN` (lo pide sin mostrarlo). En Vercel, la misma variable en
+   los dos proyectos (equipo y pública).
+3. La prueba de cierre, con la clave de las tareas en una variable de la terminal (nunca escrita en el comando):
+
+   ```sh
+   curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $BOTS_TAREAS_SECRET" https://<app>/api/probar-sentry
+   ```
+
+   Contesta 500 y en Sentry aparece «Prueba de Sentry: error forzado desde /api/probar-sentry». Sin `SENTRY_DSN`
+   contesta 409 (apagado). `pnpm probar:recorrido` hace lo mismo contra un Sentry de mentira y controla, además, que en
+   todo el recorrido no haya habido errores del servidor.

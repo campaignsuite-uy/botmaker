@@ -16,7 +16,8 @@
     "./ui/*": "./ui/*.tsx",
     "./acciones/*": "./acciones/*.ts",
     "./canal-web/*": "./canal-web/*.ts",
-    "./canal-whatsapp/*": "./canal-whatsapp/*.ts"
+    "./canal-whatsapp/*": "./canal-whatsapp/*.ts",
+    "./observabilidad/*": "./observabilidad/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

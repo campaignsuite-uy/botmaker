@@ -15,11 +15,11 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Analítica (8.01):** hecha, con la pantalla Analítica y los números sobre el diagrama.
   - Migración `bots_0010_analitica.sql`.
   - Pruebas: 281 unitarias, 78 de base, 202 de pantallas, 385 de celular y 91 del recorrido.
+- **Sentry (8.03):** hecho y apagado hasta que haya cuenta (`SENTRY_DSN`); la prueba de cierre es `/api/probar-sentry`.
 - **Lo que sigue, en orden:**
-  1. Sentry (8.03).
-  2. Respuestas grabadas (1.07).
-  3. Semilla de demo para Supabase.
-  4. Manual (8.06).
+  1. Respuestas grabadas (1.07).
+  2. Semilla de demo para Supabase.
+  3. Manual (8.06).
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 
@@ -211,7 +211,11 @@ Lo diseñado:
   - Filtros: bot, canal, versión y fechas.
 - **Sobre el diagrama**: visitas por caja, porcentaje de cada opción y abandono.
 
-### 8.03 Sentry, apagado hasta que haya cuenta
+### 8.03 Sentry, apagado hasta que haya cuenta (hecho)
+
+Como se diseñó. Además, `pnpm probar:recorrido` levanta un Sentry de mentira: controla que el error forzado llegue sin
+datos de nadie y que en todo el recorrido no haya habido errores del servidor.
+
 
 - Sin el SDK: un cliente mínimo que manda el error al endpoint de Sentry con el DSN.
 - Lo engancha `onRequestError` de `instrumentation.ts` en las dos apps.
