@@ -36,7 +36,13 @@ describe('motores', () => {
         expect(f?.funciones).toContain(m.funcion);
       }
       expect(fichaMotor(m.principal)!.empresa).not.toBe(fichaMotor(m.respaldo!)!.empresa);
+      expect(m.dobleLectura).toBe(m.funcion === 'interpretar');
     }
+  });
+  it('Mistral y Ministral quedaron apagados con la prueba', () => {
+    expect(fichaMotor('mistral-small-4')?.activo).toBe(false);
+    expect(fichaMotor('ministral-8b')?.activo).toBe(false);
+    expect(motoresPara('interpretar').map((f) => f.id)).not.toContain('mistral-small-4');
   });
   it('no hay modelos de OpenAI por API ni ids repetidos', () => {
     expect(FICHAS_MOTORES.some((f) => f.modelo.startsWith('openai/gpt-') && !f.modelo.includes('oss'))).toBe(false);
@@ -60,7 +66,7 @@ describe('avisos de motores', () => {
     expect(exigeAvisoIa(defecto)).toBe(true);
   });
   it('el copiloto no cuenta para el aviso de IA', () => {
-    const soloCopiloto = [{ funcion: 'interpretar' as const, principal: 'gpt-oss-120b', respaldo: null, tiempoMaximoMs: 2500 }, { funcion: 'copiloto' as const, principal: 'claude-sonnet-5', respaldo: null, tiempoMaximoMs: 60000 }];
+    const soloCopiloto = [{ funcion: 'interpretar' as const, principal: 'gpt-oss-120b', respaldo: null, tiempoMaximoMs: 2500, dobleLectura: false }, { funcion: 'copiloto' as const, principal: 'claude-sonnet-5', respaldo: null, tiempoMaximoMs: 60000, dobleLectura: false }];
     expect(exigeAvisoIa(soloCopiloto)).toBe(false);
   });
   it('personalización encendida con Claude: aviso de atención, nunca bloqueo', () => {
@@ -69,15 +75,15 @@ describe('avisos de motores', () => {
   });
   it('respaldo de la misma empresa y sin respaldo', () => {
     const m = [
-      { funcion: 'interpretar' as const, principal: 'claude-haiku-4.5', respaldo: 'claude-sonnet-5', tiempoMaximoMs: 2500 },
-      { funcion: 'responder' as const, principal: 'gpt-oss-120b', respaldo: null, tiempoMaximoMs: 4000 },
+      { funcion: 'interpretar' as const, principal: 'claude-haiku-4.5', respaldo: 'claude-sonnet-5', tiempoMaximoMs: 2500, dobleLectura: false },
+      { funcion: 'responder' as const, principal: 'gpt-oss-120b', respaldo: null, tiempoMaximoMs: 4000, dobleLectura: false },
     ];
     const a = avisosMotores({ caso: 'politico', personalizacion: false }, m);
     expect(a.some((x) => /misma empresa/.test(x.texto))).toBe(true);
     expect(a.some((x) => /no tiene motor de respaldo/.test(x.texto))).toBe(true);
   });
   it('Mistral entrena por defecto; Gemini y los menores de 18', () => {
-    const m = [{ funcion: 'responder' as const, principal: 'mistral-small-4', respaldo: 'gemini-3.1-flash-lite', tiempoMaximoMs: 4000 }];
+    const m = [{ funcion: 'responder' as const, principal: 'mistral-small-4', respaldo: 'gemini-3.1-flash-lite', tiempoMaximoMs: 4000, dobleLectura: false }];
     const a = avisosMotores({ caso: 'electoral', personalizacion: false }, m);
     expect(a.some((x) => /entrenar por defecto/.test(x.texto))).toBe(true);
     expect(a.some((x) => /menores de 18/.test(x.texto))).toBe(true);

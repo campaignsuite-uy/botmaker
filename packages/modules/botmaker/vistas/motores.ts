@@ -56,10 +56,10 @@ export async function vistaMotores(repo: Repositorio, _ctx: ContextoPantalla): P
     porDefecto: defecto.map((m) => ({
       funcion: ETIQUETA_FUNCION[m.funcion],
       principal: fichaMotor(m.principal, fichas)?.nombre ?? m.principal,
-      respaldo: m.respaldo ? fichaMotor(m.respaldo, fichas)?.nombre ?? m.respaldo : 'Sin respaldo',
+      respaldo: m.respaldo ? `${fichaMotor(m.respaldo, fichas)?.nombre ?? m.respaldo}${m.dobleLectura ? ', en doble lectura' : ''}` : 'Sin respaldo',
       tiempo: `${decimal(m.tiempoMaximoMs / 1000, 1)} s`,
     })),
     simulado: simularMotores(),
-    nota: 'Precios en USD por millón de tokens (entrada / salida). Las condiciones salen de la evaluación de motores del 27/9/2026 y se usan para avisar, nunca para bloquear. Los motores por defecto son provisorios hasta cerrar la prueba de motores.',
+    nota: 'Precios en USD por millón de tokens (entrada / salida). Las condiciones salen de la evaluación de motores del 27/9/2026 y se usan para avisar, nunca para bloquear. Los motores por defecto salen de la prueba de motores del 28/9/2026. En doble lectura, los dos motores leen cada mensaje a la vez y, si no coinciden, el bot pregunta.',
   };
 }

@@ -59,8 +59,8 @@ describe('crear bot', () => {
     expect((await ejecutarCrearBot(como('p-lucia'), nuevo({ clave: 'x' }))).codigo).toBe('datos');
     const s = await ejecutarCrearBot(como('p-lucia'), nuevo());
     const m = await repo.motoresDeBot(s.botId!);
-    expect(m.map((x) => [x.funcion, x.principal, x.respaldo])).toEqual([
-      ['interpretar', 'gpt-oss-120b', 'claude-haiku-4.5'], ['responder', 'gpt-oss-120b', 'claude-haiku-4.5'], ['copiloto', 'claude-sonnet-5', 'gpt-oss-120b'],
+    expect(m.map((x) => [x.funcion, x.principal, x.respaldo, x.dobleLectura])).toEqual([
+      ['interpretar', 'gemini-3.1-flash-lite', 'gpt-oss-120b', true], ['responder', 'gemini-3.1-flash-lite', 'claude-haiku-4.5', false], ['copiloto', 'claude-sonnet-5', 'gpt-oss-120b', false],
     ]);
   });
 });
@@ -82,7 +82,13 @@ describe('ajustes del bot', () => {
     const b = await repo.bot('bot-demo-1');
     expect([b?.topeDiarioUsd, b?.topeMensualUsd]).toEqual([3.5, 50]);
     expect((await repo.motoresDeBot('bot-demo-1'))[0]).toMatchObject({ principal: 'claude-haiku-4.5', respaldo: 'gpt-oss-120b' });
-    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, principal_copiloto: 'ministral-8b' }))).codigo).toBe('motor_funcion');
+    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, principal_copiloto: 'gemini-3.1-flash-lite' }))).codigo).toBe('motor_funcion');
+    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, principal_copiloto: 'ministral-8b' }))).codigo).toBe('motor');
+    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, respaldo_interpretar: '', doble_interpretar: 'si' }))).codigo).toBe('doble_lectura');
+    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, doble_interpretar: 'si' }))).tipo).toBe('ok');
+    expect((await repo.motoresDeBot('bot-demo-1'))[0]).toMatchObject({ funcion: 'interpretar', dobleLectura: true });
+    expect((await ejecutarGuardarMotores(como('p-joaquin'), fd(base))).tipo).toBe('ok');
+    expect((await repo.motoresDeBot('bot-demo-1'))[0]).toMatchObject({ dobleLectura: false });
     expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, respaldo_interpretar: 'claude-haiku-4.5' }))).codigo).toBe('respaldo_igual');
     expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, topeDiario: '80' }))).codigo).toBe('tope_diario_mayor');
     expect((await ejecutarGuardarMotores(como('p-joaquin'), fd({ ...base, topeDiario: 'mucho' }))).codigo).toBe('tope');
@@ -107,7 +113,8 @@ describe('ajustes del bot', () => {
     expect(s.tipo).toBe('ok');
     expect(s.extra?.detalle).toMatch(/Intención: tramite_electoral/);
     expect((await repo.llamadas(CAMPANA, { limite: 1 }))[0]).toMatchObject({ uso: 'pruebas', personaId: 'p-joaquin' });
-    expect((await ejecutarProbarMotor(como('p-joaquin'), capa, fd({ botId: 'bot-demo-1', funcion: 'copiloto', motor: 'ministral-8b' }))).codigo).toBe('motor_funcion');
+    expect((await ejecutarProbarMotor(como('p-joaquin'), capa, fd({ botId: 'bot-demo-1', funcion: 'copiloto', motor: 'gemini-3.1-flash-lite' }))).codigo).toBe('motor_funcion');
+    expect((await ejecutarProbarMotor(como('p-joaquin'), capa, fd({ botId: 'bot-demo-1', funcion: 'interpretar', motor: 'ministral-8b' }))).codigo).toBe('motor');
   });
 });
 

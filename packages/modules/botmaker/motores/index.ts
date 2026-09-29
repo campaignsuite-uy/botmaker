@@ -8,7 +8,7 @@ import { simularMotores } from './claves';
 import { AdaptadorOpenRouter } from './openrouter';
 import { AdaptadorSimulado } from './simulado';
 
-export { CapaMotores, type PedidoCapa, type ResultadoCapa, type IntentoMotor } from './capa';
+export { CapaMotores, type PedidoCapa, type ResultadoCapa, type IntentoMotor, type LecturaDoble } from './capa';
 export { simularMotores, claveOpenRouter, VARIABLE_CLAVE } from './claves';
 export { ENTRADA_PRUEBA } from './prueba';
 export type { ContextoBot } from './prompts';

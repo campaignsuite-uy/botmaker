@@ -96,7 +96,10 @@ export async function ejecutarGuardarMotores(c: ContextoNucleo, fd: FormData): P
     if (!existe(principal) || (respaldo && !existe(respaldo))) return mal('motor');
     if (!sirve(principal) || (respaldo && !sirve(respaldo))) return mal('motor_funcion');
     if (respaldo === principal) return mal('respaldo_igual');
-    motores[f] = { principal, respaldo };
+    // La casilla de doble lectura está solo en interpretar: sin marcar, el formulario no la manda.
+    const dobleLectura = f === 'interpretar' ? texto(fd, 'doble_interpretar') === 'si' : false;
+    if (dobleLectura && !respaldo) return mal('doble_lectura');
+    motores[f] = { principal, respaldo, dobleLectura };
   }
   const t = esquemaTopes.safeParse({ diarioUsd: numeroDe(texto(fd, 'topeDiario')), mensualUsd: numeroDe(texto(fd, 'topeMensual')) });
   if (!t.success) return mal(codigoError(t.error));

@@ -35,7 +35,7 @@ export function vistaNuevoBot(ctx: ContextoPantalla): VistaNuevoBot {
     mercados: MERCADOS.map((m) => ({ valor: m.iso, texto: m.nombre })),
     mercadoInicial: mercado(ctx.campana.paisIso)?.iso ?? MERCADOS[0]!.iso,
     tratos: TRATOS.map((t) => ({ valor: t, texto: ETIQUETA_TRATO[t] })),
-    motores: MOTORES_POR_DEFECTO.map((m) => `${ETIQUETA_FUNCION[m.funcion]}: ${fichaMotor(m.principal)?.nombre ?? m.principal}${m.respaldo ? `, respaldo ${fichaMotor(m.respaldo)?.nombre ?? m.respaldo}` : ''}`),
+    motores: MOTORES_POR_DEFECTO.map((m) => `${ETIQUETA_FUNCION[m.funcion]}: ${fichaMotor(m.principal)?.nombre ?? m.principal}${m.respaldo ? `${m.dobleLectura ? ' y ' : ', respaldo '}${fichaMotor(m.respaldo)?.nombre ?? m.respaldo}${m.dobleLectura ? ' en doble lectura' : ''}` : ''}`),
     hrefLista: ruta(ctx),
   };
 }

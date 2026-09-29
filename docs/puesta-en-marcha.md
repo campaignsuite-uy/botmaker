@@ -3,6 +3,11 @@
 Cómo pasar de la demo en memoria al proyecto de Supabase de desarrollo, paso a paso. Todo se hace desde la Terminal de
 la Mac, en la carpeta del repositorio, y desde las pantallas de cada servicio.
 
+**Cuentas:** las mismas de CampaignSuite (GitHub, Supabase, OpenRouter, Vercel y Trigger.dev), con proyectos y claves
+propios de BotMaker. En Supabase, un proyecto nuevo `botmaker-dev` y no el de AI Positioning: la instalación de
+desarrollo trae una copia reducida del núcleo de CampaignSuite que pisaría el real, y las pruebas no tienen que tocar
+los datos de AI Positioning. El ingreso con Google se configura de cero con el Gmail de CampaignSuite.
+
 **Regla de las claves:** nunca pasan por el chat, por documentos, por correos ni por archivos que se comparten. Viven en
 las variables de entorno de cada servicio y, en la Mac, en `apps/web/.env.local` (permisos 600, valores entre comillas
 dobles), que se carga con `scripts/cargar-variable.sh` sin que se vean en pantalla.
@@ -23,7 +28,7 @@ sola. Si se queja de "Ignored build scripts: esbuild", corré `pnpm approve-buil
 
 ## 1. GitHub
 
-1. En GitHub, con la misma cuenta de CampaignSuite: **New repository** → nombre `botmaker` → **Private** → sin README,
+1. En GitHub, con la cuenta de CampaignSuite: **New repository** → nombre `botmaker` → **Private** → sin README,
    sin .gitignore y sin licencia (el repositorio ya los trae).
 2. En la Terminal (cambiá `TU-CUENTA` por la de GitHub):
 
@@ -37,7 +42,8 @@ git push -u origin main
 
 ## 2. Supabase de desarrollo
 
-1. En supabase.com → **New project** → nombre `botmaker-dev` → región **South America (São Paulo)**. La contraseña de
+1. En supabase.com, con la cuenta de CampaignSuite → **New project** → nombre `botmaker-dev` → región **South America
+   (São Paulo)**. El plan gratis permite dos proyectos por usuario: `campaignsuite` y este. La contraseña de
    la base la guarda tu gestor de contraseñas; no se usa en la app.
 2. **Project Settings → Data API → Exposed schemas:** sumar `core` y `bots` (además de `public`) y guardar.
 3. **Authentication → URL Configuration:** Site URL `http://localhost:3000`; en Redirect URLs sumar
@@ -47,9 +53,12 @@ git push -u origin main
 
 ## 3. Google Cloud (el ingreso con Google)
 
-Puede ser el mismo proyecto de Google de CampaignSuite, con un cliente nuevo:
+Con el Gmail de CampaignSuite (no la cuenta personal que usó AI Positioning), de cero:
 
-1. **APIs & Services → Credentials → Create credentials → OAuth client ID** → tipo **Web application** → nombre
+0. En console.cloud.google.com: un proyecto `botmaker`; en **Google Auth Platform → Get started**, App name
+   `BotMaker`, correo de soporte el Gmail de CampaignSuite, Audience **External**; en **Audience**, queda en
+   **Testing** y en **Test users** se cargan los correos de quienes van a entrar.
+1. **Clients → Create client** (o **APIs & Services → Credentials → Create credentials → OAuth client ID**) → tipo **Web application** → nombre
    `BotMaker dev`.
 2. **Authorized redirect URIs:** `https://<ref-del-proyecto>.supabase.co/auth/v1/callback` (la dirección exacta la
    muestra Supabase en la pantalla de Google del paso 2.4).
@@ -80,7 +89,8 @@ scripts/cargar-variable.sh BOTS_OPENROUTER_API_KEY_COPILOTO
 scripts/cargar-variable.sh BOTS_OPENROUTER_API_KEY_FONDO
 ```
 
-Cada uno pide el valor sin mostrarlo. En desarrollo alcanza con la clave de OpenRouter que ya tenés en las tres. Los
+Cada uno pide el valor sin mostrarlo. Para OpenRouter, creá en la misma cuenta una clave nueva para BotMaker, con un
+tope de gasto (Settings → API Keys → Create key → Credit limit); en desarrollo va la misma en las tres. Los
 nombres están en `apps/web/.env.ejemplo`.
 
 ## 6. Primer ingreso y semilla

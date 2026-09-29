@@ -17,7 +17,11 @@ export function palabras(texto: string): Set<string> {
 
 const coinciden = (a: Set<string>, b: Set<string>) => [...a].filter((p) => b.has(p)).length;
 
-export function interpretarSimulado(e: EntradaInterpretar): Interpretacion {
+/**
+ * `semilla` (el id del motor) desempata cuando dos intenciones suman lo mismo: así, en doble lectura, dos motores
+ * simulados pueden no coincidir, como pasa con los reales en los mensajes ambiguos.
+ */
+export function interpretarSimulado(e: EntradaInterpretar, semilla = ''): Interpretacion {
   const msj = palabras(e.mensaje);
   const saludo = /\b(hola|buenas|buen dia|buenos dias|xopa|que tal)\b/i.test(e.mensaje.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
   const puntaje = e.intenciones.map((i) => {
@@ -27,7 +31,9 @@ export function interpretarSimulado(e: EntradaInterpretar): Interpretacion {
     return { id: i.id, p };
   }).sort((a, b) => b.p - a.p);
   const sinEntender = e.intenciones.find((i) => /^(otra|no_entendido|ninguna|otro)$/.test(i.id))?.id ?? e.intenciones[0]!.id;
-  const mejor = puntaje[0] && puntaje[0].p > 0 ? puntaje[0] : { id: sinEntender, p: 0 };
+  const empatados = puntaje.filter((x) => x.p > 0 && x.p === puntaje[0]!.p);
+  const desempate = empatados.length > 1 ? [...semilla].reduce((a, c) => a + c.charCodeAt(0), 0) % empatados.length : 0;
+  const mejor = empatados.length ? empatados[desempate]! : { id: sinEntender, p: 0 };
   const temas = e.temas.map((t) => ({ id: t.id, p: coinciden(msj, palabras(`${t.id.replace(/_/g, ' ')} ${t.nombre}`)) })).sort((a, b) => b.p - a.p);
   const ninguno = e.temas.find((t) => t.id === 'ninguno')?.id ?? e.temas[0]!.id;
   const tema = temas[0] && temas[0].p > 0 ? temas[0].id : ninguno;
@@ -62,7 +68,7 @@ export class AdaptadorSimulado implements Adaptador {
   async llamar(p: PedidoAdaptador): Promise<LlamadaCruda> {
     const inicio = performance.now();
     let salida: unknown;
-    if (p.funcion === 'interpretar') salida = interpretarSimulado(p.entrada as EntradaInterpretar);
+    if (p.funcion === 'interpretar') salida = interpretarSimulado(p.entrada as EntradaInterpretar, p.ficha.id);
     else if (p.funcion === 'responder') salida = responderSimulado(p.entrada as EntradaResponder);
     else salida = copilotoSimulado(p.entrada as EntradaCopiloto);
     const contenido = JSON.stringify(salida);

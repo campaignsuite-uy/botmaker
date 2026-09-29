@@ -172,10 +172,11 @@ async function main() {
     }
   });
   await prueba('bots.engine_defaults es igual a MOTORES_POR_DEFECTO', async () => {
-    const base = await filas<{ function: string; primary_engine_id: string; fallback_engine_id: string | null; timeout_ms: number }>(db, 'select * from bots.engine_defaults');
+    const base = await filas<{ function: string; primary_engine_id: string; fallback_engine_id: string | null; timeout_ms: number; double_read: boolean }>(db, 'select * from bots.engine_defaults');
+    afirmar(base.length === MOTORES_POR_DEFECTO.length, `La base tiene ${base.length} funciones y el código ${MOTORES_POR_DEFECTO.length}`);
     for (const m of MOTORES_POR_DEFECTO) {
       const b = base.find((x) => x.function === m.funcion);
-      afirmar(b && b.primary_engine_id === m.principal && b.fallback_engine_id === m.respaldo && b.timeout_ms === m.tiempoMaximoMs, `${m.funcion}: base ${JSON.stringify(b)} ≠ código ${JSON.stringify(m)}`);
+      afirmar(b && b.primary_engine_id === m.principal && b.fallback_engine_id === m.respaldo && b.timeout_ms === m.tiempoMaximoMs && b.double_read === m.dobleLectura, `${m.funcion}: base ${JSON.stringify(b)} ≠ código ${JSON.stringify(m)}`);
     }
   });
   await prueba('el producto está en el catálogo con los roles del código', async () => {
@@ -210,6 +211,9 @@ async function main() {
     const b = await uno<{ organization_id: string; public_id: string; status: string }>(db, `select organization_id, public_id, status from bots.bots where id = $1`, [botA]);
     afirmar(b?.organization_id === ORG_A && /^[a-z0-9]{10}$/.test(b.public_id) && b.status === 'borrador', JSON.stringify(b));
     afirmar(await cuenta(db, `select count(*) as n from bots.bot_engines where bot_id = $1`, [botA]) === 3, 'Faltan motores del bot');
+    const m = await filas<{ function: string; primary_engine_id: string; double_read: boolean }>(db, `select function, primary_engine_id, double_read from bots.bot_engines where bot_id = $1 order by function`, [botA]);
+    afirmar(m.every((x) => x.double_read === (x.function === 'interpretar')), `Doble lectura: ${JSON.stringify(m)}`);
+    afirmar(m.find((x) => x.function === 'interpretar')?.primary_engine_id === 'gemini-3.1-flash-lite', `Interpretar: ${JSON.stringify(m)}`);
   });
   await prueba('crear con la misma clave devuelve el mismo bot; con la clave de otra campaña, error', async () => {
     const clave = U(900);
@@ -251,7 +255,10 @@ async function main() {
       ['{"interpretar": {"principal": "gpt-9"}}', /Motor desconocido/],
       ['{"interpretar": {"principal": "gpt-oss-120b", "respaldo": "gpt-oss-120b"}}', /otro motor/],
       ['{"volar": {"principal": "gpt-oss-120b"}}', /Función desconocida/],
-      ['{"copiloto": {"principal": "ministral-8b"}}', /no sirve para la función/],
+      ['{"copiloto": {"principal": "gemini-3.1-flash-lite"}}', /no sirve para la función/],
+      ['{"interpretar": {"principal": "mistral-small-4"}}', /apagado/],
+      ['{"interpretar": {"principal": "gpt-oss-120b", "dobleLectura": true}}', /necesita un motor de respaldo/],
+      ['{"responder": {"principal": "gpt-oss-120b", "respaldo": "claude-haiku-4.5", "dobleLectura": true}}', /solo para interpretar/],
     ] as const) {
       const x = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, $2::jsonb, null)`, [botA, mal])));
       afirmar(x && patron.test(x), `${mal}: ${x}`);
@@ -263,10 +270,20 @@ async function main() {
       afirmar(y, `Aceptó los topes ${t}`);
     }
     const det = await uno<{ detail: Record<string, unknown> }>(db, `select detail from core.audit_log where action = 'bots.motores_cambiados' order by id desc limit 1`);
-    const d = det?.detail as { interpretar?: { principal?: string; respaldo?: string } } | undefined;
-    afirmar(Object.keys(d ?? {}).join() === 'interpretar' && d?.interpretar?.principal === 'claude-haiku-4.5' && d.interpretar.respaldo === 'gpt-oss-120b' && Object.keys(d.interpretar).length === 2, `La actividad guarda lo validado: ${JSON.stringify(det)}`);
+    const d = det?.detail as { interpretar?: { principal?: string; respaldo?: string; dobleLectura?: boolean } } | undefined;
+    afirmar(Object.keys(d ?? {}).join() === 'interpretar' && d?.interpretar?.principal === 'claude-haiku-4.5' && d.interpretar.respaldo === 'gpt-oss-120b' && d.interpretar.dobleLectura === true && Object.keys(d.interpretar).length === 3, `La actividad guarda lo validado: ${JSON.stringify(det)}`);
     const act = await filas<{ action: string }>(db, `select action from core.audit_log where product_id = 'botmaker' and action in ('bots.motores_cambiados', 'bots.topes_cambiados')`);
     afirmar(act.length === 2, `Actividad: ${JSON.stringify(act)}`);
+  });
+  await prueba('doble lectura: se prende y se apaga; quitar el respaldo la apaga', async () => {
+    const leer = () => uno<{ fallback_engine_id: string | null; double_read: boolean }>(db, `select fallback_engine_id, double_read from bots.bot_engines where bot_id = $1 and function = 'interpretar'`, [botA]);
+    await comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, $2::jsonb, null)`, [botA, '{"interpretar": {"principal": "gemini-3.1-flash-lite", "respaldo": "gpt-oss-120b", "dobleLectura": false}}']));
+    afirmar((await leer())?.double_read === false, 'No se apagó');
+    await comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, $2::jsonb, null)`, [botA, '{"interpretar": {"principal": "gemini-3.1-flash-lite", "respaldo": "gpt-oss-120b", "dobleLectura": true}}']));
+    afirmar((await leer())?.double_read === true, 'No se prendió');
+    await comoPersona(db, P.dueno, (tx) => tx.query(`select bots.guardar_motores($1, $2::jsonb, null)`, [botA, '{"interpretar": {"principal": "gemini-3.1-flash-lite"}}']));
+    const x = await leer();
+    afirmar(x?.fallback_engine_id === null && x.double_read === false, `Sin respaldo: ${JSON.stringify(x)}`);
   });
   await prueba('datos personales: solo el administrador', async () => {
     const e = await error(() => comoPersona(db, P.editor, (tx) => tx.query(`select bots.guardar_datos_personales($1, true, 30)`, [botA])));
@@ -359,14 +376,26 @@ async function main() {
     await r.guardarBot(id, { avisoIa: 'Soy un asistente virtual.' }, P.editor);
     afirmar((await r.bot(id))?.avisoIa === 'Soy un asistente virtual.', 'No guardó el aviso');
     try {
-      await r.guardarMotores(id, { responder: { principal: 'mistral-small-4', respaldo: null } }, null, P.editor);
+      await r.guardarMotores(id, { responder: { principal: 'claude-haiku-4.5', respaldo: null } }, null, P.editor);
       throw new Error('El editor pudo elegir motores');
     } catch (e) {
       afirmar(e instanceof ErrorDatos && e.codigo === 'sin_permiso', `Dio: ${(e as Error).message}`);
     }
-    await repoDe(P.dueno).guardarMotores(id, { responder: { principal: 'mistral-small-4', respaldo: null } }, { diarioUsd: 1, mensualUsd: 20 }, P.dueno);
+    await repoDe(P.dueno).guardarMotores(id, { responder: { principal: 'claude-haiku-4.5', respaldo: null } }, { diarioUsd: 1, mensualUsd: 20 }, P.dueno);
     const m = await r.motoresDeBot(id);
-    afirmar(m.map((x) => x.funcion).join(',') === 'interpretar,responder,copiloto' && m[1]?.principal === 'mistral-small-4' && m[1].respaldo === null, JSON.stringify(m));
+    afirmar(m.map((x) => x.funcion).join(',') === 'interpretar,responder,copiloto' && m[1]?.principal === 'claude-haiku-4.5' && m[1].respaldo === null, JSON.stringify(m));
+    afirmar(m[0]?.dobleLectura === true, `La doble lectura llega al repositorio: ${JSON.stringify(m[0])}`);
+    for (const [eleccion, codigo] of [
+      [{ interpretar: { principal: 'mistral-small-4', respaldo: null } }, 'motor'],
+      [{ interpretar: { principal: 'gemini-3.1-flash-lite', respaldo: null, dobleLectura: true } }, 'doble_lectura'],
+    ] as const) {
+      try {
+        await repoDe(P.dueno).guardarMotores(id, eleccion, null, P.dueno);
+        throw new Error(`Aceptó ${JSON.stringify(eleccion)}`);
+      } catch (e) {
+        afirmar(e instanceof ErrorDatos && e.codigo === codigo, `${JSON.stringify(eleccion)}: ${(e as Error).message}`);
+      }
+    }
   });
   await prueba('registra llamadas con la clave de servicio y el gasto sale de spend_daily', async () => {
     const r = repoDe(P.editor);
@@ -396,6 +425,20 @@ async function main() {
     await repoDe(P.dueno).asignarRol(CAMP_A, P.sinAcceso, 'agente', P.dueno);
     afirmar((await uno<{ r: string }>(db, `select bots.rol_efectivo($1, $2) as r`, [CAMP_A, P.sinAcceso]))?.r === 'agente', 'No quedó como agente');
     await repoDe(P.dueno).asignarRol(CAMP_A, P.sinAcceso, null, P.dueno);
+  });
+
+  console.log('\nMigración 0002 sobre una base con bots de la 0001');
+  await prueba('los bots que ya existían conservan sus motores; los nuevos nacen con los elegidos', async () => {
+    const db3 = await baseConMigraciones('bots_0002_motores_elegidos.sql');
+    await cargarDatos(db3);
+    const viejo = await comoPersona(db3, P.editor, (tx) => crearBot(tx, CAMP_A, 'Bot de antes'));
+    await db3.exec(readFileSync(new URL('../migraciones/bots_0002_motores_elegidos.sql', import.meta.url), 'utf8'));
+    const m = await uno<{ primary_engine_id: string; fallback_engine_id: string; double_read: boolean }>(db3, `select primary_engine_id, fallback_engine_id, double_read from bots.bot_engines where bot_id = $1 and function = 'interpretar'`, [viejo]);
+    afirmar(m?.primary_engine_id === 'gpt-oss-120b' && m.fallback_engine_id === 'claude-haiku-4.5' && m.double_read === false, `El bot viejo cambió: ${JSON.stringify(m)}`);
+    const nuevo = await comoPersona(db3, P.editor, (tx) => crearBot(tx, CAMP_A, 'Bot de después'));
+    const n = await uno<{ primary_engine_id: string; double_read: boolean }>(db3, `select primary_engine_id, double_read from bots.bot_engines where bot_id = $1 and function = 'interpretar'`, [nuevo]);
+    afirmar(n?.primary_engine_id === 'gemini-3.1-flash-lite' && n.double_read === true, `El bot nuevo: ${JSON.stringify(n)}`);
+    afirmar(await cuenta(db3, `select count(*) as n from bots.engines where active`) === FICHAS_MOTORES.filter((f) => f.activo).length, 'Motores activos');
   });
 
   console.log('\nSemilla de desarrollo');

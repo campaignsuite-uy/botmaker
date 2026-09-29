@@ -33,6 +33,8 @@ export interface FilaMotorBot {
   respaldoTexto: string;
   opciones: Opcion[];
   tiempoMaximo: string;
+  /** Solo interpretar: la casilla de doble lectura (null en las otras funciones). */
+  dobleLectura: boolean | null;
 }
 
 export interface ResultadoPrueba {
@@ -106,9 +108,10 @@ export async function vistaBot(repo: Repositorio, ctx: ContextoPantalla, botId: 
     principal: m.principal,
     principalTexto: nombreDe(m.principal),
     respaldo: m.respaldo ?? '',
-    respaldoTexto: nombreDe(m.respaldo),
+    respaldoTexto: m.dobleLectura && m.respaldo ? `${nombreDe(m.respaldo)}, en doble lectura` : nombreDe(m.respaldo),
     opciones: motoresPara(m.funcion, fichas).map((f) => ({ valor: f.id, texto: `${f.nombre} · ${f.empresa}` })),
     tiempoMaximo: milisegundos(m.tiempoMaximoMs),
+    dobleLectura: m.funcion === 'interpretar' ? m.dobleLectura : null,
   }));
 
   let gasto: VistaBot['motores']['gasto'] = null;

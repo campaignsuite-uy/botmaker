@@ -100,6 +100,12 @@ export function PantallaBot({ v }: { v: VistaBot }) {
                           <option value="">Sin respaldo</option>
                           {f.opciones.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
                         </select>
+                        {f.dobleLectura !== null ? (
+                          <label className="interruptor texto-mini" style={{ marginTop: 6, whiteSpace: 'normal' }}>
+                            <input type="checkbox" name={`doble_${f.funcion}`} value="si" defaultChecked={f.dobleLectura} />
+                            <span>Doble lectura: el respaldo lee cada mensaje a la vez y, si no coinciden, el bot pregunta</span>
+                          </label>
+                        ) : null}
                       </td>
                       <td className="texto-chico secundario num">{f.tiempoMaximo}</td>
                     </tr>

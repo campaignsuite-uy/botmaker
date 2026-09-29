@@ -7,6 +7,7 @@ import { AdaptadorSimulado } from './simulado';
 import type { Adaptador, LlamadaCruda, PedidoAdaptador } from './tipos';
 
 const CTX = { nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const };
+const BOT = { id: 'bot-demo-1', campanaId: 'c-pa-2029' };
 
 /** Adaptador que responde lo que le digan por motor y guarda lo que recibió. */
 class AdaptadorFalso implements Adaptador {
@@ -20,93 +21,139 @@ class AdaptadorFalso implements Adaptador {
   }
 }
 
-const BIEN = { ok: true, contenido: '{"intencion":"tramite_electoral","tema":"ninguno","confianza":0.9,"alternativas":[]}' };
+const lee = (intencion: string, extra: Partial<LlamadaCruda> = {}) => ({ ok: true, contenido: JSON.stringify({ intencion, tema: 'ninguno', confianza: 0.95, alternativas: [] }), ...extra });
+const BIEN = lee('tramite_electoral');
+const RESPONDE = { ok: true, contenido: JSON.stringify({ respuesta: 'Un programa de primer empleo.', secciones: ['S01'], tiene_respuesta: 'si' }) };
 
 function pedido(extra: Partial<PedidoCapa<'interpretar'>> = {}): PedidoCapa<'interpretar'> {
-  return { funcion: 'interpretar', uso: 'en_vivo', bot: { id: 'bot-demo-1', campanaId: 'c-pa-2029' }, contexto: CTX, entrada: ENTRADA_PRUEBA.interpretar, personaId: null, ...extra };
+  return { funcion: 'interpretar', uso: 'en_vivo', bot: BOT, contexto: CTX, entrada: ENTRADA_PRUEBA.interpretar, personaId: null, ...extra };
 }
+const pedidoResponder = (): PedidoCapa<'responder'> => ({ funcion: 'responder', uso: 'en_vivo', bot: BOT, contexto: CTX, entrada: ENTRADA_PRUEBA.responder, personaId: null });
 
-describe('capa de motores', () => {
+describe('capa de motores: interpretar en doble lectura (así nacen los bots)', () => {
+  let repo: RepositorioDemo;
+  beforeEach(() => {
+    reiniciarNucleoMemoria();
+    repo = new RepositorioDemo({ vacio: false });
+  });
+  const capaCon = (falso: Adaptador) => new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
+
+  it('los dos leen el mismo mensaje a la vez; si coinciden, sigue con la del principal', async () => {
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': lee('tramite_electoral', { demoraMs: 300 }) });
+    const antes = (await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 })).length;
+    const r = await capaCon(falso).llamar(pedido());
+    expect(falso.recibidos.map((x) => x.ficha.id).sort()).toEqual(['gemini-3.1-flash-lite', 'gpt-oss-120b']);
+    expect(r.lectura).toEqual({ principal: 'tramite_electoral', respaldo: 'tramite_electoral', resultado: 'coinciden' });
+    expect(r.salida?.intencion).toBe('tramite_electoral');
+    expect([r.motorId, r.respaldo]).toEqual(['gemini-3.1-flash-lite', false]);
+    // La persona espera al más lento, no la suma; se pagan las dos.
+    expect(r.demoraMs).toBe(300);
+    expect(r.costoUsd).toBeCloseTo(0.002);
+    const despues = await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 });
+    expect(despues.length).toBe(antes + 2);
+  });
+
+  it('si no coinciden, la del respaldo pasa a ser la primera alternativa', async () => {
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': lee('propuesta') });
+    const r = await capaCon(falso).llamar(pedido());
+    expect(r.lectura).toEqual({ principal: 'tramite_electoral', respaldo: 'propuesta', resultado: 'distintas' });
+    expect(r.salida?.intencion).toBe('tramite_electoral');
+    expect(r.salida?.alternativas[0]?.intencion).toBe('propuesta');
+    expect(r.motivo).toBeNull();
+  });
+
+  it('si responde uno solo, sigue con ese; una salida fuera del catálogo cuenta como falla', async () => {
+    const r = await capaCon(new AdaptadorFalso({ 'gemini-3.1-flash-lite': lee('inventada'), 'gpt-oss-120b': BIEN })).llamar(pedido());
+    expect(r.lectura?.resultado).toBe('una');
+    expect([r.motorId, r.respaldo, r.salida?.intencion]).toEqual(['gpt-oss-120b', true, 'tramite_electoral']);
+    expect(r.intentos.find((i) => i.motorId === 'gemini-3.1-flash-lite')?.error).toMatch(/contrato/);
+  });
+
+  it('si no responde ninguno, no hay salida: el bot sigue con menús', async () => {
+    const r = await capaCon(new AdaptadorFalso({})).llamar(pedido());
+    expect(r.salida).toBeNull();
+    expect(r.motivo).toBe('fallaron');
+    expect(r.lectura?.resultado).toBe('ninguna');
+    expect(r.intentos.length).toBe(2);
+  });
+
+  it('con la doble lectura apagada, interpretar vuelve a principal y después respaldo', async () => {
+    await repo.guardarMotores('bot-demo-1', { interpretar: { principal: 'gemini-3.1-flash-lite', respaldo: 'gpt-oss-120b', dobleLectura: false } }, null, 'p-joaquin');
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': BIEN });
+    const r = await capaCon(falso).llamar(pedido());
+    expect(falso.recibidos.map((x) => x.ficha.id)).toEqual(['gemini-3.1-flash-lite']);
+    expect(r.lectura).toBeNull();
+  });
+
+  it('cambia los datos personales por marcas antes de mandar, en las dos lecturas', async () => {
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': BIEN });
+    await capaCon(falso).llamar(pedido({ entrada: { ...ENTRADA_PRUEBA.interpretar, mensaje: 'Soy Ana, 6123-4567, ana@correo.com' } }));
+    expect(falso.recibidos.length).toBe(2);
+    for (const r of falso.recibidos) {
+      expect(r.usuario).toContain('Soy Ana, [TELÉFONO], [CORREO]');
+      expect(r.usuario).not.toContain('6123');
+    }
+  });
+
+  it('en modo simulado los dos van al simulado; dos motores simulados pueden no coincidir en un empate', async () => {
+    const falso = new AdaptadorFalso({});
+    const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: true });
+    const r = await capa.llamar(pedido());
+    expect(r.motorId).toBe('simulado');
+    expect(r.simulado).toBe(true);
+    expect(falso.recibidos.length).toBe(0);
+    expect(r.lectura?.resultado).toBe('coinciden');
+    // "quiero saber" empata entre dos intenciones con una palabra cada una: cada motor desempata distinto.
+    const empate = { ...ENTRADA_PRUEBA.interpretar, mensaje: 'propone algo para sumarse', intenciones: [
+      { id: 'propuesta', descripcion: 'propone' }, { id: 'voluntariado', descripcion: 'sumarse' }, { id: 'otra', descripcion: 'otra' },
+    ] };
+    const d = await capa.llamar(pedido({ entrada: empate }));
+    expect(d.lectura?.resultado).toBe('distintas');
+  });
+});
+
+describe('capa de motores: en serie (responder, copiloto y probar un motor)', () => {
   let repo: RepositorioDemo;
   beforeEach(() => {
     reiniciarNucleoMemoria();
     repo = new RepositorioDemo({ vacio: false });
   });
 
-  it('usa el principal (gpt-oss-120b) y registra la llamada', async () => {
-    const falso = new AdaptadorFalso({ 'gpt-oss-120b': BIEN });
+  it('responder usa el principal (Gemini 3.1 Flash-Lite) y registra la llamada', async () => {
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': RESPONDE });
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
-    const antes = (await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 })).length;
-    const r = await capa.llamar(pedido());
-    expect(r.salida?.intencion).toBe('tramite_electoral');
-    expect(r.motorId).toBe('gpt-oss-120b');
-    expect(r.respaldo).toBe(false);
-    const despues = await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 });
-    expect(despues.length).toBe(antes + 1);
-    expect(despues[0]).toMatchObject({ uso: 'en_vivo', funcion: 'interpretar', motorId: 'gpt-oss-120b', ok: true, costoUsd: 0.001 });
+    const r = await capa.llamar(pedidoResponder());
+    expect([r.motorId, r.respaldo, r.lectura]).toEqual(['gemini-3.1-flash-lite', false, null]);
+    expect((await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 1 }))[0]).toMatchObject({ uso: 'en_vivo', funcion: 'responder', motorId: 'gemini-3.1-flash-lite', ok: true, costoUsd: 0.001 });
   });
 
-  it('si el principal falla, responde el respaldo; se registran los dos intentos', async () => {
-    const falso = new AdaptadorFalso({ 'claude-haiku-4.5': BIEN });
+  it('si el principal falla, responde el respaldo; se registran los dos intentos y la demora se suma', async () => {
+    const falso = new AdaptadorFalso({ 'claude-haiku-4.5': RESPONDE });
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
-    const r = await capa.llamar(pedido());
-    expect(r.motorId).toBe('claude-haiku-4.5');
-    expect(r.respaldo).toBe(true);
+    const r = await capa.llamar(pedidoResponder());
+    expect([r.motorId, r.respaldo]).toEqual(['claude-haiku-4.5', true]);
     expect(r.intentos.map((i) => i.ok)).toEqual([false, true]);
+    expect(r.demoraMs).toBe(200);
     const ult = await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 2 });
-    expect(ult.map((l) => [l.motorId, l.ok, l.respaldo])).toEqual([['claude-haiku-4.5', true, true], ['gpt-oss-120b', false, false]]);
+    expect(ult.map((l) => [l.motorId, l.ok, l.respaldo])).toEqual([['claude-haiku-4.5', true, true], ['gemini-3.1-flash-lite', false, false]]);
   });
 
-  it('una salida fuera del catálogo cuenta como falla', async () => {
-    const falso = new AdaptadorFalso({ 'gpt-oss-120b': { ok: true, contenido: '{"intencion":"inventada","tema":"ninguno","confianza":0.9,"alternativas":[]}' }, 'claude-haiku-4.5': BIEN });
-    const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
-    const r = await capa.llamar(pedido());
-    expect(r.intentos[0]?.error).toMatch(/contrato/);
-    expect(r.respaldo).toBe(true);
-  });
-
-  it('si fallan los dos, no hay salida: el bot sigue con menús', async () => {
-    const capa = new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorFalso({}), simulado: new AdaptadorSimulado() }, simular: false });
-    const r = await capa.llamar(pedido());
-    expect(r.salida).toBeNull();
-    expect(r.motivo).toBe('fallaron');
-    expect(r.intentos.length).toBe(2);
-  });
-
-  it('con el tope diario alcanzado no llama a nadie', async () => {
-    const falso = new AdaptadorFalso({ 'gpt-oss-120b': BIEN });
+  it('con el tope diario alcanzado no llama a nadie; el simulador sigue andando', async () => {
+    const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': BIEN });
     await repo.registrarLlamada({ botId: 'bot-demo-1', campanaId: 'c-pa-2029', uso: 'en_vivo', funcion: 'responder', motorId: 'gpt-oss-120b', modelo: 'm', proveedor: 'p', respaldo: false, ok: true, error: null, demoraMs: 1, tokensEntrada: 1, tokensSalida: 1, tokensCache: 0, tokensRazonamiento: 0, costoUsd: 5, idGeneracion: null, personaId: null });
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
     const r = await capa.llamar(pedido());
     expect(r.motivo).toBe('tope_diario');
     expect(falso.recibidos.length).toBe(0);
-    // El tope es del uso en vivo: el simulador sigue andando.
     expect((await capa.llamar(pedido({ uso: 'simulador' }))).salida).not.toBeNull();
   });
 
-  it('cambia los datos personales por marcas antes de mandar', async () => {
-    const falso = new AdaptadorFalso({ 'gpt-oss-120b': BIEN });
+  it('probar un motor puntual salta la elección del bot, el respaldo y la doble lectura', async () => {
+    const falso = new AdaptadorFalso({ 'claude-haiku-4.5': BIEN });
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
-    await capa.llamar(pedido({ entrada: { ...ENTRADA_PRUEBA.interpretar, mensaje: 'Soy Ana, 6123-4567, ana@correo.com' } }));
-    expect(falso.recibidos[0]!.usuario).toContain('Soy Ana, [TELÉFONO], [CORREO]');
-    expect(falso.recibidos[0]!.usuario).not.toContain('6123');
-  });
-
-  it('en modo simulado todo va al simulado y queda registrado como tal', async () => {
-    const falso = new AdaptadorFalso({ 'gpt-oss-120b': BIEN });
-    const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: true });
-    const r = await capa.llamar(pedido());
-    expect(r.motorId).toBe('simulado');
-    expect(r.simulado).toBe(true);
-    expect(falso.recibidos.length).toBe(0);
-    expect((await repo.llamadas('c-pa-2029', { limite: 1 }))[0]?.motorId).toBe('simulado');
-  });
-
-  it('probar un motor puntual salta la elección del bot y el respaldo', async () => {
-    const falso = new AdaptadorFalso({ 'mistral-small-4': BIEN });
-    const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
-    const r = await capa.llamar(pedido({ uso: 'pruebas', soloMotor: 'mistral-small-4' }));
-    expect(r.motorId).toBe('mistral-small-4');
-    expect(falso.recibidos.map((p) => p.ficha.id)).toEqual(['mistral-small-4']);
+    const r = await capa.llamar(pedido({ uso: 'pruebas', soloMotor: 'claude-haiku-4.5' }));
+    expect(r.motorId).toBe('claude-haiku-4.5');
+    expect(r.lectura).toBeNull();
+    expect(falso.recibidos.map((p) => p.ficha.id)).toEqual(['claude-haiku-4.5']);
   });
 });

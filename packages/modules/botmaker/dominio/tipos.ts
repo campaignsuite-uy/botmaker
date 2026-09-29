@@ -75,9 +75,14 @@ export interface MotorFuncion {
   principal: string;
   respaldo: string | null;
   tiempoMaximoMs: number;
+  /**
+   * Solo interpretar: el respaldo lee el mismo mensaje a la vez que el principal. Si coinciden, sigue; si no, el bot
+   * pregunta con dos botones (motores/capa.ts → interpretarDoble). Pide un respaldo.
+   */
+  dobleLectura: boolean;
 }
 
-export type EleccionMotores = Partial<Record<FuncionMotor, { principal: string; respaldo: string | null }>>;
+export type EleccionMotores = Partial<Record<FuncionMotor, { principal: string; respaldo: string | null; dobleLectura?: boolean }>>;
 
 export interface Topes {
   diarioUsd: number;

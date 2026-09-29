@@ -30,6 +30,7 @@ const ERROR: Record<string, string> = {
   motor: 'Ese motor no existe o está apagado.',
   motor_funcion: 'Ese motor no sirve para esa función: mirá en Motores para qué funciones es candidato cada uno.',
   respaldo_igual: 'El respaldo tiene que ser otro motor.',
+  doble_lectura: 'La doble lectura necesita un motor de respaldo, y es solo para interpretar.',
   archivado: 'El bot está archivado: no se puede cambiar.',
   no_existe: 'Ese bot no existe o no es de esta campaña.',
   campana: 'BotMaker no está preparado en esta campaña: pedíselo a quien administra la organización.',

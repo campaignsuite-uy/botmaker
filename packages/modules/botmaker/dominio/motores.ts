@@ -46,7 +46,7 @@ export interface FichaMotor {
 }
 
 const OPENAI_GROQ = 'Licencia Apache 2.0 y política de Groq, sin cláusula electoral. La prohibición de campañas de OpenAI es de sus servicios; no se encontró que alcance a gpt-oss.';
-const MISTRAL = 'Sin cláusula de campañas; prohíbe la desinformación que afecte procesos cívicos o políticos.';
+const MISTRAL = 'Sin cláusula de campañas; prohíbe la desinformación que afecte procesos cívicos o políticos. Apagado desde la prueba del 28/9/2026: inventó datos al responder y OpenRouter lo limitaba seguido.';
 const ANTHROPIC = 'Permite bots de campaña si avisan que son IA al empezar cada conversación y no segmentan por el perfil de cada persona.';
 
 export const FICHAS_MOTORES: readonly FichaMotor[] = [
@@ -79,7 +79,7 @@ export const FICHAS_MOTORES: readonly FichaMotor[] = [
     precioEntrada: 0.15, precioSalida: 0.6, precioCache: 0.015, jsonEstricto: true,
     permiteElectoral: 'si', permitePolitico: 'si', exigeAvisoIa: false, permitePersonalizacion: true, entrena: true,
     retencion: 'Entrena por defecto: se apaga en el panel de Mistral', region: 'UE', condiciones: MISTRAL,
-    funciones: ['interpretar', 'responder'], activo: true,
+    funciones: ['interpretar', 'responder'], activo: false,
   },
   {
     id: 'ministral-8b', nombre: 'Ministral 3 8B', empresa: 'Mistral', ruta: 'openrouter', modelo: 'mistralai/ministral-8b-2512',
@@ -87,7 +87,7 @@ export const FICHAS_MOTORES: readonly FichaMotor[] = [
     precioEntrada: 0.15, precioSalida: 0.15, precioCache: 0.015, jsonEstricto: false,
     permiteElectoral: 'si', permitePolitico: 'si', exigeAvisoIa: false, permitePersonalizacion: true, entrena: true,
     retencion: 'Entrena por defecto: se apaga en el panel de Mistral', region: 'UE', condiciones: MISTRAL,
-    funciones: ['interpretar'], activo: true,
+    funciones: ['interpretar'], activo: false,
   },
   {
     id: 'claude-haiku-4.5', nombre: 'Claude Haiku 4.5', empresa: 'Anthropic', ruta: 'openrouter', modelo: 'anthropic/claude-haiku-4.5',
@@ -116,11 +116,15 @@ export const FICHAS_MOTORES: readonly FichaMotor[] = [
   },
 ];
 
-/** Provisorios hasta cerrar la prueba de motores (plan técnico, etapa 1). Espejo de bots.engine_defaults. */
+/**
+ * Elegidos con la prueba de motores del 28/9/2026 (informe "Resultado de la prueba de motores"). Espejo de
+ * bots.engine_defaults (migración bots_0002). Interpretar lee cada mensaje con dos motores a la vez; responder usa el
+ * único motor que no dio datos falsos, con Claude Haiku 4.5 de respaldo. El copiloto no se probó: sigue igual.
+ */
 export const MOTORES_POR_DEFECTO: readonly MotorFuncion[] = [
-  { funcion: 'interpretar', principal: 'gpt-oss-120b', respaldo: 'claude-haiku-4.5', tiempoMaximoMs: 2500 },
-  { funcion: 'responder', principal: 'gpt-oss-120b', respaldo: 'claude-haiku-4.5', tiempoMaximoMs: 4000 },
-  { funcion: 'copiloto', principal: 'claude-sonnet-5', respaldo: 'gpt-oss-120b', tiempoMaximoMs: 60000 },
+  { funcion: 'interpretar', principal: 'gemini-3.1-flash-lite', respaldo: 'gpt-oss-120b', tiempoMaximoMs: 2500, dobleLectura: true },
+  { funcion: 'responder', principal: 'gemini-3.1-flash-lite', respaldo: 'claude-haiku-4.5', tiempoMaximoMs: 5000, dobleLectura: false },
+  { funcion: 'copiloto', principal: 'claude-sonnet-5', respaldo: 'gpt-oss-120b', tiempoMaximoMs: 60000, dobleLectura: false },
 ];
 
 export const ETIQUETA_FUNCION: Record<FuncionMotor, string> = {

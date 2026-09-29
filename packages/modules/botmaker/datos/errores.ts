@@ -15,6 +15,7 @@ export function errorDeBase(e: { message: string; code?: string } | null | undef
   if (c === '42501' || /no permite esta acción|Solo el Administrador|permission denied|row-level security/i.test(m)) return new ErrorDatos('sin_permiso', m);
   if (/archivado/.test(m)) return new ErrorDatos('archivado', m);
   if (/respaldo tiene que ser otro/.test(m)) return new ErrorDatos('respaldo_igual', m);
+  if (/doble lectura/.test(m)) return new ErrorDatos('doble_lectura', m);
   if (/Motor desconocido/.test(m)) return new ErrorDatos('motor', m);
   if (/no sirve para la función/.test(m)) return new ErrorDatos('motor_funcion', m);
   if (/No existe el bot/.test(m) || c === 'P0002') return new ErrorDatos('no_existe', m);

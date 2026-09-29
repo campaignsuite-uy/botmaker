@@ -70,10 +70,11 @@ export const aFicha = (f: FilaMotor): FichaMotor => ({
   activo: f.active,
 });
 
-export interface FilaMotorFuncion { function: FuncionMotor; primary_engine_id: string; fallback_engine_id: string | null; timeout_ms: number }
+export interface FilaMotorFuncion { function: FuncionMotor; primary_engine_id: string; fallback_engine_id: string | null; timeout_ms: number; double_read: boolean }
+export const COLUMNAS_MOTOR_FUNCION = 'function, primary_engine_id, fallback_engine_id, timeout_ms, double_read';
 
 export const aMotorFuncion = (f: FilaMotorFuncion): MotorFuncion => ({
-  funcion: f.function, principal: f.primary_engine_id, respaldo: f.fallback_engine_id, tiempoMaximoMs: Number(f.timeout_ms),
+  funcion: f.function, principal: f.primary_engine_id, respaldo: f.fallback_engine_id, tiempoMaximoMs: Number(f.timeout_ms), dobleLectura: !!f.double_read,
 });
 
 export const ordenarFunciones = (xs: MotorFuncion[]) => [...xs].sort((a, b) => FUNCIONES.indexOf(a.funcion) - FUNCIONES.indexOf(b.funcion));

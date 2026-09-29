@@ -180,8 +180,12 @@ export class RepositorioDemo implements Repositorio {
       if (eleccion.respaldo === eleccion.principal) throw new ErrorDatos('respaldo_igual', 'El respaldo tiene que ser otro motor.');
       const m = actuales.find((x) => x.funcion === funcion);
       if (!m) throw new ErrorDatos('funcion', `Función desconocida: ${funcion}`);
+      const doble = eleccion.dobleLectura ?? (m.dobleLectura && !!eleccion.respaldo);
+      if (doble && funcion !== 'interpretar') throw new ErrorDatos('doble_lectura', 'La doble lectura es solo para interpretar.');
+      if (doble && !eleccion.respaldo) throw new ErrorDatos('doble_lectura', 'La doble lectura necesita un motor de respaldo.');
       m.principal = eleccion.principal;
       m.respaldo = eleccion.respaldo;
+      m.dobleLectura = doble;
     }
     if (topes) {
       const t = esquemaTopes.parse(topes);

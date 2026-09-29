@@ -81,5 +81,16 @@ describe('claves e instrucciones', () => {
     const r = instruccionesResponder(ctx, ENTRADA_PRUEBA.responder);
     expect(r.sistema.startsWith('## MATERIAL')).toBe(true);
     expect(r.sistema).toContain('### S01');
+    expect(i.sistema).not.toContain('Quién es quién');
+  });
+  it('interpretar sabe cómo le dice la gente al partido y los límites de cada intención', () => {
+    const ctx = {
+      nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const,
+      identidad: { candidato: { nombre: 'Ricardo Lombana', alias: [] }, partido: { nombre: 'Movimiento Otro Camino', alias: ['MOCA', 'Otro Camino'] } },
+    };
+    const entrada = { ...ENTRADA_PRUEBA.interpretar, intenciones: [{ id: 'partido', descripcion: 'El partido.', limite: 'Trámites del organismo electoral van en tramite_electoral.' }, { id: 'otra', descripcion: 'Otra cosa.' }] };
+    const i = instruccionesInterpretar(ctx, entrada);
+    expect(i.sistema).toContain('El partido es Movimiento Otro Camino (también le dicen «MOCA», «Otro Camino»)');
+    expect(i.sistema).toContain('- partido: El partido. Trámites del organismo electoral van en tramite_electoral.');
   });
 });

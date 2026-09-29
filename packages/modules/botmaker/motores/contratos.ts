@@ -19,7 +19,7 @@ export interface EntradaInterpretar {
   mensaje: string;
   /** Los últimos turnos de la conversación (hasta 6). */
   turnos: Turno[];
-  intenciones: { id: string; descripcion: string; ejemplos?: string[] }[];
+  intenciones: { id: string; descripcion: string; limite?: string; ejemplos?: string[] }[];
   temas: { id: string; nombre: string }[];
 }
 

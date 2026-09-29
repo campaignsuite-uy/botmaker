@@ -99,13 +99,13 @@ export class RepositorioSupabase implements Repositorio {
   }
 
   async motoresPorDefecto(): Promise<MotorFuncion[]> {
-    const filas = datos(await this.servicio.from('engine_defaults').select('function, primary_engine_id, fallback_engine_id, timeout_ms'), 'leer los motores por defecto') as M.FilaMotorFuncion[];
+    const filas = datos(await this.servicio.from('engine_defaults').select(M.COLUMNAS_MOTOR_FUNCION), 'leer los motores por defecto') as M.FilaMotorFuncion[];
     return M.ordenarFunciones(filas.map(M.aMotorFuncion));
   }
 
   async motoresDeBot(botId: string): Promise<MotorFuncion[]> {
     // Con la clave de servicio: la capa de motores lo necesita también en la app pública (etapa 5), sin sesión.
-    const filas = datos(await this.servicio.from('bot_engines').select('function, primary_engine_id, fallback_engine_id, timeout_ms').eq('bot_id', botId), 'leer los motores del bot') as M.FilaMotorFuncion[];
+    const filas = datos(await this.servicio.from('bot_engines').select(M.COLUMNAS_MOTOR_FUNCION).eq('bot_id', botId), 'leer los motores del bot') as M.FilaMotorFuncion[];
     return M.ordenarFunciones(filas.map(M.aMotorFuncion));
   }
 
@@ -146,8 +146,10 @@ export class RepositorioSupabase implements Repositorio {
 
   async guardarMotores(botId: string, motores: EleccionMotores, topes: Topes | null, _por: string): Promise<void> {
     const b = await this.bots_();
-    const m: Record<string, { principal: string; respaldo: string | null }> = {};
-    for (const [f, e] of Object.entries(motores) as [FuncionMotor, { principal: string; respaldo: string | null } | undefined][]) if (e) m[f] = e;
+    const m: Record<string, { principal: string; respaldo: string | null; dobleLectura?: boolean }> = {};
+    for (const [f, e] of Object.entries(motores) as [FuncionMotor, { principal: string; respaldo: string | null; dobleLectura?: boolean } | undefined][]) {
+      if (e) m[f] = { principal: e.principal, respaldo: e.respaldo, ...(e.dobleLectura !== undefined ? { dobleLectura: e.dobleLectura } : {}) };
+    }
     datos(await b.rpc('guardar_motores', { bot: botId, motores: m, topes: topes ? { diario: topes.diarioUsd, mensual: topes.mensualUsd } : null }), 'guardar los motores');
   }
 

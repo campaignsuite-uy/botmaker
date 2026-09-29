@@ -92,7 +92,8 @@ describe('ajustes del bot', () => {
 describe('motores, costos y equipo', () => {
   it('fichas y por defecto', async () => {
     const v = await vistaMotores(repo, ctx('p-equipo'));
-    expect(v.porDefecto[0]).toMatchObject({ funcion: 'Interpretar', principal: 'gpt-oss-120b (Groq)', respaldo: 'Claude Haiku 4.5' });
+    expect(v.porDefecto[0]).toMatchObject({ funcion: 'Interpretar', principal: 'Gemini 3.1 Flash-Lite', respaldo: 'gpt-oss-120b (Groq), en doble lectura' });
+    expect(v.fichas.some((f) => f.id === 'mistral-small-4')).toBe(false);
     expect(v.fichas.find((f) => f.id === 'claude-haiku-4.5')?.avisoIa).toBe('Lo exige');
   });
   it('costos: 30 días, totales que cuadran', async () => {

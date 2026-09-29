@@ -17,6 +17,11 @@ export interface ContextoBot {
   mercado: string;
   caso: CasoUso;
   trato: Trato;
+  /**
+   * El candidato y el partido, con cómo les dice la gente. Sin esto, "q significa otro camino" falló en 6 de 7 motores
+   * en la prueba del 28/9/2026: las instrucciones decían MOCA y no Movimiento Otro Camino.
+   */
+  identidad?: { candidato: { nombre: string; alias: string[] }; partido: { nombre: string; alias: string[] } | null };
 }
 
 export interface Instrucciones {
@@ -34,11 +39,15 @@ function conversacion(turnos: Turno[]): string {
 
 export function instruccionesInterpretar(c: ContextoBot, e: EntradaInterpretar): Instrucciones {
   const m = mercado(c.mercado);
-  const intenciones = e.intenciones.map((i) => `- ${i.id}: ${i.descripcion}${i.ejemplos?.length ? ` (por ejemplo: ${i.ejemplos.slice(0, 3).map((x) => `"${x}"`).join(', ')})` : ''}`).join('\n');
+  const intenciones = e.intenciones.map((i) => `- ${i.id}: ${i.descripcion}${i.limite ? ` ${i.limite}` : ''}${i.ejemplos?.length ? ` (por ejemplo: ${i.ejemplos.slice(0, 3).map((x) => `"${x}"`).join(', ')})` : ''}`).join('\n');
+  const alias = (p: { nombre: string; alias: string[] }) => `${p.nombre}${p.alias.length ? ` (también le dicen ${p.alias.map((a) => `«${a}»`).join(', ')})` : ''}`;
+  const quien = c.identidad
+    ? `\n\n## Quién es quién\n\nEl candidato es ${alias(c.identidad.candidato)}.${c.identidad.partido ? ` El partido es ${alias(c.identidad.partido)}. Si el mensaje nombra al partido de cualquiera de esas formas, habla del partido.` : ''}`
+    : '';
   const temas = e.temas.map((t) => `- ${t.id}: ${t.nombre}`).join('\n');
   const sistema = `Eres el intérprete de mensajes del bot «${c.nombreBot}» de la campaña «${c.campana}» en ${paisDe(c)}. Recibes un mensaje que una persona le escribió al bot por WhatsApp o por la web, y tu única tarea es clasificarlo. No respondes a la persona.
 
-Elige UNA intención y UN tema de las listas de abajo, usando exactamente los identificadores que aparecen.
+Elige UNA intención y UN tema de las listas de abajo, usando exactamente los identificadores que aparecen.${quien}
 
 ## Intenciones
 
