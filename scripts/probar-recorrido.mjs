@@ -23,6 +23,7 @@
  * Uso: pnpm probar:recorrido   (CHROMIUM=/ruta/al/chrome si hace falta; URL=http://localhost:3000 para una app andando).
  */
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
@@ -39,10 +40,28 @@ function prueba(nombre, ok, detalle = '') {
   console.log(`  ${ok ? '✓' : '✗'} ${nombre}${ok || !detalle ? '' : `\n      ${String(detalle).slice(0, 300)}`}`);
 }
 
+// Un Sentry de mentira (8.03): recibe los sobres que manda la app, para ver que llegan y que no llevan nada de nadie.
+const PUERTO_SENTRY = PUERTO + 6;
+const CLAVE_TAREAS = 'clave-de-tareas-del-recorrido';
+const sobresSentry = [];
+const sentryFalso = process.env.URL ? null : createServer((req, res) => {
+  let cuerpo = '';
+  req.on('data', (d) => { cuerpo += d; });
+  req.on('end', () => {
+    sobresSentry.push({ url: req.url, auth: req.headers['x-sentry-auth'] ?? '', cuerpo });
+    res.writeHead(200, { 'content-type': 'application/json' }).end('{}');
+  });
+}).listen(PUERTO_SENTRY);
+
 async function levantarApp() {
   if (process.env.URL) return null;
   const app = spawn('pnpm', ['exec', 'next', 'start', '-p', String(PUERTO)], {
-    cwd: `${RAIZ}apps/web`, env: { ...process.env, CAMPAIGNSUITE_DATOS: 'demo', CAMPAIGNSUITE_SOLO_LECTURA: '', PORT: String(PUERTO) }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: `${RAIZ}apps/web`,
+    env: {
+      ...process.env, CAMPAIGNSUITE_DATOS: 'demo', CAMPAIGNSUITE_SOLO_LECTURA: '', PORT: String(PUERTO),
+      SENTRY_DSN: `http://clave-publica-de-prueba@localhost:${PUERTO_SENTRY}/1`, BOTS_TAREAS_SECRET: CLAVE_TAREAS,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
   const limite = Date.now() + 60_000;
   while (Date.now() < limite) {
@@ -485,6 +504,21 @@ try {
   prueba('el lector ve la analítica sin el costo', anaLector.includes('Qué consultan') && !anaLector.includes('Costo en vivo'));
   prueba('analítica sin errores en la página', !admin.errores.length && !lectorAna.errores.length, [...admin.errores, ...lectorAna.errores].join(' · '));
 
+  // ── Etapa 8: Sentry con un servidor de mentira (8.03) ──────────────────────────────────────────
+  if (!process.env.URL) {
+    console.log('\nEtapa 8: errores a Sentry (servidor de mentira)\n');
+    const antes = sobresSentry.length;
+    prueba('en todo el recorrido la app no tuvo errores del servidor', antes === 0, sobresSentry.map((x) => x.cuerpo.split('\n')[2]?.slice(0, 200)).join(' · '));
+    prueba('/api/probar-sentry pide la clave de las tareas', (await fetch(`${BASE}/api/probar-sentry`)).status === 401);
+    const forzado = await fetch(`${BASE}/api/probar-sentry?contacto=rosa@ejemplo.org`, { headers: { authorization: `Bearer ${CLAVE_TAREAS}` } });
+    for (let i = 0; i < 20 && sobresSentry.length === antes; i++) await new Promise((r) => setTimeout(r, 250));
+    const sobre = sobresSentry[antes];
+    const [cab, item, evento] = (sobre?.cuerpo ?? '').split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } });
+    prueba('un error forzado llega a Sentry con su ruta, sin la dirección, la clave ni datos de nadie', forzado.status === 500 && sobre?.url === '/api/1/envelope/'
+      && sobre.auth.includes('sentry_key=clave-publica-de-prueba') && cab?.event_id && item?.type === 'event' && evento?.exception?.values?.[0]?.value?.includes('Prueba de Sentry')
+      && evento?.tags?.ruta === '/api/probar-sentry' && evento?.tags?.app === 'equipo' && !sobre.cuerpo.includes('rosa') && !sobre.cuerpo.includes(CLAVE_TAREAS), (sobre?.cuerpo ?? 'no llegó nada').slice(0, 400));
+  }
+
   // ── La app pública aparte (apps/bots-publico), con su propia demo ─────────────────────────────
   if (!process.env.URL) {
     console.log('\nApp pública aparte (apps/bots-publico)\n');
@@ -531,6 +565,7 @@ try {
 } finally {
   await navegador.close();
   app?.kill();
+  sentryFalso?.close();
 }
 console.log(`\n${total - fallas} de ${total} pruebas bien.${fallas ? ` ${fallas} fallaron.` : ''}\n`);
 process.exit(fallas ? 1 : 0);

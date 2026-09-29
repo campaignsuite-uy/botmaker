@@ -175,3 +175,13 @@ GitHub las corre en cada push, sin claves.
 - **Pruebas:** `dominio/analitica.test.ts`, la sección «Analítica» de `pnpm db:probar`, las vistas y pantallas y la
   etapa 8 de `pnpm probar:recorrido`.
 
+
+## Errores a Sentry (8.03)
+
+- `observabilidad/sentry.ts`: cliente mínimo (DSN → endpoint de sobres, evento, sobre, límite de 30 por minuto). Lo
+  llama `onRequestError` de `instrumentation.ts` en las dos apps; anda en Node y en Edge.
+- Nada de la persona: `limpiarTexto` tapa correos, números, claves, parámetros de direcciones y valores de la base
+  (`(campo)=(valor)`); la ruta va como la escribe Next (`/[org]/[campana]/…`), sin valores.
+- `/api/probar-sentry` (con la clave de las tareas) tira un error a propósito; sin DSN contesta 409.
+- Pruebas: `observabilidad/sentry.test.ts` y el tramo «errores a Sentry» de `pnpm probar:recorrido`, que levanta un
+  Sentry de mentira, le apunta la app y falla si en el recorrido hubo algún error del servidor.
