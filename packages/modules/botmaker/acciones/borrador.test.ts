@@ -6,7 +6,7 @@ import { CANDIDATA_DEMO } from '../datos/demo/semilla';
 import { direccion, ubicar, validarDefinicion, type Definicion } from '../dominio/definicion';
 import { rolEfectivo } from './comun';
 import { ejecutarCrearBot, type ContextoNucleo } from './ejecutar-bots';
-import { ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, leerBorrador, type ResultadoBorrador } from './ejecutar-borrador';
+import { ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarImportarYaml, leerBorrador, yamlDelBorrador, type ResultadoBorrador } from './ejecutar-borrador';
 
 const CAMPANA = 'c-pa-2029';
 const BOT = 'bot-demo-1';
@@ -107,12 +107,12 @@ describe('cambios del borrador', () => {
         renombrarMenu('Menú'),
       ],
     }));
-    expect(r.resumen).toBe('2 cambios: Agregó la caja 2.7 (mensaje); Editó la caja 1.2');
+    expect(r.resumen).toBe('2 cambios: Agregó la caja 2.8 (mensaje); Editó la caja 1.2');
     expect(r.creados).toHaveLength(1);
-    expect(direccion(r.definicion, r.creados[0]!)).toBe('2.7');
+    expect(direccion(r.definicion, r.creados[0]!)).toBe('2.8');
     const d = bien(await ejecutarDeshacer(como('p-lucia'), { botId: BOT, seq: r.seq }));
     expect(texto(d.definicion)).toBe(antes);
-    expect(d).toMatchObject({ resumen: 'Deshizo: 2 cambios: Agregó la caja 2.7 (mensaje); Editó la caja 1.2', deshacer: null, rehacer: r.resumen });
+    expect(d).toMatchObject({ resumen: 'Deshizo: 2 cambios: Agregó la caja 2.8 (mensaje); Editó la caja 1.2', deshacer: null, rehacer: r.resumen });
   });
 
   it('si otra persona guardó en el medio, el cambio se aplica sobre lo último y avisa', async () => {
@@ -173,5 +173,42 @@ describe('deshacer y rehacer', () => {
     await repo.archivarBot(BOT, 'p-joaquin');
     expect((await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 0, operaciones: [renombrarMenu('A')], origen: 'editor' }) as { codigo: string }).codigo).toBe('archivado');
     expect((await ejecutarDeshacer(como('p-lucia'), { botId: BOT, seq: 0 }) as { codigo: string }).codigo).toBe('archivado');
+  });
+});
+
+describe('YAML sobre el borrador', () => {
+  const exportar = async () => yamlDelBorrador({ nombre: 'Asistente' }, (await repo.borrador(BOT))!, await definicion(), new Date('2026-09-29T12:00:00Z'));
+
+  it('exportar e importar sin tocar nada no cambia nada', async () => {
+    const y = await exportar();
+    expect(y).toContain('# Exportado del cambio 0 del borrador v1, el 2026-09-29 12:00 (UTC).');
+    expect(await ejecutarImportarYaml(como('p-lucia'), { botId: BOT, texto: y })).toMatchObject({ ok: false, codigo: 'sin_cambios' });
+  });
+
+  it('importar guarda un cambio de origen yaml que se deshace', async () => {
+    const antes = texto(await definicion());
+    const y = (await exportar()).replace('nombre: Menú principal', 'nombre: Menú del YAML');
+    const r = bien(await ejecutarImportarYaml(como('p-lucia'), { botId: BOT, texto: y }));
+    expect(r.resumen).toBe('Importó el YAML: cambió 1 flujo');
+    expect((ubicar(r.definicion, 'n_menu')!.caja as { nombre: string }).nombre).toBe('Menú del YAML');
+    expect((await repo.cambios(r.versionId)).at(-1)).toMatchObject({ origen: 'yaml', resumen: 'Importó el YAML: cambió 1 flujo' });
+    const d = bien(await ejecutarDeshacer(como('p-lucia'), { botId: BOT, seq: r.seq }));
+    expect(texto(d.definicion)).toBe(antes);
+  });
+
+  it('si el borrador cambió desde que se exportó, avisa y solo sigue con "igual"', async () => {
+    const y = (await exportar()).replace('nombre: Menú principal', 'nombre: Menú del YAML');
+    bien(await ejecutarCambio(como('p-joaquin'), { botId: BOT, seq: 0, operaciones: [{ tipo: 'editar_caja', caja: 'n_bienvenida', cambios: { nombre: 'Hola' } }], origen: 'editor' }));
+    expect(await ejecutarImportarYaml(como('p-lucia'), { botId: BOT, texto: y })).toMatchObject({ ok: false, codigo: 'yaml_desactualizado' });
+    const r = bien(await ejecutarImportarYaml(como('p-lucia'), { botId: BOT, texto: y, igual: true }));
+    expect((ubicar(r.definicion, 'n_bienvenida')!.caja as { nombre: string }).nombre).toBe('Bienvenida');
+  });
+
+  it('los errores vuelven con línea; el lector no importa', async () => {
+    const y = (await exportar()).replace('modo: lista', 'modo: rueda');
+    const r = await ejecutarImportarYaml(como('p-lucia'), { botId: BOT, texto: y });
+    expect(r).toMatchObject({ ok: false, codigo: 'yaml' });
+    expect(!r.ok && r.problemasYaml?.[0]?.linea).toBeGreaterThan(1);
+    expect(await ejecutarImportarYaml(como('p-equipo'), { botId: BOT, texto: y })).toMatchObject({ ok: false, codigo: 'sin_permiso' });
   });
 });

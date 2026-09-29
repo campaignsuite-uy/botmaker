@@ -52,7 +52,7 @@ export async function vistaBots(repo: Repositorio, ctx: ContextoPantalla): Promi
     filas.push({
       id: b.id,
       nombre: b.nombre,
-      href: ruta(ctx, b.id),
+      href: ruta(ctx, `${b.id}/flujos`),
       caso: ETIQUETA_CASO[b.caso],
       mercado: nombreMercado(b.mercado),
       estado: b.estado,

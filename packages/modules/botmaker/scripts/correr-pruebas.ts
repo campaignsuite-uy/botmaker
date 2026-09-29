@@ -19,6 +19,8 @@ import { PantallaCostos } from '../ui/costos';
 import { PantallaEquipo } from '../ui/equipo';
 import { PantallaMotores } from '../ui/motores';
 import { PantallaNuevoBot } from '../ui/nuevo';
+import { PantallaFlujos } from '../ui/flujos';
+import { vistaEditor } from '../vistas/editor';
 import { vistaBot } from '../vistas/bot';
 import { vistaBots } from '../vistas/bots';
 import { vistaCostos } from '../vistas/costos';
@@ -101,6 +103,10 @@ async function main() {
       prueba(`ajustes: archivar ${e.archivar ? 'aparece' : 'no aparece'}`, tiene(bot, 'Archivar el bot') === e.archivar);
       prueba(`ajustes: gasto del bot ${e.costos ? 'a la vista' : 'oculto'}`, tiene(bot, 'Gasto de hoy') === e.costos);
       prueba('ajustes: los avisos de los motores se ven siempre', tiene(bot, 'Avisos de los motores elegidos'));
+
+      const flujos = html(createElement(PantallaFlujos, { v: (await vistaEditor(repo, c, 'bot-demo-1'))! }));
+      prueba('flujos: el editor con los flujos y las pestañas del bot', tiene(flujos, 'Partes del bot') && tiene(flujos, 'ed-barra') && tiene(flujos, 'Datos personales</button>'));
+      prueba(`flujos: ${e.datos ? 'se edita (+ Caja, deshacer)' : 'solo mirar'}`, tiene(flujos, '+ Caja') === e.datos && tiene(flujos, 'Deshacer') === e.datos);
 
       const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));

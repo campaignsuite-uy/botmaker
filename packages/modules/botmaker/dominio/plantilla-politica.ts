@@ -187,24 +187,27 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     { id: 'n_consulta', codigo: 1, nombre: 'Respuesta con base', ultimaLetra: 0, tipo: 'respuesta_base', temas: [], conDato: 'n_masayuda', sinDato: 'n_sindato' },
     {
       id: 'n_masayuda', codigo: 2, nombre: 'Algo más', ultimaLetra: 2, tipo: 'mensaje', contenido: 'c_masayuda', siguiente: null,
-      opciones: [{ letra: 'A', texto: 'Ver el menú', destino: 'n_irmenu' }, { letra: 'B', texto: 'No, gracias', destino: null }],
+      opciones: [{ letra: 'A', texto: 'Ver el menú', destino: 'n_irmenu' }, { letra: 'B', texto: 'No, gracias', destino: 'n_cierre' }],
     },
     { id: 'n_irmenu', codigo: 3, nombre: 'Al menú', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_inicio', caja: 'n_menu' },
     { id: 'n_sindato', codigo: 4, nombre: 'Sin el dato', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_sindato', opciones: [], siguiente: 'n_masayuda' },
     // Desde el menú no llega un texto: "Propuestas" pide la pregunta; "Quién es" contesta una pregunta fija.
     { id: 'n_preguntar', codigo: 5, nombre: 'Pedir la pregunta', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_preguntar', opciones: [], siguiente: null },
     { id: 'n_quien', codigo: 6, nombre: 'Quién es', ultimaLetra: 0, tipo: 'respuesta_base', temas: [], pregunta: '¿Quién es {{bot.candidato}} y cuál es su trayectoria?', conDato: 'n_masayuda', sinDato: 'n_sindato' },
+    // Un "No" también recibe respuesta: nunca un botón que no contesta nada.
+    { id: 'n_cierre', codigo: 7, nombre: 'Cierre', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_cierre', opciones: [], siguiente: null },
   ];
 
   const sumarse: Caja[] = [
     {
       id: 'n_apoyo', codigo: 1, nombre: 'Gracias por el apoyo', ultimaLetra: 2, tipo: 'mensaje', contenido: 'c_apoyo', siguiente: null,
-      opciones: [{ letra: 'A', texto: 'Sí, me sumo', destino: 'n_sumate' }, { letra: 'B', texto: 'Ahora no', destino: null }],
+      opciones: [{ letra: 'A', texto: 'Sí, me sumo', destino: 'n_sumate' }, { letra: 'B', texto: 'Ahora no', destino: 'n_cierre3' }],
     },
     { id: 'n_sumate', codigo: 2, nombre: 'Pedir nombre', ultimaLetra: 0, tipo: 'pedir_dato', contenido: 'c_nombre', dato: 'nombre', variable: 'contacto.nombre', reintentos: 1, siguiente: 'n_zona', siFalla: 'n_zona' },
     { id: 'n_zona', codigo: 3, nombre: 'Pedir zona', ultimaLetra: 0, tipo: 'pedir_dato', contenido: 'c_zona', dato: 'texto', variable: 'contacto.zona', reintentos: 1, siguiente: 'n_sumado', siFalla: 'n_sumado' },
     { id: 'n_sumado', codigo: 4, nombre: 'Voluntario anotado', ultimaLetra: 0, tipo: 'derivacion', contenido: 'c_sumado', motivo: 'Quiere sumarse como voluntario', alVolver: null },
     { id: 'n_aporte', codigo: 5, nombre: 'Aportes', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_aporte', opciones: [], siguiente: null },
+    { id: 'n_cierre3', codigo: 6, nombre: 'Cierre', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_cierre', opciones: [], siguiente: null },
   ];
 
   const atencion: Caja[] = [
@@ -219,9 +222,10 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
   const datos: Caja[] = [
     {
       id: 'n_datos', codigo: 1, nombre: 'Datos personales', ultimaLetra: 2, tipo: 'mensaje', contenido: 'c_datos', siguiente: null,
-      opciones: [{ letra: 'A', texto: 'Sí, no me escriban', destino: 'n_baja' }, { letra: 'B', texto: 'No, sigan', destino: null }],
+      opciones: [{ letra: 'A', texto: 'Sí, no me escriban', destino: 'n_baja' }, { letra: 'B', texto: 'No, sigan', destino: 'n_cierre5' }],
     },
     { id: 'n_baja', codigo: 2, nombre: 'Baja', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_baja', opciones: [], siguiente: null, accion: 'dar_de_baja' },
+    { id: 'n_cierre5', codigo: 3, nombre: 'Cierre', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_cierre', opciones: [], siguiente: null },
   ];
 
   const flujo = (id: string, codigo: number, nombre: string, cajas: Caja[]) => ({ id, codigo, nombre, inicio: cajas[0]!.id, cajas, ultimoCodigo: Math.max(...cajas.map((c) => c.codigo)) });

@@ -30,7 +30,10 @@ const salida = z.union([
   z.object({ caso: z.number().int().min(1) }),
   z.object({ intencion: z.string().min(1) }),
 ]);
-/** Una caja nueva: su tipo y sus campos, sin id ni código (los pone la operación). Las opciones, sin letra. */
+/**
+ * Una caja nueva: su tipo y sus campos, sin código (lo pone la operación). Las opciones, sin letra. El id es opcional:
+ * quien arma varias operaciones juntas (el editor, el copiloto) lo elige para poder apuntar a la caja en la siguiente.
+ */
 const cajaNueva = z.object({ tipo: z.string() }).loose();
 const partes = z.object({
   flujos: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
@@ -42,7 +45,7 @@ const partes = z.object({
 });
 
 export const esquemaOperacion = z.discriminatedUnion('tipo', [
-  z.object({ tipo: z.literal('agregar_flujo'), nombre: z.string(), primera: cajaNueva }),
+  z.object({ tipo: z.literal('agregar_flujo'), id: z.string().optional(), nombre: z.string(), primera: cajaNueva }),
   z.object({ tipo: z.literal('renombrar_flujo'), flujo: z.string(), nombre: z.string() }),
   z.object({ tipo: z.literal('quitar_flujo'), flujo: z.string() }),
   z.object({ tipo: z.literal('agregar_caja'), flujo: z.string(), caja: cajaNueva, desde: z.object({ caja: idCaja, salida }).optional() }),
@@ -55,7 +58,7 @@ export const esquemaOperacion = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('cambiar_inicio'), caja: idCaja }),
   z.object({ tipo: z.literal('cambiar_texto_libre'), caja: idCaja }),
   z.object({ tipo: z.literal('cambiar_inicio_flujo'), flujo: z.string(), caja: idCaja }),
-  z.object({ tipo: z.literal('agregar_contenido'), contenido: z.object({ nombre: z.string(), tipo: z.enum(['texto', 'imagen', 'documento']).default('texto'), texto: z.string().default(''), archivo: z.unknown().optional() }) }),
+  z.object({ tipo: z.literal('agregar_contenido'), contenido: z.object({ id: z.string().optional(), nombre: z.string(), tipo: z.enum(['texto', 'imagen', 'documento']).default('texto'), texto: z.string().default(''), archivo: z.unknown().optional() }) }),
   z.object({ tipo: z.literal('editar_contenido'), contenido: z.string(), cambios: z.object({ nombre: z.string().optional(), texto: z.string().optional(), archivo: z.unknown().optional() }) }),
   z.object({ tipo: z.literal('quitar_contenido'), contenido: z.string() }),
   z.object({ tipo: z.literal('agregar_intencion'), intencion: z.record(z.string(), z.unknown()) }),
@@ -71,6 +74,8 @@ export const esquemaOperacion = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('editar_contacto'), consultas: z.unknown().optional(), aportes: z.unknown().optional() }),
   z.object({ tipo: z.literal('editar_sistema'), clave: z.enum(['noEntendi', 'aclaracion', 'cierre', 'sinMotor']), contenido: z.string() }),
   z.object({ tipo: z.literal('restaurar'), partes }),
+  /** Reemplazar partes enteras con lo que vino de un YAML (operacionImportar arma las partes y el resumen). */
+  z.object({ tipo: z.literal('importar'), partes, resumen: z.string().max(400).default('Importó el YAML') }),
 ]);
 
 export type Operacion = z.infer<typeof esquemaOperacion>;
@@ -151,6 +156,15 @@ function flujoDe(def: Definicion, id: string) {
   return def.flujos.find((f) => f.id === id) ?? falla('flujo_inexistente', 'El flujo no existe.');
 }
 
+/** El id que pidió quien arma la operación (si es válido y está libre) o uno nuevo. */
+function idPedido(d: Definicion, prefijo: 'n' | 'f' | 'c', pedido: unknown, azar: () => number): string {
+  const usados = idsUsados(d);
+  if (pedido === undefined) return nuevoId(prefijo, usados, azar);
+  if (typeof pedido !== 'string' || !new RegExp(`^${prefijo}_[a-z0-9]{4,12}$`).test(pedido)) falla('id_invalido', `El id ${String(pedido)} no tiene el formato ${prefijo}_ y de 4 a 12 letras o números.`);
+  if (usados.has(pedido as string)) falla('id_repetido', `El id ${String(pedido)} ya está en uso.`);
+  return pedido as string;
+}
+
 function construirCaja(datos: Record<string, unknown>, id: string, codigo: number): Caja {
   const opciones = Array.isArray(datos.opciones) ? (datos.opciones as Record<string, unknown>[]).map((o, i) => ({ ...o, letra: letraDeNumero(i + 1) })) : undefined;
   const r = esquemaCaja.safeParse({ ...datos, id, codigo, ultimaLetra: opciones?.length ?? 0, ...(opciones ? { opciones } : {}) });
@@ -205,10 +219,12 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
   const azar = o.azar ?? Math.random;
   switch (op.tipo) {
     case 'agregar_flujo': {
-      const id = nuevoId('f', idsUsados(d), azar);
+      const id = idPedido(d, 'f', op.id, azar);
       const codigo = d.ultimoFlujo + 1;
       if (codigo > 99) falla('limite', 'Un bot tiene hasta 99 flujos.');
-      const primera = construirCaja(op.primera as Record<string, unknown>, nuevoId('n', idsUsados(d), azar), 1);
+      const idPrimera = idPedido(d, 'n', (op.primera as { id?: unknown }).id, azar);
+      if (idPrimera === id) falla('id_repetido', 'El flujo y su primera caja no pueden tener el mismo id.');
+      const primera = construirCaja(op.primera as Record<string, unknown>, idPrimera, 1);
       d.flujos.push({ id, codigo, nombre: op.nombre.trim(), inicio: primera.id, cajas: [primera], ultimoCodigo: 1 });
       d.ultimoFlujo = codigo;
       return { resumen: `Agregó el flujo ${codigo} (${op.nombre.trim()})`, creado: id };
@@ -232,7 +248,7 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
       const f = flujoDe(d, op.flujo);
       const codigo = f.ultimoCodigo + 1;
       if (codigo > 999) falla('limite', 'Un flujo tiene hasta 999 cajas.');
-      const caja = construirCaja(op.caja as Record<string, unknown>, nuevoId('n', idsUsados(d), azar), codigo);
+      const caja = construirCaja(op.caja as Record<string, unknown>, idPedido(d, 'n', (op.caja as { id?: unknown }).id, azar), codigo);
       f.cajas.push(caja);
       f.ultimoCodigo = codigo;
       if (op.desde) ponerDestino(cajaDe(d, op.desde.caja).caja, op.desde.salida, caja.id);
@@ -303,8 +319,8 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
       return { resumen: `Cambió la caja de inicio del flujo ${f.codigo} a ${f.codigo}.${c.codigo}` };
     }
     case 'agregar_contenido': {
-      const id = nuevoId('c', idsUsados(d), azar);
-      const r = esquemaContenido.safeParse({ id, ...op.contenido });
+      const id = idPedido(d, 'c', op.contenido.id, azar);
+      const r = esquemaContenido.safeParse({ ...op.contenido, id });
       if (!r.success) falla('contenido_invalido', `El contenido no es válido: ${r.error.issues.map((i) => i.message).join('; ')}`);
       d.contenidos.push(r.data!);
       return { resumen: `Agregó el contenido ${r.data!.nombre}`, creado: id };
@@ -412,6 +428,10 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
       Object.assign(d, r);
       return { resumen: 'Deshizo un cambio' };
     }
+    case 'importar': {
+      Object.assign(d, restaurar(d, op.partes));
+      return { resumen: op.resumen };
+    }
   }
 }
 
@@ -477,6 +497,47 @@ export function aplicarCambio(def: Definicion, ops: unknown[], o: OpcionesOperac
     resumenes.push(r.resumen);
     if (r.creado) creados.push(r.creado);
   }
-  const resumen = resumenes.length === 1 ? resumenes[0]! : `${resumenes.length} cambios: ${resumenes.join('; ')}`;
+  // Lo que se crea para una caja o un flujo nuevo en el mismo cambio (su texto, su variable) no se nombra aparte.
+  const estructura = operaciones.some((x) => x.tipo === 'agregar_caja' || x.tipo === 'agregar_flujo');
+  const visibles = resumenes.filter((_, i) => !(estructura && (operaciones[i]!.tipo === 'agregar_contenido' || operaciones[i]!.tipo === 'agregar_variable')));
+  const resumen = visibles.length === 1 ? visibles[0]! : `${visibles.length} cambios: ${visibles.join('; ')}`;
   return { definicion: d, inversa: inversaEntre(def, d), operaciones, resumen: resumen.length > 500 ? `${resumen.slice(0, 497)}...` : resumen, creados };
+}
+
+/**
+ * La operación que lleva el borrador `actual` a lo que vino de un YAML (`importada`): las partes que cambian, con un
+ * resumen de qué cambió ("Importó el YAML: cambió 2 flujos y 1 contenido; agregó 1 intención"). null si no cambia nada.
+ */
+export function operacionImportar(actual: Definicion, importada: Definicion): Operacion | null {
+  const partes = partesParaVolver(importada, actual);
+  const nombres: Record<Coleccion, [string, string]> = {
+    flujos: ['flujo', 'flujos'], contenidos: ['contenido', 'contenidos'], intenciones: ['intención', 'intenciones'], temas: ['tema', 'temas'], variables: ['variable', 'variables'],
+  };
+  const cuantos = (n: number, c: Coleccion) => `${n} ${nombres[c][n === 1 ? 0 : 1]}`;
+  const agregados: string[] = [];
+  const cambiados: string[] = [];
+  const quitados: string[] = [];
+  for (const c of COLECCIONES) {
+    const antes = new Set((actual[c] as { id?: string; nombre?: string }[]).map((x) => claveDe(c, x)));
+    const despues = new Set((importada[c] as { id?: string; nombre?: string }[]).map((x) => claveDe(c, x)));
+    const ids = partes[c].map((p) => p.id);
+    const a = ids.filter((k) => !antes.has(k)).length;
+    const q = ids.filter((k) => !despues.has(k)).length;
+    // Los que solo cambiaron de lugar (porque se quitó o agregó otro) no cuentan como cambiados.
+    const valor = (d: Definicion, k: string) => (d[c] as { id?: string; nombre?: string }[]).find((x) => claveDe(c, x) === k);
+    const m = ids.filter((k) => antes.has(k) && despues.has(k) && !igual(valor(actual, k), valor(importada, k))).length;
+    if (a) agregados.push(cuantos(a, c));
+    if (m) cambiados.push(cuantos(m, c));
+    if (q) quitados.push(cuantos(q, c));
+  }
+  const sueltos = Object.keys(partes.sueltos).length;
+  if (!agregados.length && !cambiados.length && !quitados.length && !sueltos) return null;
+  const y = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)}` : xs[0] ?? '');
+  const frases = [
+    cambiados.length ? `cambió ${y(cambiados)}` : '',
+    agregados.length ? `agregó ${y(agregados)}` : '',
+    quitados.length ? `quitó ${y(quitados)}` : '',
+    sueltos ? 'cambió los datos generales' : '',
+  ].filter(Boolean);
+  return { tipo: 'importar', partes, resumen: `Importó el YAML: ${frases.join('; ')}` };
 }

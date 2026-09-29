@@ -5,6 +5,7 @@
 const OK: Record<string, string> = {
   bot_creado: 'Listo: el bot quedó creado en borrador, con la plantilla y los motores por defecto.',
   borrador_creado: 'Listo: el borrador quedó armado. Ya se puede editar.',
+  yaml_importado: 'Listo: se importó el YAML. Si algo no quedó bien, se deshace desde Flujos.',
   bot_guardado: 'Listo: se guardaron los datos del bot.',
   motores_guardados: 'Listo: se guardaron los motores y los topes de gasto.',
   datos_personales_guardados: 'Listo: se guardaron la personalización y los días de guardado.',
@@ -37,6 +38,14 @@ const ERROR: Record<string, string> = {
   definicion_invalida: 'Ese cambio dejaría el bot con un error, así que no se aplicó.',
   nada_que_deshacer: 'No hay nada para deshacer.',
   nada_que_rehacer: 'No hay nada para rehacer.',
+  yaml: 'El YAML tiene problemas: mirá la lista de abajo, con la línea de cada uno.',
+  yaml_desactualizado: 'El borrador cambió desde que se exportó este YAML. Si lo importás igual, se pierde lo que se cambió en el medio.',
+  sin_cambios: 'El YAML es igual al borrador: no hay nada para importar.',
+  caja_inexistente: 'Esa caja ya no existe. Recargá para ver lo último.',
+  id_repetido: 'Ese id ya está en uso.',
+  contenido_en_uso: 'Ese contenido lo usa alguna caja: cambiá esas cajas antes de quitarlo.',
+  variable_en_uso: 'Esa variable se usa en algún texto o caja: cambialos antes de quitarla.',
+  es_inicio: 'Esa caja es el inicio del bot o de su flujo: elegí otro inicio antes de quitarla.',
   tope: 'Los topes tienen que ser montos en dólares, de 0 en adelante.',
   tope_diario_mayor: 'El tope diario no puede ser mayor que el mensual.',
   dias: 'Los días de guardado van de 1 a 365.',
@@ -70,3 +79,12 @@ export function mensajeDe(parametros: Record<string, string | undefined>): Mensa
 
 export const CODIGOS_OK = Object.keys(OK);
 export const CODIGOS_ERROR = Object.keys(ERROR);
+
+/** El texto de un código de error (para las pantallas que reciben el resultado sin recargar, como el editor). */
+export function textoError(codigo: string): string {
+  return ERROR[codigo] ?? ERROR.no_se_pudo!;
+}
+
+export function textoOk(codigo: string): string {
+  return OK[codigo] ?? 'Listo.';
+}

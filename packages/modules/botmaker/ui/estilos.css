@@ -1,3 +1,6 @@
+/* El diagrama del editor de flujos usa React Flow: sus estilos base van primero. */
+@import '@xyflow/react/dist/style.css';
+
 /*
  * Estilos propios de BotMaker. Todo lo común sale de @campaignsuite/ui (tokens, marco, cajas, tablas, formularios);
  * acá solo lo que no existe, con el prefijo bots- y los mismos tokens. Solo modo oscuro.
@@ -43,4 +46,95 @@
   .bots-probar .entrada { min-width: 0; max-width: 100%; }
   .bots-fila-form { flex-wrap: wrap; }
   .bots-barras { gap: 1px; }
+}
+
+/* ── Editor de flujos (ui/editor) ─────────────────────────────────────────────────────────────── */
+.boton--peligro { background: var(--critico); color: #000; }
+.boton--peligro:hover { background: var(--flojo); color: #000; }
+.entrada--chica { width: auto; padding: 6px 8px; font-size: 12px; max-width: 100%; }
+.ed { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ed-barra { display: flex; flex-direction: column; gap: 10px; }
+.ed-flujos { display: flex; gap: 6px; flex-wrap: wrap; }
+.ed-flujo { background: transparent; color: var(--gris); border: 1px solid var(--linea); padding: 6px 10px; font-size: 12px; border-radius: var(--radio); cursor: pointer; font-family: inherit; }
+.ed-flujo:hover { color: var(--texto); border-color: var(--lavanda); }
+.ed-flujo[aria-selected='true'] { color: #000; background: var(--lavanda); border-color: var(--lavanda); }
+.ed-flujo__num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ed-flujo--nuevo { border-style: dashed; }
+.ed-herramientas { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ed-buscar { display: flex; gap: 6px; align-items: center; }
+.ed-buscar .entrada { width: 200px; }
+.ed-revision { background: transparent; color: var(--bien); border: 1px solid var(--linea); padding: 6px 10px; font-size: 12px; border-radius: var(--radio); cursor: pointer; font-family: inherit; }
+.ed-revision--aviso { color: var(--atencion); }
+.ed-revision--error { color: var(--critico); border-color: var(--critico); }
+.ed-panel { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px; background: var(--caja); border: 1px solid var(--linea); }
+.ed-panel .campo { min-width: 200px; }
+.ed-panel--revision { flex-direction: column; align-items: stretch; }
+.ed-flujo-acciones { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--gris); }
+.ed-enlace { background: none; border: 0; padding: 0; color: var(--lavanda); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.ed-boton-icono { background: transparent; border: 1px solid var(--linea); color: var(--texto-3); width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--radio); cursor: pointer; font-size: 14px; line-height: 1; }
+.ed-boton-icono:hover { border-color: var(--lavanda); color: var(--lavanda); }
+.ed-aviso { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; padding: 10px 12px; font-size: 12px; border-left: 2px solid var(--lavanda); background: var(--lavanda-suave); color: var(--texto-2); }
+.ed-aviso > span { flex: 1; min-width: 200px; }
+.ed-aviso ul { flex-basis: 100%; margin: 0; padding-left: 18px; order: 3; }
+.ed-aviso--ok { border-left-color: var(--bien); }
+.ed-aviso--error { border-left-color: var(--critico); background: var(--critico-suave); color: var(--texto); }
+.ed-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.ed-cuerpo--con-inspector { grid-template-columns: minmax(0, 1fr) 380px; }
+.ed-diagrama { height: 68vh; min-height: 420px; border: 1px solid var(--linea); background: #050505; }
+.ed-diagrama .react-flow { --xy-background-color: #050505; --xy-edge-stroke: #5c5c5c; --xy-edge-stroke-selected: var(--lavanda); --xy-controls-button-background-color: var(--cabecera); --xy-controls-button-color: var(--texto); --xy-controls-button-border-color: var(--linea); --xy-attribution-background-color: transparent; }
+.ed-arista--marcada path { stroke: var(--lavanda) !important; stroke-width: 2px; }
+.ed-nodo { background: var(--cabecera); border: 1px solid var(--linea); border-top: 2px solid var(--gris-oscuro); font-size: 12px; color: var(--texto-2); cursor: pointer; box-sizing: border-box; }
+.ed-nodo--mensaje, .ed-nodo--menu { border-top-color: var(--lavanda); }
+.ed-nodo--interpretar, .ed-nodo--respuesta_base { border-top-color: var(--bien); }
+.ed-nodo--derivacion { border-top-color: var(--atencion); }
+.ed-nodo--elegido { border-color: var(--lavanda); box-shadow: 0 0 0 1px var(--lavanda); }
+.ed-nodo--error { border-color: var(--critico); }
+.ed-nodo__cabeza { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--linea-suave); }
+.ed-nodo__dir { font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; }
+.ed-nodo__tipo { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gris); flex: 1; }
+.ed-marca { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; background: var(--lavanda); color: #000; padding: 1px 5px; border-radius: var(--radio); }
+.ed-marca--suave { background: transparent; color: var(--lavanda); border: 1px solid var(--lavanda); }
+.ed-cuenta { font-size: 10px; font-weight: 700; min-width: 16px; text-align: center; padding: 1px 4px; border-radius: 8px; color: #000; }
+.ed-cuenta--error { background: var(--critico); }
+.ed-cuenta--aviso { background: var(--atencion); }
+.ed-nodo__nombre { padding: 6px 10px 0; font-weight: 700; color: var(--texto); }
+.ed-nodo__resumen { padding: 4px 10px 8px; line-height: 1.35; overflow-wrap: anywhere; }
+.ed-nodo__salidas { list-style: none; margin: 0; padding: 0 0 4px; border-top: 1px solid var(--linea-suave); }
+.ed-salida { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 3px 14px 3px 10px; min-height: 24px; align-items: center; }
+.ed-salida__etiqueta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ed-salida__etiqueta em { color: var(--gris); font-style: normal; }
+.ed-salida__destino { color: var(--lavanda); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ed-punto { width: 9px !important; height: 9px !important; background: var(--lavanda) !important; border: 1px solid #000 !important; }
+.ed-punto--entrada { background: var(--gris) !important; }
+.ed-inspector { background: var(--caja); border: 1px solid var(--linea); padding: 16px; display: flex; flex-direction: column; gap: 14px; max-height: 68vh; overflow-y: auto; min-width: 0; }
+.ed-inspector__cabeza { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.ed-inspector__guardar { position: sticky; bottom: -16px; background: var(--caja); padding: 10px 0; border-top: 1px solid var(--linea); }
+.ed-inspector__acciones { display: flex; flex-direction: column; gap: 8px; }
+.ed-campo { gap: 4px; }
+.ed-texto { min-height: 80px; }
+.ed-destino { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.ed-destino select { min-width: 0; }
+.ed-opciones { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ed-opciones > legend, .ed-temas > legend { padding: 0; margin-bottom: 6px; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gris); }
+.ed-opcion { display: flex; gap: 8px; align-items: flex-start; }
+.ed-opcion__letra { flex-shrink: 0; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; border: 1px solid var(--lavanda); color: var(--lavanda); border-radius: var(--radio); }
+.ed-opcion__letra--ancha { width: auto; padding: 0 6px; font-weight: 500; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-opcion__campos { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ed-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ed-chip { cursor: pointer; }
+.ed-chip input { accent-color: var(--lavanda); }
+.ed-temas { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ed-hallazgos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ed-hallazgo { font-size: 12px; padding: 6px 10px; border-left: 2px solid var(--atencion); background: var(--fila-a); }
+.ed-hallazgo--error { border-left-color: var(--critico); color: var(--texto); }
+.ed-otro-contenido { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+@media (max-width: 1100px) {
+  .ed-cuerpo--con-inspector { grid-template-columns: minmax(0, 1fr); }
+  .ed-inspector { max-height: none; }
+}
+@media (max-width: 760px) {
+  .ed-diagrama { height: 60vh; min-height: 360px; }
+  .ed-buscar .entrada { width: 150px; }
+  .ed-panel .campo { min-width: 0; width: 100%; }
 }

@@ -11,11 +11,12 @@
 import { ErrorDatos } from '../datos/errores';
 import type { Repositorio } from '../datos/repositorio';
 import { validarDefinicion, type Definicion, type Problema } from '../dominio/definicion';
-import { aplicarCambio, aplicarOperacion, ErrorOperacion } from '../dominio/operaciones';
+import { aplicarCambio, aplicarOperacion, ErrorOperacion, operacionImportar } from '../dominio/operaciones';
 import { puede } from '../dominio/permisos';
 import { plantillaPolitica } from '../dominio/plantilla-politica';
 import type { Bot } from '../dominio/tipos';
 import { pilasDeshacer, type Borrador, type OrigenCambio } from '../dominio/versiones';
+import { exportarYaml, importarYaml, type ProblemaYaml } from '../dominio/yaml';
 import type { ContextoNucleo, Salida } from './ejecutar-bots';
 
 /** Cómo queda el borrador después de una acción: lo que necesita la pantalla del editor. */
@@ -31,7 +32,7 @@ export interface EstadoBorrador {
 
 export type ResultadoBorrador =
   | ({ ok: true; resumen: string; creados: string[]; otroCambio: boolean } & EstadoBorrador)
-  | { ok: false; codigo: string; mensaje?: string; problemas?: Problema[] };
+  | { ok: false; codigo: string; mensaje?: string; problemas?: Problema[]; problemasYaml?: ProblemaYaml[] };
 
 const falla = (codigo: string, mensaje?: string, problemas?: Problema[]): ResultadoBorrador => ({
   ok: false, codigo, ...(mensaje ? { mensaje } : {}), ...(problemas?.length ? { problemas } : {}),
@@ -143,5 +144,42 @@ export async function ejecutarCrearBorrador(c: ContextoNucleo, e: { botId: strin
     return { tipo: 'ok', codigo: 'borrador_creado' };
   } catch (x) {
     return { tipo: 'error', codigo: x instanceof ErrorDatos ? x.codigo : 'no_se_pudo' };
+  }
+}
+
+// ── YAML ────────────────────────────────────────────────────────────────────────────────────────
+
+const RE_EXPORTADO = /Exportado del cambio (\d+) del borrador v(\d+)/;
+
+/** El YAML del borrador, con un encabezado que dice de qué cambio salió (para avisar si al importarlo ya cambió). */
+export function yamlDelBorrador(bot: Pick<Bot, 'nombre'>, borrador: Pick<Borrador, 'numero' | 'seq'>, definicion: Definicion, ahora = new Date()): string {
+  const fecha = ahora.toISOString().slice(0, 16).replace('T', ' ');
+  return exportarYaml(definicion, [`Bot: ${bot.nombre}`, `Exportado del cambio ${borrador.seq} del borrador v${borrador.numero}, el ${fecha} (UTC).`]);
+}
+
+/**
+ * Importa un YAML sobre el borrador: lo compara y lo guarda como un solo cambio (origen yaml), que se deshace como
+ * cualquier otro. Si el YAML salió de un cambio anterior al actual, avisa que se pisarían los cambios de otras
+ * personas y solo sigue con `igual`.
+ */
+export async function ejecutarImportarYaml(c: ContextoNucleo, e: { botId: string; texto: string; igual?: boolean }, opciones: { azar?: () => number } = {}): Promise<ResultadoBorrador> {
+  const b = await botEditable(c, e.botId);
+  if ('ok' in b) return b;
+  const l = await leerBorrador(c.repo, b.id);
+  if ('codigo' in l) return falla(l.codigo, undefined, l.problemas);
+  const m = e.texto.match(RE_EXPORTADO);
+  if (m && !e.igual && (Number(m[1]) !== l.borrador.seq || Number(m[2]) !== l.borrador.numero)) {
+    return falla('yaml_desactualizado', `Este YAML salió del cambio ${m[1]} del borrador v${m[2]}, y el borrador ya va por el cambio ${l.borrador.seq} de la v${l.borrador.numero}. Si lo importás, se pierde lo que se cambió en el medio.`);
+  }
+  const r = importarYaml(e.texto, l.definicion, opciones);
+  if (!r.ok) return { ok: false, codigo: 'yaml', problemasYaml: r.problemas };
+  const op = operacionImportar(l.definicion, r.definicion);
+  if (!op) return falla('sin_cambios');
+  try {
+    const x = aplicarCambio(l.definicion, [op]);
+    const seq = await c.repo.guardarCambio(l.borrador.id, l.borrador.seq, { origen: 'yaml', operaciones: x.operaciones, inversa: x.inversa, resumen: x.resumen, objetivo: null }, x.definicion, c.personaId);
+    return { ok: true, resumen: x.resumen, creados: [], otroCambio: false, ...(await estado(c.repo, l.borrador, seq, x.definicion)) };
+  } catch (x) {
+    return deError(x);
   }
 }

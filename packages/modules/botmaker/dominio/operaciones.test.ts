@@ -73,8 +73,8 @@ describe('capa de operaciones', () => {
 
   it('agregar una caja le da el código siguiente y la conecta desde la salida elegida', () => {
     const r = aplicarOperacion(base(), OPERACIONES[0], { azar: azarFijo() });
-    expect(direccion(r.definicion, r.creado!)).toBe('2.7');
-    expect(r.resumen).toBe('Agregó la caja 2.7 (mensaje)');
+    expect(direccion(r.definicion, r.creado!)).toBe('2.8');
+    expect(r.resumen).toBe('Agregó la caja 2.8 (mensaje)');
     const menu = ubicar(r.definicion, 'n_masayuda')!.caja as { opciones: { letra: string; destino: string | null }[] };
     expect(menu.opciones.find((o) => o.letra === 'B')?.destino).toBe(r.creado);
   });
@@ -87,7 +87,7 @@ describe('capa de operaciones', () => {
     d = aplicarOperacion(d, { tipo: 'cambiar_inicio_flujo', flujo: 'f_consultas', caja: 'n_masayuda' }).definicion;
     d = aplicarOperacion(d, { tipo: 'quitar_caja', caja: 'n_irmenu' }).definicion;
     const nueva = aplicarOperacion(d, { tipo: 'agregar_caja', flujo: 'f_consultas', caja: { tipo: 'mensaje', contenido: 'c_masayuda', siguiente: null } });
-    expect(direccion(nueva.definicion, nueva.creado!)).toBe('2.7');
+    expect(direccion(nueva.definicion, nueva.creado!)).toBe('2.8');
   });
 
   it('quitar una caja deja sin destino lo que apuntaba a ella; la de inicio no se quita', () => {
@@ -119,6 +119,17 @@ describe('capa de operaciones', () => {
     d = aplicarOperacion(d, { tipo: 'editar_intencion', intencion: 'propuesta', cambios: { tema: 'agua' } }).definicion;
     d = aplicarOperacion(d, { tipo: 'quitar_tema', tema: 'agua' }).definicion;
     expect(d.intenciones.find((i) => i.id === 'propuesta')?.tema).toBeNull();
+  });
+
+  it('quien arma varias operaciones juntas puede elegir los ids para encadenarlas', () => {
+    const { definicion } = aplicarOperaciones(base(), [
+      { tipo: 'agregar_contenido', contenido: { id: 'c_gracias1', nombre: 'Gracias', texto: 'Gracias.' } },
+      { tipo: 'agregar_caja', flujo: 'f_consultas', caja: { id: 'n_gracias1', tipo: 'mensaje', contenido: 'c_gracias1' } },
+      { tipo: 'cambiar_ruta', caja: 'n_masayuda', salida: { opcion: 'B' }, destino: 'n_gracias1' },
+    ]);
+    expect(direccion(definicion, 'n_gracias1')).toBe('2.8');
+    expect(falla(base(), { tipo: 'agregar_caja', flujo: 'f_consultas', caja: { id: 'n_menu', tipo: 'mensaje', contenido: 'c_menu' } }).codigo).toBe('id_repetido');
+    expect(falla(base(), { tipo: 'agregar_contenido', contenido: { id: 'n_malo1', nombre: 'x', texto: 'x' } }).codigo).toBe('id_invalido');
   });
 
   it('varias operaciones: si una falla, no se aplica ninguna', () => {

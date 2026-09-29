@@ -27,8 +27,8 @@ export async function crearBot(fd: FormData): Promise<void> {
   const s = await ejecutarCrearBot({ repo, rol, personaId: persona.id, campanaId }, fd);
   if (s.tipo === 'ok' && s.botId) {
     revalidatePath(RUTA_LAYOUT, 'layout');
-    // De …/bots/nuevo al bot recién creado: …/bots/<id>.
-    redirect(conMensaje(volver.replace(/\/nuevo(\?.*)?$/, `/${s.botId}`), 'ok', s.codigo));
+    // De …/bots/nuevo a los flujos del bot recién creado: …/bots/<id>/flujos.
+    redirect(conMensaje(volver.replace(/\/nuevo(\?.*)?$/, `/${s.botId}/flujos`), 'ok', s.codigo));
   }
   volverCon(volver, s);
 }
