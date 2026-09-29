@@ -89,6 +89,7 @@
 .ed-nodo--derivacion { border-top-color: var(--atencion); }
 .ed-nodo--elegido { border-color: var(--lavanda); box-shadow: 0 0 0 1px var(--lavanda); }
 .ed-nodo--error { border-color: var(--critico); }
+.ed-nodo--recorrido { box-shadow: 0 0 0 3px rgba(196, 181, 232, 0.35); }
 .ed-nodo__cabeza { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--linea-suave); }
 .ed-nodo__dir { font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; }
 .ed-nodo__tipo { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gris); flex: 1; }
@@ -168,4 +169,39 @@ textarea.bots-yaml { min-height: 520px; }
 }
 @media (max-width: 760px) {
   .bots-previas { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Simulador (ui/simulador) ──────────────────────────────────────────────────────────────────── */
+.sim { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+.sim-controles { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.sim-controles .campo { min-width: 0; }
+.sim-variables { display: flex; flex-direction: column; gap: 8px; padding: 6px 0; }
+.sim-variables[open] { flex-basis: 100%; }
+.sim-chat { display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 360px; max-height: 62vh; overflow-y: auto; background: #0a0a0a; border: 1px solid var(--linea); }
+.sim--whatsapp .sim-chat { background: #0b141a; }
+.sim-grupo { display: flex; flex-direction: column; gap: 6px; }
+.sim-fila { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 85%; }
+.sim-fila--persona { align-self: flex-end; align-items: flex-end; }
+.sim-burbuja { padding: 8px 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--cabecera); color: var(--texto); border-radius: 10px 10px 10px 2px; }
+.sim-burbuja--persona { background: var(--lavanda); color: #000; border-radius: 10px 10px 2px 10px; }
+.sim--whatsapp .sim-burbuja { background: #202c33; }
+.sim--whatsapp .sim-burbuja--persona { background: #005c4b; color: #e9edef; }
+.sim-opciones { display: flex; flex-wrap: wrap; gap: 6px; }
+.sim-opciones--lista { flex-direction: column; flex-wrap: nowrap; width: 100%; }
+.sim--whatsapp .sim-opciones { flex-direction: column; width: 100%; }
+.sim-boton { display: flex; flex-direction: column; align-items: center; gap: 2px; background: transparent; color: var(--lavanda); border: 1px solid var(--lavanda); padding: 6px 12px; font: inherit; font-size: 13px; border-radius: 16px; cursor: pointer; }
+.sim-boton:disabled { opacity: 0.45; cursor: default; }
+.sim--whatsapp .sim-boton { color: #53bdeb; border-color: transparent; background: #202c33; border-radius: 8px; }
+.sim-boton--lista { margin-top: 6px; width: 100%; }
+.sim-porque { max-width: 100%; color: var(--gris); }
+.sim-porque > summary { cursor: pointer; }
+.sim-decision { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 6px 0 0; padding: 8px 10px; background: var(--fila-a); border-left: 2px solid var(--lavanda); }
+.sim-decision dt { color: var(--gris); }
+.sim-decision dd { margin: 0; color: var(--texto-2); overflow-wrap: anywhere; }
+.sim-escribiendo, .sim-nada { font-style: italic; }
+.sim-entrada { display: flex; gap: 8px; }
+.sim-entrada .entrada { flex: 1; min-width: 0; }
+@media (max-width: 760px) {
+  .sim-fila { max-width: 100%; }
+  .sim-decision { grid-template-columns: minmax(0, 1fr); }
 }

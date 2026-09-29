@@ -23,6 +23,8 @@ import { PantallaFlujos } from '../ui/flujos';
 import { vistaEditor } from '../vistas/editor';
 import { PantallaContenidos, PantallaIntenciones, PantallaVariables, PantallaYaml } from '../ui/partes';
 import { vistaContenidos, vistaIntenciones, vistaVariables, vistaYaml } from '../vistas/partes';
+import { PantallaSimulador } from '../ui/simulador';
+import { vistaSimulador } from '../vistas/simulador';
 import { vistaBot } from '../vistas/bot';
 import { vistaBots } from '../vistas/bots';
 import { vistaCostos } from '../vistas/costos';
@@ -118,6 +120,9 @@ async function main() {
       prueba(`variables y datos: ${e.datos ? 'se editan' : 'solo mirar'}`, tiene(variables, 'Candidato y partido') && tiene(variables, '{{bot.horario}}') && tiene(variables, 'Agregar variable') === e.datos);
       const yaml = html(createElement(PantallaYaml, { v: (await vistaYaml(repo, c, 'bot-demo-1'))! }));
       prueba(`yaml: exportar${e.datos ? ' e importar' : ''}`, tiene(yaml, 'Descargar .yaml') && tiene(yaml, 'Importar</button>') === e.datos);
+
+      const simulador = html(createElement(PantallaSimulador, { v: (await vistaSimulador(repo, c, 'bot-demo-1'))! }));
+      prueba(`simulador: ${e.datos ? 'el chat' : 'no lo usa (tiene costo)'}`, tiene(simulador, 'sim-controles') === e.datos && tiene(simulador, 'lo usan el editor y el administrador') === !e.datos);
 
       const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));

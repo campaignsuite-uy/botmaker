@@ -227,7 +227,7 @@ class Turnero {
         const pregunta = this.consumir() ?? this.rellenar(c.pregunta!);
         const r = await this.sv.responder({ pregunta, turnos: this.previos, material: this.sv.material(c.temas) });
         this.decision.costoUsd += r.costoUsd;
-        this.decision.motor = r.motorId;
+        if (r.motorId) this.decision.motor = r.motorId;
         if (r.salida && r.salida.tiene_respuesta !== 'no') {
           this.decision.secciones = r.salida.secciones;
           this.decir(r.salida.respuesta, null);
