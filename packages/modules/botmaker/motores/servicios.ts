@@ -3,7 +3,7 @@
  * interpretar y responder pasan por la capa (con su elección de motores, respaldo, doble lectura, topes y registro de
  * cada llamada con su uso: simulador, pruebas o en vivo); el material y el horario los pone quien llama.
  */
-import type { Definicion } from '../dominio/definicion';
+import { materialPara, type Definicion } from '../dominio/definicion';
 import type { Servicios } from '../dominio/motor';
 import type { Bot, UsoMotor } from '../dominio/tipos';
 import type { CapaMotores } from './capa';
@@ -16,7 +16,7 @@ export interface OpcionesServicios {
   definicion: Definicion;
   uso: UsoMotor;
   personaId: string | null;
-  /** El material del bot en secciones (etapa 3). Sin material, responder con base dice que no tiene el dato. */
+  /** El material en secciones. Si no se pasa, el de la definición (lo que guarda cada versión). */
   material?: (temas: string[]) => SeccionMaterial[];
   dentroDeHorario: () => boolean;
 }
@@ -25,6 +25,7 @@ export function contextoDeBot(o: Pick<OpcionesServicios, 'bot' | 'campana' | 'de
   return {
     nombreBot: o.bot.nombre, campana: o.campana.nombre, mercado: o.bot.mercado, caso: o.bot.caso, trato: o.bot.trato,
     identidad: o.definicion.identidad,
+    ...(o.definicion.contacto.consultas ? { consultas: o.definicion.contacto.consultas.valor } : {}),
   };
 }
 
@@ -42,7 +43,7 @@ export function serviciosDeCapa(capa: CapaMotores, o: OpcionesServicios): Servic
       const r = await capa.llamar({ funcion: 'responder', uso: o.uso, bot, contexto, entrada, personaId: o.personaId });
       return { salida: r.salida, motorId: r.motorId, costoUsd: r.costoUsd };
     },
-    material: (temas) => o.material?.(temas) ?? [],
+    material: (temas) => o.material?.(temas) ?? materialPara(o.definicion, temas),
     dentroDeHorario: o.dentroDeHorario,
   };
 }

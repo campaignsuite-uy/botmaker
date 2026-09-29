@@ -27,6 +27,8 @@ const EVENTOS: Partial<Record<Evento['nombre'], string>> = {
   boton_viejo: 'Botón de antes: se tomó como texto',
   sin_dato: 'El material no tiene el dato',
   mensaje_en_derivada: 'La conversación está con el equipo: el bot no contesta',
+  dato_cortado: 'El validador de datos cortó la respuesta: tenía un dato que no está en lo citado',
+  tramite_electoral: 'Trámite electoral que el material no cubre: derivó al organismo electoral',
 };
 
 function guardarRecorrido(versionId: string, recorrido: string[]) {
@@ -193,6 +195,7 @@ function PorQue({ t, s }: { t: Extract<Turno, { quien: 'bot' }>; s: EstadoSimula
         ) : null}
         {d.motor ? <><dt>Motor</dt><dd>{s.motores[d.motor] ?? d.motor}</dd></> : null}
         {d.secciones?.length ? <><dt>Secciones del material</dt><dd>{d.secciones.join(', ')}</dd></> : null}
+        {d.corte?.length ? <><dt>Cortó el validador</dt><dd className="est-critico">{d.corte.join(' · ')}</dd></> : null}
         <dt>Costo</dt><dd>{usd(d.costoUsd)}</dd>
         {eventos.length ? <><dt>Qué pasó</dt><dd>{eventos.join(' · ')}</dd></> : null}
       </dl>

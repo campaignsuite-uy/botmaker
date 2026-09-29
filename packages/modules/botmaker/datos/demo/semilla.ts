@@ -4,7 +4,9 @@
  * barra de arriba lo dice: "Datos de prueba". Siempre las mismas: salen de un generador con semilla fija.
  */
 import { MOTORES_POR_DEFECTO, fichaMotor, costoEstimado } from '../../dominio/motores';
+import { aplicarOperacion } from '../../dominio/operaciones';
 import { plantillaPolitica } from '../../dominio/plantilla-politica';
+import { MATERIAL_DEMO } from './material-demo';
 import type { Bot, FuncionMotor, LlamadaMotor, MotorFuncion, UsoMotor } from '../../dominio/tipos';
 import type { Version } from '../../dominio/versiones';
 
@@ -86,14 +88,22 @@ export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, Mo
       }
     }
   }
-  // Cada bot arranca con su borrador (v1) armado con la plantilla política.
-  const versiones = bots.map((b, i) => ({
-    id: `ver-demo-${i + 1}`, botId: b.id, campanaId: b.campanaId, numero: 1, estado: 'borrador' as const, basadaEn: null, seq: 0,
-    creadaPor: b.creadoPor, creadaEn: b.creadoEn, actualizadaEn: b.actualizadoEn,
-    definicion: plantillaPolitica({
-      candidato: CANDIDATA_DEMO, partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'], trato: b.trato, mercado: b.mercado,
+  // Cada bot arranca con su borrador (v1) armado con la plantilla política. El primero, con una candidata inventada y sin
+  // material (muestra el camino de "no tengo ese dato"); el segundo, con el material de prueba de la prueba de motores
+  // (fuentes públicas al 28/9/2026), para probar la respuesta con base en el simulador.
+  const definiciones = [
+    plantillaPolitica({
+      candidato: CANDIDATA_DEMO, partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'], trato: bots[0]!.trato, mercado: bots[0]!.mercado,
       consultas: { canal: 'correo', valor: 'consultas@ejemplo.org' }, aportes: { canal: 'web', valor: 'ejemplo.org/aportes' },
     }),
+    aplicarOperacion(plantillaPolitica({
+      candidato: 'Ricardo Lombana', aliasCandidato: ['Lombana', 'el lic'], partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'],
+      trato: bots[1]!.trato, mercado: bots[1]!.mercado, consultas: { canal: 'web', valor: 'otrocamino.org' },
+    }), { tipo: 'cargar_material', texto: MATERIAL_DEMO, reemplazar: true }).definicion,
+  ];
+  const versiones = bots.map((b, i) => ({
+    id: `ver-demo-${i + 1}`, botId: b.id, campanaId: b.campanaId, numero: 1, estado: 'borrador' as const, basadaEn: null, seq: 0,
+    creadaPor: b.creadoPor, creadaEn: b.creadoEn, actualizadaEn: b.actualizadoEn, definicion: definiciones[i],
   }));
   return { bots, motores, llamadas, versiones };
 }

@@ -102,3 +102,28 @@ describe('simulador', () => {
     expect(await ejecutarTurnoSimulador(como('p-joaquin'), capa, { botId: BOT, sesion: null, entrada: { tipo: 'volar' }, horario: 'dentro' })).toEqual({ ok: false, codigo: 'datos' });
   });
 });
+
+describe('simulador con material (etapa 3)', () => {
+  const BOT2 = 'bot-demo-2';
+  const turnoEn = async (sesion: unknown, entrada: unknown) => {
+    const r = await ejecutarTurnoSimulador(como('p-lucia'), capa, { botId: BOT2, sesion, entrada, horario: 'dentro' });
+    if (!r.ok) throw new Error(r.codigo);
+    return r;
+  };
+
+  it('contesta con el material y cita la sección', async () => {
+    const a = await turnoEn(null, { tipo: 'inicio' });
+    const r = await turnoEn(a.sesion, { tipo: 'texto', texto: '¿Cuántos votos sacó Lombana en la elección de 2019?' });
+    expect(r.decision.secciones).toEqual(['S02']);
+    expect(r.mensajes[0]!.texto).toMatch(/Otro Camino|2019|independiente/);
+    expect(r.decision.corte).toBeUndefined();
+  });
+
+  it('"Si tengo la cédula vencida, ¿puedo votar?" termina en la derivación al Tribunal Electoral', async () => {
+    const a = await turnoEn(null, { tipo: 'inicio' });
+    const r = await turnoEn(a.sesion, { tipo: 'texto', texto: 'Si tengo la cédula vencida, ¿puedo votar?' });
+    expect(r.decision.intencion).toBe('tramite_electoral');
+    expect(r.mensajes[0]!.texto).toMatch(/la información oficial la da el Tribunal Electoral/);
+    expect(r.eventos.map((e) => e.nombre)).toContain('tramite_electoral');
+  });
+});

@@ -1,6 +1,6 @@
 /**
- * Lo común a las pantallas de un bot: el encabezado (nombre, estado) y las pestañas (Flujos, Contenidos, Intenciones,
- * Variables, Simulador, YAML, Ajustes), y la carga del bot y su borrador con los permisos de quien mira.
+ * Lo común a las pantallas de un bot: el encabezado (nombre, estado) y las pestañas (Flujos, Contenidos, Material,
+ * Intenciones, Variables, Simulador, YAML, Ajustes), y la carga del bot y su borrador con los permisos de quien mira.
  */
 import type { Repositorio } from '../datos/repositorio';
 import { ETIQUETA_ESTADO_BOT } from '../dominio/bots';
@@ -10,11 +10,12 @@ import type { Bot, EstadoBot } from '../dominio/tipos';
 import { pilasDeshacer, type Borrador } from '../dominio/versiones';
 import { ruta, type ContextoPantalla } from '../ui/contexto';
 
-export type PestanaBot = 'flujos' | 'contenidos' | 'intenciones' | 'variables' | 'simulador' | 'yaml' | 'ajustes';
+export type PestanaBot = 'flujos' | 'contenidos' | 'material' | 'intenciones' | 'variables' | 'simulador' | 'yaml' | 'ajustes';
 
 export const PESTANAS_BOT: { id: PestanaBot; texto: string; seccion: string }[] = [
   { id: 'flujos', texto: 'Flujos', seccion: 'flujos' },
   { id: 'contenidos', texto: 'Contenidos', seccion: 'contenidos' },
+  { id: 'material', texto: 'Material', seccion: 'material' },
   { id: 'intenciones', texto: 'Intenciones y temas', seccion: 'intenciones' },
   { id: 'variables', texto: 'Variables y datos', seccion: 'variables' },
   { id: 'simulador', texto: 'Simulador', seccion: 'simulador' },

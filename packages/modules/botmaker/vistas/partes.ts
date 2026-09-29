@@ -7,6 +7,8 @@ import type { Repositorio } from '../datos/repositorio';
 import { ETIQUETA_TIPO_CAJA, LIMITES, opcionesDe, type Definicion } from '../dominio/definicion';
 import { puede } from '../dominio/permisos';
 import { yamlDelBorrador } from '../acciones/ejecutar-borrador';
+import { tokensAproximados } from '../dominio/material';
+import { costoEstimado, fichaMotor } from '../dominio/motores';
 import type { ContextoPantalla } from '../ui/contexto';
 import { cargarBot, encabezadoBot, hrefBot, type BotConBorrador, type EncabezadoBotVista, type PestanaBot } from './bot-comun';
 import { mensajeDe, type MensajePantalla } from './mensajes';
@@ -87,6 +89,7 @@ export interface VistaContenidos extends BaseParte {
 
 const CLAVES_SISTEMA: Record<keyof Definicion['sistema'], string> = {
   noEntendi: 'no entendí', aclaracion: 'aclaración de la doble lectura', cierre: 'cierre', sinMotor: 'sin motor',
+  tramite: 'trámite electoral que el material no cubre',
 };
 
 export async function vistaContenidos(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaContenidos | null> {
@@ -205,7 +208,7 @@ export async function vistaVariables(repo: Repositorio, ctx: ContextoPantalla, b
       ];
       return { nombre: v.nombre, ambito: v.nombre.startsWith('bot.') ? 'bot' as const : 'contacto' as const, descripcion: v.descripcion, valor: v.valor ?? '', usos, quitable: !usos.length };
     }),
-    sistema: (Object.keys(CLAVES_SISTEMA) as (keyof Definicion['sistema'])[]).map((k) => ({ clave: k, etiqueta: CLAVES_SISTEMA[k], valor: def.sistema[k] })),
+    sistema: (Object.keys(CLAVES_SISTEMA) as (keyof Definicion['sistema'])[]).map((k) => ({ clave: k, etiqueta: CLAVES_SISTEMA[k], valor: def.sistema[k] ?? '' })),
     contenidos: def.contenidos.map((c) => ({ valor: c.id, texto: c.nombre })),
   };
 }
@@ -228,5 +231,50 @@ export async function vistaYaml(repo: Repositorio, ctx: ContextoPantalla, botId:
     ...x.comun, yaml, puedeVer: puede(ctx.rol, 'ver'),
     nombreArchivo: `${bot.nombre.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'bot'}-v${borrador?.numero ?? 0}.yaml`,
     hrefDescargar: hrefBot(ctx, bot.id, 'yaml/descargar'),
+  };
+}
+
+// ── Material ────────────────────────────────────────────────────────────────────────────────────
+
+export interface VistaMaterial extends BaseParte {
+  secciones: { codigo: string; titulo: string; texto: string; fuente: string; fecha: string; temas: string[]; temasTexto: string; tokens: number; citadaEn: string[] }[];
+  temas: Opcion[];
+  tokens: number;
+  /** Lo que cuesta mandar el material en cada respuesta con base, con el motor de responder del bot. */
+  costo: { motor: string; sinCache: string; conCache: string | null } | null;
+  hrefDescargar: string;
+  hrefSimulador: string;
+}
+
+export async function vistaMaterial(repo: Repositorio, ctx: ContextoPantalla, botId: string): Promise<VistaMaterial | null> {
+  const x = await base(repo, ctx, botId, 'material');
+  if (!x) return null;
+  const def = x.b.definicion;
+  const secciones = def?.material ?? [];
+  const tokens = tokensAproximados(secciones);
+  const motores = await repo.motoresDeBot(x.b.bot.id);
+  const fichas = await repo.fichas();
+  const responder = motores.find((m) => m.funcion === 'responder');
+  const f = responder ? fichaMotor(responder.principal, fichas) : undefined;
+  const usd = (n: number) => `USD ${n < 0.001 ? n.toFixed(5) : n.toFixed(4)}`.replace('.', ',');
+  const temaDe = new Map((def?.temas ?? []).map((t) => [t.id, t.nombre]));
+  // Las cajas de respuesta con base que usan cada sección (todas, salvo las que filtran por otros temas).
+  const respuestas = (def?.flujos ?? []).flatMap((fl) => fl.cajas.flatMap((c) => (c.tipo === 'respuesta_base' ? [{ dir: `${fl.codigo}.${c.codigo}`, temas: c.temas }] : [])));
+  const cajasCon = (temas: string[]) => respuestas.filter((r) => !r.temas.length || !temas.length || temas.some((t) => r.temas.includes(t))).map((r) => r.dir);
+  return {
+    ...x.comun,
+    secciones: secciones.map((s) => ({
+      codigo: s.codigo, titulo: s.titulo, texto: s.texto, fuente: s.fuente, fecha: s.fecha, temas: s.temas,
+      temasTexto: s.temas.map((t) => temaDe.get(t) ?? t).join(', '), tokens: tokensAproximados([s]), citadaEn: cajasCon(s.temas),
+    })),
+    temas: (def?.temas ?? []).map((t) => ({ valor: t.id, texto: t.nombre })),
+    tokens,
+    costo: f && tokens ? {
+      motor: f.nombre,
+      sinCache: usd(costoEstimado(f, { entrada: tokens + 600, salida: 180, cache: 0 })),
+      conCache: f.precioCache !== null ? usd(costoEstimado(f, { entrada: tokens + 600, salida: 180, cache: tokens })) : null,
+    } : null,
+    hrefDescargar: hrefBot(ctx, x.b.bot.id, 'material/descargar'),
+    hrefSimulador: hrefBot(ctx, x.b.bot.id, 'simulador'),
   };
 }

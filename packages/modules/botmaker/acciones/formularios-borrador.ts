@@ -112,10 +112,26 @@ export function operacionesDeForma(fd: FormData, def: Definicion): ResultadoForm
       }
       return { ops };
     }
+    case 'material_cargar': {
+      const t = String(fd.get('texto') ?? '');
+      if (!t.trim()) return { codigo: 'material_vacio' };
+      return { ops: [{ tipo: 'cargar_material', texto: t, reemplazar: texto(fd, 'reemplazar') === 'si' }] };
+    }
+    case 'seccion_agregar':
+      return { ops: [{ tipo: 'agregar_seccion', seccion: { titulo: texto(fd, 'titulo'), texto: String(fd.get('texto') ?? '').trim(), fuente: texto(fd, 'fuente'), fecha: texto(fd, 'fecha'), temas: fd.getAll('temas').map(String) } }] };
+    case 'seccion_editar':
+      return {
+        ops: [{
+          tipo: 'editar_seccion', seccion: texto(fd, 'seccion'),
+          cambios: { titulo: texto(fd, 'titulo'), texto: String(fd.get('texto') ?? '').trim(), fuente: texto(fd, 'fuente'), fecha: texto(fd, 'fecha'), temas: fd.getAll('temas').map(String) },
+        }],
+      };
+    case 'seccion_quitar':
+      return { ops: [{ tipo: 'quitar_seccion', seccion: texto(fd, 'seccion') }] };
     case 'contacto':
       return { ops: [{ tipo: 'editar_contacto', consultas: canal(fd, 'consultas'), aportes: canal(fd, 'aportes') }] };
     case 'sistema': {
-      const ops = (['noEntendi', 'aclaracion', 'cierre', 'sinMotor'] as const)
+      const ops = (['noEntendi', 'aclaracion', 'cierre', 'sinMotor', 'tramite'] as const)
         .filter((k) => texto(fd, k) && texto(fd, k) !== def.sistema[k])
         .map((k) => ({ tipo: 'editar_sistema', clave: k, contenido: texto(fd, k) }));
       return ops.length ? { ops } : { codigo: 'sin_cambios' };

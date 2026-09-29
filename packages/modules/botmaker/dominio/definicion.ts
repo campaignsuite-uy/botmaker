@@ -50,6 +50,8 @@ export const LIMITES = {
   temas: 60,
   frasesPorIntencion: 30,
   alias: 10,
+  secciones: 300,
+  textoSeccion: 20000,
 } as const;
 
 // ── Piezas ──────────────────────────────────────────────────────────────────────────────────────
@@ -212,6 +214,20 @@ export const esquemaTema = z.object({
   descripcion: texto(200).default(''),
 });
 
+/** Una sección del material con que el bot contesta (etapa 3): se cita por su código (S12). */
+export const RE_CODIGO_SECCION = /^S\d{2,3}$/;
+export const esquemaSeccion = z.object({
+  codigo: z.string().regex(RE_CODIGO_SECCION, 'codigo_seccion'),
+  titulo: texto(120).min(1, 'nombre_vacio'),
+  texto: z.string().trim().min(1, 'texto_vacio').max(LIMITES.textoSeccion),
+  /** De dónde sale (medio y fecha): el bot lo puede mencionar y el validador de datos lo usa. */
+  fuente: texto(600).default(''),
+  /** Fecha del dato, si la tiene (AAAA-MM-DD o como venga en la fuente). */
+  fecha: texto(40).default(''),
+  /** Temas de la sección. Sin temas, entra en toda respuesta con base; con temas, solo en las cajas de esos temas. */
+  temas: z.array(idCatalogo).default([]),
+});
+
 export const esquemaVariable = z.object({
   nombre: refVariable,
   descripcion: texto(200).default(''),
@@ -243,6 +259,10 @@ export const esquemaDefinicion = z.object({
   intenciones: z.array(esquemaIntencion).max(LIMITES.intenciones).default([]),
   temas: z.array(esquemaTema).max(LIMITES.temas).default([]),
   variables: z.array(esquemaVariable).max(60).default([]),
+  /** El material del bot, en secciones (etapa 3). Cada versión guarda su copia: lo publicado no cambia. */
+  material: z.array(esquemaSeccion).max(LIMITES.secciones).default([]),
+  /** El último número de sección asignado (no se reusan: una conversación vieja sigue citando lo mismo). */
+  ultimaSeccion: z.number().int().min(0).max(999).default(0),
   identidad: z.object({ candidato: persona, partido: persona.nullable().default(null) }),
   /** Canales de contacto: el de consultas es el que ofrece el bot cuando no sabe algo; el de aportes, solo para aportes. */
   contacto: z.object({ consultas: canal.nullable().default(null), aportes: canal.nullable().default(null) }),
@@ -256,6 +276,8 @@ export const esquemaDefinicion = z.object({
     cierre: idContenido,
     /** Sin motor disponible (tope o falla): pedir que use las opciones. */
     sinMotor: idContenido,
+    /** Un trámite electoral que el material no cubre: derivar al organismo electoral (nunca contestar una regla). */
+    tramite: idContenido.optional(),
   }),
 });
 
@@ -265,6 +287,7 @@ export type Contenido = z.infer<typeof esquemaContenido>;
 export type Intencion = z.infer<typeof esquemaIntencion>;
 export type Tema = z.infer<typeof esquemaTema>;
 export type Variable = z.infer<typeof esquemaVariable>;
+export type Seccion = z.infer<typeof esquemaSeccion>;
 export type Opcion = z.infer<typeof opcion>;
 export type Condicion = z.infer<typeof condicion>;
 export type Definicion = z.infer<typeof esquemaDefinicion>;
@@ -398,7 +421,7 @@ export function problemasDeReferencias(def: Definicion): Problema[] {
 
   if (!idCajas.has(def.inicio)) agregar('destino_inexistente', 'La caja de inicio del bot no existe.', 'inicio');
   if (!idCajas.has(def.textoLibre)) agregar('destino_inexistente', 'La caja que recibe los textos libres no existe.', 'texto libre');
-  for (const [clave, id] of Object.entries(def.sistema)) if (!contenidos.has(id)) agregar('contenido_inexistente', `El mensaje del sistema "${clave}" usa un contenido que no existe.`, `sistema ${clave}`);
+  for (const [clave, id] of Object.entries(def.sistema)) if (id !== undefined && !contenidos.has(id)) agregar('contenido_inexistente', `El mensaje del sistema "${clave}" usa un contenido que no existe.`, `sistema ${clave}`);
 
   for (const f of def.flujos) {
     const donde = `flujo ${f.codigo}`;
@@ -439,6 +462,11 @@ export function problemasDeReferencias(def: Definicion): Problema[] {
     if (i.destino !== null && !idCajas.has(i.destino)) agregar('destino_inexistente', `La intención ${i.id} va a una caja que no existe.`, donde);
     if (i.tema !== null && !temas.has(i.tema)) agregar('tema_inexistente', `La intención ${i.id} usa el tema ${i.tema}, que no existe.`, donde);
   }
+  for (const c of repetidos(def.material.map((x) => x.codigo))) agregar('id_repetido', `La sección ${c} está dos veces en el material.`, `sección ${c}`);
+  for (const x of def.material) {
+    for (const t of x.temas) if (!temas.has(t)) agregar('tema_inexistente', `La sección ${x.codigo} usa el tema ${t}, que no existe.`, `sección ${x.codigo}`);
+    if (Number(x.codigo.slice(1)) > def.ultimaSeccion) agregar('codigo_fuera', `La sección ${x.codigo} tiene un número mayor que el último asignado.`, `sección ${x.codigo}`);
+  }
   for (const c of def.contenidos) {
     for (const [, nombre] of c.texto.matchAll(/\{\{\s*([a-z.0-9_]+)\s*\}\}/g)) {
       if (!variables.has(nombre!)) agregar('variable_inexistente', `El contenido "${c.nombre}" usa {{${nombre}}}, que no existe.`, `contenido ${c.nombre}`);
@@ -462,4 +490,13 @@ export function validarDefinicion(x: unknown): ResultadoValidacion {
   }
   const problemas = problemasDeReferencias(r.data);
   return problemas.length ? { ok: false, problemas } : { ok: true, definicion: r.data };
+}
+
+/**
+ * El material que usa una respuesta con base: si la caja no elige temas, todo; si elige, las secciones de esos temas y
+ * las que no tienen tema (lo general nunca se pierde por filtrar).
+ */
+export function materialPara(def: Definicion, temas: readonly string[]): Seccion[] {
+  if (!temas.length) return def.material;
+  return def.material.filter((s) => !s.temas.length || s.temas.some((t) => temas.includes(t)));
 }

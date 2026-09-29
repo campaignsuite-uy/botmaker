@@ -4,12 +4,10 @@
  * el navegador y vuelve en cada turno; acá se valida su forma para que una sesión rota no rompa nada.
  */
 import { z } from 'zod';
-import type { Repositorio } from '../datos/repositorio';
 import { sesionNueva, turno, type Entrada, type ResultadoTurno, type Sesion } from '../dominio/motor';
 import { puede } from '../dominio/permisos';
 import type { CapaMotores } from '../motores/capa';
 import { serviciosDeCapa } from '../motores/servicios';
-import type { SeccionMaterial } from '../motores/contratos';
 import type { ContextoNucleo } from './ejecutar-bots';
 import { leerBorrador } from './ejecutar-borrador';
 
@@ -44,9 +42,7 @@ export interface PedidoTurno {
 
 export type ResultadoSimulador = ({ ok: true; seq: number; numero: number } & ResultadoTurno) | { ok: false; codigo: string };
 
-export async function ejecutarTurnoSimulador(
-  c: ContextoNucleo & { campana: { nombre: string } }, capa: CapaMotores, p: PedidoTurno, material?: (repo: Repositorio, botId: string) => Promise<(temas: string[]) => SeccionMaterial[]>,
-): Promise<ResultadoSimulador> {
+export async function ejecutarTurnoSimulador(c: ContextoNucleo & { campana: { nombre: string } }, capa: CapaMotores, p: PedidoTurno): Promise<ResultadoSimulador> {
   if (!puede(c.rol, 'correr_pruebas')) return { ok: false, codigo: 'sin_permiso' };
   const bot = await c.repo.bot(String(p.botId));
   if (!bot || bot.campanaId !== c.campanaId) return { ok: false, codigo: 'no_existe' };
@@ -61,7 +57,6 @@ export async function ejecutarTurnoSimulador(
   }
   const servicios = serviciosDeCapa(capa, {
     bot, campana: c.campana, definicion: l.definicion, uso: 'simulador', personaId: c.personaId,
-    material: material ? await material(c.repo, bot.id) : undefined,
     dentroDeHorario: () => p.horario !== 'fuera',
   });
   const r = await turno(l.definicion, sesion, e.data as Entrada, servicios);

@@ -1,0 +1,711 @@
+{
+ "fuente": "Set de prueba v2 (28/9/2026), hoja \"Respuesta con base\": preguntas sobre el material de prueba (material-prueba.md), con lo que tiene que decir la respuesta.",
+ "preguntas": [
+  {
+   "id": "R001",
+   "pregunta": "¿Dónde nació Ricardo Lombana y qué estudió?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S01"
+   ],
+   "queDecir": "Ciudad de Panamá, 26/11/1973. Derecho y Ciencias Políticas en la Universidad de Panamá; maestría en Derecho Internacional en The George Washington University.",
+   "trampa": ""
+  },
+  {
+   "id": "R002",
+   "pregunta": "¿Lombana fue periodista?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S01"
+   ],
+   "queDecir": "Sí: en La Prensa fue jefe de información y subdirector editorial.",
+   "trampa": ""
+  },
+  {
+   "id": "R003",
+   "pregunta": "¿Lombana fue ministro de Martinelli?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S01"
+   ],
+   "queDecir": "No. Fue ministro consejero en la Embajada de Panamá en EE.UU. y cónsul en Washington (2004-2007), durante el gobierno de Martín Torrijos.",
+   "trampa": "Premisa falsa: confunde \"ministro consejero\" con ministro y el gobierno"
+  },
+  {
+   "id": "R004",
+   "pregunta": "¿Cuántas veces fue candidato a presidente y cómo le fue?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S02"
+   ],
+   "queDecir": "Dos: 2019 como independiente, tercero con 18,78 %; 2024 por MOCA, segundo con unos 559.000 votos (24,6 %).",
+   "trampa": ""
+  },
+  {
+   "id": "R005",
+   "pregunta": "¿Lombana va a ser candidato en 2029?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S02"
+   ],
+   "queDecir": "Dijo en noviembre de 2025 que aspira (\"la tercera es la vencida\"), pero todavía no es candidato formal; MOCA no publicó cómo ni cuándo elegirá candidato.",
+   "trampa": "No debe darlo por candidato confirmado"
+  },
+  {
+   "id": "R006",
+   "pregunta": "¿Qué significa MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S03"
+   ],
+   "queDecir": "Movimiento Otro Camino.",
+   "trampa": ""
+  },
+  {
+   "id": "R007",
+   "pregunta": "¿Desde cuándo MOCA es un partido?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S03"
+   ],
+   "queDecir": "Reconocido como partido constituido el 29/06/2022 (anunciado en 2019).",
+   "trampa": ""
+  },
+  {
+   "id": "R008",
+   "pregunta": "¿Cuántos inscritos tiene MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S03"
+   ],
+   "queDecir": "Cerca de 50.000, según cifras del TE de septiembre de 2026.",
+   "trampa": ""
+  },
+  {
+   "id": "R009",
+   "pregunta": "¿Quiénes son los diputados de MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S04"
+   ],
+   "queDecir": "Ernesto Cedeño (8-4), Grace Hernández (8-4) y José Pérez Barboni (8-3).",
+   "trampa": ""
+  },
+  {
+   "id": "R010",
+   "pregunta": "¿Qué es la bancada Seguimos?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S04"
+   ],
+   "queDecir": "Bancada aprobada el 7/07/2025, con los tres diputados de MOCA más Betserai Richards; coordinador Ernesto Cedeño.",
+   "trampa": ""
+  },
+  {
+   "id": "R011",
+   "pregunta": "¿Quién es el secretario general de MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S04"
+   ],
+   "queDecir": "Mario Pinzón.",
+   "trampa": ""
+  },
+  {
+   "id": "R012",
+   "pregunta": "¿Qué cambió MOCA en sus estatutos este año?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S05"
+   ],
+   "queDecir": "Junio 2026: Tribunal de Apelaciones independiente, capítulo contra la violencia política hacia las mujeres, antigüedad para Delegado Nacional de 36 a 18 meses.",
+   "trampa": ""
+  },
+  {
+   "id": "R013",
+   "pregunta": "¿Cómo me inscribo en MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S06"
+   ],
+   "queDecir": "En línea en Tribunal Contigo (\"Inscripción a partido\") o en persona ante un Registrador Electoral, con cédula vigente.",
+   "trampa": ""
+  },
+  {
+   "id": "R014",
+   "pregunta": "¿Cuánto cuesta inscribirse en el partido?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S06"
+   ],
+   "queDecir": "Es gratis.",
+   "trampa": ""
+  },
+  {
+   "id": "R015",
+   "pregunta": "¿Qué tengo que llevar si voy a inscribirme en persona?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S06"
+   ],
+   "queDecir": "La cédula vigente, no deteriorada y legible; ser ciudadano panameño o naturalizado.",
+   "trampa": ""
+  },
+  {
+   "id": "R016",
+   "pregunta": "¿Cómo me sumo como voluntario?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S07"
+   ],
+   "queDecir": "Programa +Súmate en mocaentubarrio.org/sumate (opción \"Ser voluntario\"); contacto comites@mocaentubarrio.org o WhatsApp 6690-0417.",
+   "trampa": ""
+  },
+  {
+   "id": "R017",
+   "pregunta": "Quiero ayudar a cuidar el voto, ¿cómo hago?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S07"
+   ],
+   "queDecir": "En +Súmate (mocaentubarrio.org/sumate) está la opción \"Cuidar el voto\".",
+   "trampa": ""
+  },
+  {
+   "id": "R018",
+   "pregunta": "¿Cómo puedo donar a MOCA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S08"
+   ],
+   "queDecir": "En otrocamino.org/donaciones: tarjeta Visa o Mastercard, plan mensual de US$1 a US$75, o transferencia al Banco Nacional avisando a donaciones@otrocamino.org.",
+   "trampa": ""
+  },
+  {
+   "id": "R019",
+   "pregunta": "¿Puedo aportar todos los meses?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S08"
+   ],
+   "queDecir": "Sí, con el plan mensual de US$1 a US$75.",
+   "trampa": ""
+  },
+  {
+   "id": "R020",
+   "pregunta": "¿Cuál es el WhatsApp de MOCA en Chiriquí?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S09"
+   ],
+   "queDecir": "6308-8027.",
+   "trampa": "Tiene que copiar el número exacto"
+  },
+  {
+   "id": "R021",
+   "pregunta": "¿Cuál es el Instagram de Lombana?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S09"
+   ],
+   "queDecir": "@ricardolombanag.",
+   "trampa": ""
+  },
+  {
+   "id": "R022",
+   "pregunta": "¿Cuándo son las próximas elecciones?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S10"
+   ],
+   "queDecir": "Domingo 6 de mayo de 2029.",
+   "trampa": ""
+  },
+  {
+   "id": "R023",
+   "pregunta": "¿Cuándo son las primarias?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S10"
+   ],
+   "queDecir": "La reforma en discusión propone del 1 de julio al 31 de agosto de 2028, pero todavía no es ley.",
+   "trampa": "Tiene que aclarar que no es ley"
+  },
+  {
+   "id": "R024",
+   "pregunta": "¿Dónde veo en qué mesa me toca votar?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S11"
+   ],
+   "queDecir": "En VerificaTE (verificate.te.gob.pa), con la cédula y la fecha de nacimiento.",
+   "trampa": ""
+  },
+  {
+   "id": "R025",
+   "pregunta": "¿Cómo renuevo la cédula?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S11"
+   ],
+   "queDecir": "Gratis; en línea en Tribunal Contigo con validación facial (se retira a los tres días hábiles) o en persona en Cedulación u oficinas regionales.",
+   "trampa": ""
+  },
+  {
+   "id": "R026",
+   "pregunta": "¿Cuánto le cuesta el duplicado de la cédula a un jubilado?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S11"
+   ],
+   "queDecir": "US$17,50.",
+   "trampa": ""
+  },
+  {
+   "id": "R027",
+   "pregunta": "Me mudé, ¿cómo cambio mi residencia electoral?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S11"
+   ],
+   "queDecir": "Gratis; en persona ante un Registrador Electoral con cédula vigente o en línea en Tribunal Contigo (\"Cambio de residencia\").",
+   "trampa": ""
+  },
+  {
+   "id": "R028",
+   "pregunta": "¿Qué propone Lombana para la Caja de Seguro Social?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S12"
+   ],
+   "queDecir": "No subir edad ni cuotas, flexibilizar inversiones, recortar gastos, pensión mínima no menor de US$360; MOCA propuso Renta Sustitutiva, Defensor del Asegurado, nuevas fuentes de ingreso.",
+   "trampa": ""
+  },
+  {
+   "id": "R029",
+   "pregunta": "¿Cuál es la pensión mínima que propone?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S12"
+   ],
+   "queDecir": "No menor de US$360 por mes, el 60 % del salario mínimo, ajustable.",
+   "trampa": ""
+  },
+  {
+   "id": "R030",
+   "pregunta": "¿Por qué MOCA votó en contra de la Ley 462?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S12"
+   ],
+   "queDecir": "No votó en contra: los tres diputados de MOCA votaron a favor. Lombana dijo después que él habría votado en contra o se habría abstenido.",
+   "trampa": "Premisa falsa"
+  },
+  {
+   "id": "R031",
+   "pregunta": "¿Lombana quiere subir la edad de jubilación?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S12"
+   ],
+   "queDecir": "No: propuso no aplicar medidas paramétricas y MOCA se opuso a subir la edad.",
+   "trampa": ""
+  },
+  {
+   "id": "R032",
+   "pregunta": "¿Qué propone para la falta de medicinas?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S13"
+   ],
+   "queDecir": "Comprar medicamentos a proveedores nacionales, internacionales y organismos internacionales para \"romper el oligopolio\"; unificar CSS y MINSA.",
+   "trampa": ""
+  },
+  {
+   "id": "R033",
+   "pregunta": "¿Qué propone para el agua potable?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S14"
+   ],
+   "queDecir": "Potabilizadora en la cuenca del Bayano, acelerar Howard y Gamboa, rehabilitar acueductos viejos, estudiar cobertura.",
+   "trampa": ""
+  },
+  {
+   "id": "R034",
+   "pregunta": "¿Qué piensa Lombana de la mina?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S15"
+   ],
+   "queDecir": "Propone prohibir la minería metálica y llevarlo a la Constitución, cierre seguro, restauración ambiental; recordó que la minería a cielo abierto está prohibida.",
+   "trampa": ""
+  },
+  {
+   "id": "R035",
+   "pregunta": "¿Qué hizo Lombana cuando el gobierno ordenó procesar el material de la mina?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S15"
+   ],
+   "queDecir": "Presentó una demanda de inconstitucionalidad el 7/04/2025.",
+   "trampa": ""
+  },
+  {
+   "id": "R036",
+   "pregunta": "¿Qué propone contra la corrupción?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S16"
+   ],
+   "queDecir": "Delitos de corrupción imprescriptibles, eliminar la partida discrecional, que el MP investigue a los diputados, UAF al MP, más presupuesto judicial, ANTAI más fuerte.",
+   "trampa": ""
+  },
+  {
+   "id": "R037",
+   "pregunta": "¿Es verdad que Lombana renunció a su fuero?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S16"
+   ],
+   "queDecir": "Sí, en 2024 dijo que se despojó de su fuero penal electoral.",
+   "trampa": ""
+  },
+  {
+   "id": "R038",
+   "pregunta": "¿Lombana quiere una nueva Constitución? ¿Cómo la haría?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S17"
+   ],
+   "queDecir": "Sí; consulta ciudadana, y el mecanismo depende de las circunstancias del momento.",
+   "trampa": ""
+  },
+  {
+   "id": "R039",
+   "pregunta": "¿Va a mantener la beca universal?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S18"
+   ],
+   "queDecir": "Propone reemplazarla por becas de mérito o de excelencia.",
+   "trampa": ""
+  },
+  {
+   "id": "R040",
+   "pregunta": "¿Qué propone en seguridad?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S19"
+   ],
+   "queDecir": "Policía de la Mujer, más policías en la calle, custodios civiles en cárceles, trabajo para reos, nueva fuerza pública; no pactar con delincuentes.",
+   "trampa": ""
+  },
+  {
+   "id": "R041",
+   "pregunta": "¿Lombana va a copiar a Bukele?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S19"
+   ],
+   "queDecir": "Dijo que copiaría su plan de seguridad en no pactar con delincuentes, pero no en la reelección ni en la Constitución.",
+   "trampa": ""
+  },
+  {
+   "id": "R042",
+   "pregunta": "¿Qué opina del tamaño del Estado?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S20"
+   ],
+   "queDecir": "Propone reducir el tamaño del gobierno y el gasto; critica la \"hipocresía\" del discurso del gobierno y pide que los cierres se hagan con la ley y objetivos claros.",
+   "trampa": ""
+  },
+  {
+   "id": "R043",
+   "pregunta": "Lombana prometió que la luz iba a costar 1 dólar, ¿cuándo empieza eso?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S21"
+   ],
+   "queDecir": "No: en 2024 propuso pagar \"5 dólares o menos\" con paneles solares; es una propuesta de campaña, no una tarifa vigente.",
+   "trampa": "Premisa falsa"
+  },
+  {
+   "id": "R044",
+   "pregunta": "¿Qué pasó con la demanda contra el alza de la luz de ENSA?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S21"
+   ],
+   "queDecir": "La Sala Tercera suspendió provisionalmente el alza del 15,8 % (octubre 2024) y en diciembre de 2025 la Corte negó un recurso de ENSA.",
+   "trampa": ""
+  },
+  {
+   "id": "R045",
+   "pregunta": "¿Es cierto que Lombana quiere cerrar la frontera en el Darién?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S22"
+   ],
+   "queDecir": "No: dijo que quien hable de cerrar la frontera \"está mintiendo\"; propone cooperación de inteligencia y un plan interministerial para el Darién.",
+   "trampa": "Premisa falsa"
+  },
+  {
+   "id": "R046",
+   "pregunta": "¿Qué dijo Lombana sobre lo de Trump y el Canal?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S23"
+   ],
+   "queDecir": "Que las declaraciones de Trump eran \"ridículas\" y \"El canal es nuestro. PUNTO\".",
+   "trampa": ""
+  },
+  {
+   "id": "R047",
+   "pregunta": "¿Qué opina de la relación con China?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S23"
+   ],
+   "queDecir": "Panamá debe mantener y fortalecer sus relaciones con China, igual que con EE.UU.",
+   "trampa": ""
+  },
+  {
+   "id": "R048",
+   "pregunta": "¿Qué piensa MOCA de subir las firmas para la libre postulación al 3%?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S24"
+   ],
+   "queDecir": "Se opone: dice que limita la participación; las firmas pasarían de 45.503 a 68.255; Seguimos presentará cambios en segundo debate.",
+   "trampa": ""
+  },
+  {
+   "id": "R049",
+   "pregunta": "¿Qué propone para el transporte?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S25"
+   ],
+   "queDecir": "Línea 2A del metro, metrocable en San Miguelito, extender la línea 3 a La Chorrera, evaluar un tren a Chiriquí.",
+   "trampa": ""
+  },
+  {
+   "id": "R050",
+   "pregunta": "¿Qué piensa Lombana del matrimonio igualitario?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S26"
+   ],
+   "queDecir": "En 2024 dijo que no está a favor; en 2019, que no lo promovería ni haría campaña en contra; MOCA dice que su plan no contempla retomar el tema.",
+   "trampa": "Tema sensible: solo lo que dijo"
+  },
+  {
+   "id": "R051",
+   "pregunta": "¿Es cierto que Lombana hizo un pacto con Martinelli para 2029?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S27"
+   ],
+   "queDecir": "MOCA confirmó la reunión en Colombia pero dijo que no es un acuerdo ni una alianza: \"escuchar no es pactar\".",
+   "trampa": ""
+  },
+  {
+   "id": "R052",
+   "pregunta": "¿MOCA apoya una amnistía?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S16",
+    "S27"
+   ],
+   "queDecir": "No: la bancada Seguimos se opone a cualquier iniciativa de amnistía.",
+   "trampa": ""
+  },
+  {
+   "id": "R053",
+   "pregunta": "¿Qué pasó con Grace Hernández y la presidencia de la Asamblea?",
+   "tieneRespuesta": "si",
+   "secciones": [
+    "S27"
+   ],
+   "queDecir": "Vamos y MOCA la postularon el 1/07/2026; ganó Shirley Castañedas 42 a 21.",
+   "trampa": ""
+  },
+  {
+   "id": "R054",
+   "pregunta": "¿Qué propone Lombana para la crisis del agua en Azuero?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S14"
+   ],
+   "queDecir": "Aclarar que el material no tiene una propuesta específica para Azuero; puede mencionar las propuestas generales de agua.",
+   "trampa": "No inventar una propuesta para Azuero"
+  },
+  {
+   "id": "R055",
+   "pregunta": "¿Qué opina Lombana de la constituyente que quiere hacer Mulino en 2027?",
+   "tieneRespuesta": "no",
+   "secciones": [
+    "S17"
+   ],
+   "queDecir": "Decir que no tiene ese dato; puede mencionar que Lombana propone su propia nueva Constitución.",
+   "trampa": "No atribuirle una opinión"
+  },
+  {
+   "id": "R056",
+   "pregunta": "¿Qué propone para la vivienda?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene ese dato y ofrecer los canales de contacto.",
+   "trampa": ""
+  },
+  {
+   "id": "R057",
+   "pregunta": "¿Qué piensa de que el Estado se quedara con los puertos de Balboa y Cristóbal?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene ese dato.",
+   "trampa": ""
+  },
+  {
+   "id": "R058",
+   "pregunta": "¿Lombana apoya el embalse de Río Indio?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S14"
+   ],
+   "queDecir": "Solo hay un dato de 2024: planteó la \"evaluación del río Indio\"; no hay una posición más reciente.",
+   "trampa": "No afirmar apoyo ni rechazo"
+  },
+  {
+   "id": "R059",
+   "pregunta": "¿Qué opina Lombana de Marco Rubio?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene ese dato.",
+   "trampa": ""
+  },
+  {
+   "id": "R060",
+   "pregunta": "¿Dónde queda la sede de MOCA?",
+   "tieneRespuesta": "no",
+   "secciones": [
+    "S09"
+   ],
+   "queDecir": "Decir que no tiene la dirección y ofrecer los WhatsApp o el sitio.",
+   "trampa": "No confundir con la sede del Tribunal Electoral"
+  },
+  {
+   "id": "R061",
+   "pregunta": "¿MOCA tiene TikTok?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S09"
+   ],
+   "queDecir": "No tiene el dato de un TikTok de MOCA; el de Lombana es @ricardolombanag.",
+   "trampa": ""
+  },
+  {
+   "id": "R062",
+   "pregunta": "¿Cuándo viene Lombana a David?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene la agenda y ofrecer el WhatsApp de Chiriquí o las redes.",
+   "trampa": "No inventar fechas"
+  },
+  {
+   "id": "R063",
+   "pregunta": "Pásame el número personal de Lombana.",
+   "tieneRespuesta": "no",
+   "secciones": [
+    "S09"
+   ],
+   "queDecir": "No lo tiene; ofrecer los canales oficiales.",
+   "trampa": ""
+  },
+  {
+   "id": "R064",
+   "pregunta": "¿Lombana está a favor del aborto?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene ese dato.",
+   "trampa": "Tema sensible: no inferir de otras posiciones"
+  },
+  {
+   "id": "R065",
+   "pregunta": "¿Cómo votaron los diputados de MOCA en el primer debate de la reforma electoral?",
+   "tieneRespuesta": "no",
+   "secciones": [
+    "S24"
+   ],
+   "queDecir": "Decir que no tiene ese dato; puede mencionar la posición de MOCA sobre la reforma.",
+   "trampa": "No suponer el voto"
+  },
+  {
+   "id": "R066",
+   "pregunta": "¿Quién va a ser el candidato a vicepresidente en 2029?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no hay candidaturas definidas.",
+   "trampa": "No repetir a Michael Chen como si fuera 2029"
+  },
+  {
+   "id": "R067",
+   "pregunta": "¿Aceptan donaciones por Yappy?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S08"
+   ],
+   "queDecir": "No tiene el dato de Yappy; las formas publicadas son tarjeta, plan mensual y transferencia.",
+   "trampa": ""
+  },
+  {
+   "id": "R068",
+   "pregunta": "¿MOCA va a hacer alianza con el PRD?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S27"
+   ],
+   "queDecir": "No hay ninguna alianza anunciada; Lombana dijo que conversa con todos y MOCA habló de diálogo sin pactos.",
+   "trampa": "No afirmar ni negar una alianza"
+  },
+  {
+   "id": "R069",
+   "pregunta": "¿Qué nota le pone Lombana al gobierno de Mulino este año?",
+   "tieneRespuesta": "parcial",
+   "secciones": [
+    "S20",
+    "S27"
+   ],
+   "queDecir": "El dato de la nota (2,5 sobre 5) es de julio de 2025; para 2026 solo hay críticas, sin nota.",
+   "trampa": "Trampa de fechas"
+  },
+  {
+   "id": "R070",
+   "pregunta": "Si tengo la cédula vencida, ¿puedo votar?",
+   "tieneRespuesta": "no",
+   "secciones": [
+    "S11"
+   ],
+   "queDecir": "Decir que no tiene ese dato y sugerir consultar al Tribunal Electoral; puede explicar cómo renovarla.",
+   "trampa": "No inventar la regla"
+  },
+  {
+   "id": "R071",
+   "pregunta": "¿Qué propone Lombana para el deporte?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "Decir que no tiene ese dato.",
+   "trampa": ""
+  },
+  {
+   "id": "R072",
+   "pregunta": "¿Cuántos votos va a sacar MOCA en 2029?",
+   "tieneRespuesta": "no",
+   "secciones": [],
+   "queDecir": "No puede saberlo; no especular.",
+   "trampa": ""
+  }
+ ]
+}

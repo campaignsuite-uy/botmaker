@@ -19,6 +19,7 @@ import type { EntradaInterpretar, EntradaResponder, Interpretacion, RespuestaCon
 import { MAX_TURNOS } from '../motores/contratos';
 import { opcionesDe, ubicar, type Caja, type CajaDe, type Definicion } from './definicion';
 import { reglaAntesDelMotor } from './reglas';
+import { validarDatos } from './validar-datos';
 
 // ── Sesión, entrada y salida ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,8 @@ export interface MensajeSalida {
 export interface Evento {
   nombre:
     | 'conversacion_iniciada' | 'caja' | 'opcion' | 'boton_viejo' | 'regla' | 'interpretado' | 'aclaracion' | 'sin_motor'
-    | 'respuesta' | 'sin_dato' | 'dato_guardado' | 'dato_invalido' | 'derivada' | 'baja' | 'tope_pasos' | 'mensaje_en_derivada';
+    | 'respuesta' | 'sin_dato' | 'dato_guardado' | 'dato_invalido' | 'derivada' | 'baja' | 'tope_pasos' | 'mensaje_en_derivada'
+    | 'dato_cortado' | 'tramite_electoral';
   cajaId?: string;
   datos?: Record<string, unknown>;
 }
@@ -85,6 +87,8 @@ export interface Decision {
   lectura?: { principal: string | null; respaldo: string | null; resultado: string } | null;
   motor?: string | null;
   secciones?: string[];
+  /** Lo que cortó el validador de datos (números, enlaces, correos o teléfonos que no estaban en lo citado). */
+  corte?: string[];
   costoUsd: number;
 }
 
@@ -166,7 +170,8 @@ class Turnero {
   }
 
   sistema(clave: keyof Definicion['sistema']) {
-    this.decir(this.contenido(this.def.sistema[clave]), null);
+    const id = this.def.sistema[clave];
+    if (id) this.decir(this.contenido(id), null);
   }
 
   /** Recorre desde una caja hasta que el bot tenga que esperar a la persona (o se termine el recorrido). */
@@ -225,16 +230,35 @@ class Turnero {
           return null;
         }
         const pregunta = this.consumir() ?? this.rellenar(c.pregunta!);
-        const r = await this.sv.responder({ pregunta, turnos: this.previos, material: this.sv.material(c.temas) });
+        const material = this.sv.material(c.temas);
+        const r = await this.sv.responder({ pregunta, turnos: this.previos, material });
         this.decision.costoUsd += r.costoUsd;
         if (r.motorId) this.decision.motor = r.motorId;
-        if (r.salida && r.salida.tiene_respuesta !== 'no') {
-          this.decision.secciones = r.salida.secciones;
-          this.decir(r.salida.respuesta, null);
-          this.eventos.push({ nombre: 'respuesta', cajaId: c.id, datos: { secciones: r.salida.secciones, completa: r.salida.tiene_respuesta === 'si' } });
+        let salida = r.salida && r.salida.tiene_respuesta !== 'no' ? r.salida : null;
+        if (salida) {
+          // Validador de datos: un número, enlace, correo o teléfono que no está en lo citado corta la respuesta.
+          const citadas = material.filter((m) => salida!.secciones.includes(m.codigo)).map((m) => `${m.titulo}\n${m.texto}\n${m.fuente ?? ''}`);
+          const otros = [pregunta, ...this.def.variables.map((v) => v.valor ?? ''), this.def.contacto.consultas?.valor ?? '', this.def.contacto.aportes?.valor ?? ''];
+          const cortes = validarDatos(salida.respuesta, { citadas, otros });
+          if (cortes.length) {
+            this.decision.corte = cortes.map((x) => `${x.tipo}: ${x.valor}`);
+            this.eventos.push({ nombre: 'dato_cortado', cajaId: c.id, datos: { cortes: this.decision.corte } });
+            salida = null;
+          }
+        }
+        // Un trámite electoral que el material no cubre del todo: nunca se contesta la regla, se deriva al organismo.
+        if (this.decision.intencion === 'tramite_electoral' && this.def.sistema.tramite && (!salida || salida.tiene_respuesta !== 'si')) {
+          this.sistema('tramite');
+          this.eventos.push({ nombre: 'tramite_electoral', cajaId: c.id });
           return c.conDato;
         }
-        this.eventos.push({ nombre: r.salida ? 'sin_dato' : 'sin_motor', cajaId: c.id });
+        if (salida) {
+          this.decision.secciones = salida.secciones;
+          this.decir(salida.respuesta, null);
+          this.eventos.push({ nombre: 'respuesta', cajaId: c.id, datos: { secciones: salida.secciones, completa: salida.tiene_respuesta === 'si' } });
+          return c.conDato;
+        }
+        this.eventos.push({ nombre: r.salida || this.decision.corte ? 'sin_dato' : 'sin_motor', cajaId: c.id });
         return c.sinDato;
       }
       case 'pedir_dato': {

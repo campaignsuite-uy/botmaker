@@ -195,6 +195,12 @@ export async function ejecutarFormulario(c: ContextoNucleo, fd: FormData): Promi
   if ('ok' in b) return { tipo: 'error', codigo: b.ok ? 'no_se_pudo' : b.codigo };
   const l = await leerBorrador(c.repo, b.id);
   if ('codigo' in l) return { tipo: 'error', codigo: l.codigo };
+  // El material se puede subir como archivo de texto (.md o .txt) en lugar de pegarlo.
+  const archivo = fd.get('archivo');
+  if (archivo && typeof archivo === 'object' && 'text' in archivo && (archivo as File).size > 0) {
+    if ((archivo as File).size > 2_000_000) return { tipo: 'error', codigo: 'material_largo' };
+    fd.set('texto', await (archivo as File).text());
+  }
   const f = operacionesDeForma(fd, l.definicion);
   if ('codigo' in f) return { tipo: 'error', codigo: f.codigo };
   const r = await ejecutarCambio(c, { botId: b.id, seq: Number(texto(fd, 'seq')) || l.borrador.seq, operaciones: f.ops, origen: 'editor' });

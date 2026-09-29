@@ -12,6 +12,7 @@
  * Flujos: 1 Inicio (bienvenida, menú e interpretar), 2 Consultas (respuesta con base), 3 Sumarse (voluntariado y
  * aportes), 4 Atención (derivación en horario), 5 Datos personales (baja con confirmación).
  */
+import { mercado } from './mercados';
 import type { Trato } from './tipos';
 import { esquemaDefinicion, type Caja, type Contenido, type Definicion, type Intencion, type Tema, type Variable } from './definicion';
 
@@ -114,6 +115,7 @@ const DESTINO: Record<string, string> = {
 export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
   const u = o.trato === 'usted';
   const t = (usted: string, tu: string) => (u ? usted : tu);
+  const organismo = mercado(o.mercado)?.organismoElectoral ?? 'el organismo electoral';
   const contenido = (id: string, nombre: string, texto: string): Contenido => ({ id, nombre, tipo: 'texto', texto });
 
   const contenidos: Contenido[] = [
@@ -124,6 +126,9 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     contenido('c_noentendi', 'No entendí', t('Disculpe, no le entendí. ¿Me lo escribe de otra forma?', 'Perdón, no te entendí. ¿Me lo escribes de otra forma?')),
     contenido('c_aclaracion', 'Aclaración', t('Para ayudarle mejor, ¿qué quiere saber?', 'Para ayudarte mejor, ¿qué quieres saber?')),
     contenido('c_cierre', 'Cierre', t('Gracias a usted. Cuando quiera, me escribe.', 'Gracias a ti. Cuando quieras, me escribes.')),
+    contenido('c_tramite', 'Trámite electoral', t(
+      `Para trámites electorales (la cédula, dónde votar, la residencia electoral o las fechas), la información oficial la da ${organismo}. Le recomiendo consultarle directamente.`,
+      `Para trámites electorales (la cédula, dónde votar, la residencia electoral o las fechas), la información oficial la da ${organismo}. Te recomiendo consultarle directamente.`)),
     contenido('c_sinmotor', 'Sin motor', t('Ahora puedo ayudarle mejor con las opciones del menú.', 'Ahora puedo ayudarte mejor con las opciones del menú.')),
     contenido('c_preguntar', 'Pedir la pregunta', t(
       'Escríbame su pregunta sobre las propuestas de {{bot.candidato}} y le respondo.',
@@ -265,6 +270,6 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
       partido: o.partido ? { nombre: o.partido, alias: o.aliasPartido ?? [] } : null,
     },
     contacto: { consultas: o.consultas ?? null, aportes: o.aportes ?? null },
-    sistema: { noEntendi: 'c_noentendi', aclaracion: 'c_aclaracion', cierre: 'c_cierre', sinMotor: 'c_sinmotor' },
+    sistema: { noEntendi: 'c_noentendi', aclaracion: 'c_aclaracion', cierre: 'c_cierre', sinMotor: 'c_sinmotor', tramite: 'c_tramite' },
   });
 }

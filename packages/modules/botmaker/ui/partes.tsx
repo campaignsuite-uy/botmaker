@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react';
 import { Caja } from '@campaignsuite/ui';
 import { cambiarBorrador, deshacerBorrador } from '../acciones/borrador';
-import type { BaseParte, VistaContenidos, VistaIntenciones, VistaVariables, VistaYaml } from '../vistas/partes';
+import type { BaseParte, VistaContenidos, VistaIntenciones, VistaMaterial, VistaVariables, VistaYaml } from '../vistas/partes';
 import { EncabezadoBot } from './encabezado-bot';
 import { MensajeAccion, Ocultos, SoloLectura } from './piezas';
 import { ImportarYaml } from './yaml-importar';
@@ -376,6 +376,84 @@ export function PantallaYaml({ v }: { v: VistaYaml }) {
       {v.editable && v.yaml ? (
         <ImportarYaml campanaId={v.campanaId} botId={v.botId} inicial={v.yaml} hrefFlujos={v.volver.replace(/\/yaml$/, '/flujos')} />
       ) : v.yaml ? <SoloLectura>Importar un YAML es del editor y el administrador.</SoloLectura> : null}
+    </>
+  );
+}
+
+// ── Material ────────────────────────────────────────────────────────────────────────────────────
+
+export function PantallaMaterial({ v }: { v: VistaMaterial }) {
+  return (
+    <>
+      <Cabeza b={v} bajada="Lo que el bot puede usar para contestar preguntas abiertas, en secciones con su fuente. Contesta solo con esto, cita las secciones que usa y corta cualquier dato que no esté acá." />
+      <Caja titulo={`${v.secciones.length} ${v.secciones.length === 1 ? 'sección' : 'secciones'} · unos ${v.tokens.toLocaleString('es')} tokens`} accion={v.secciones.length ? { texto: 'Descargar el material', href: v.hrefDescargar } : undefined}>
+        {v.costo ? (
+          <p className="texto-chico secundario">
+            Cada respuesta con base le manda el material a {v.costo.motor}: unos {v.costo.sinCache} por respuesta{v.costo.conCache ? `, o ${v.costo.conCache} cuando el proveedor ya lo tiene en caché` : ''}. Una caja de respuesta que elige temas manda solo esas secciones y las generales.
+          </p>
+        ) : <p className="texto-chico secundario">Todavía no hay material: las respuestas con base dicen que no tienen el dato y ofrecen el canal de consultas.</p>}
+        {v.editable ? (
+          <Forma b={v} forma="material_cargar">
+            <div className="campo">
+              <label htmlFor="m-texto">Pegar el material</label>
+              <textarea id="m-texto" name="texto" className="entrada bots-yaml" rows={8} placeholder={'## Quién es el candidato\nTexto de la sección…\nFuentes: medio, fecha.\n\n## Salud\nTexto…\nTemas: salud'} />
+              <span className="texto-mini apagado">Una sección por título de segundo nivel (## Título). Opcionales al final de cada una: Temas:, Fecha: y Fuentes:.</span>
+            </div>
+            <div className="campo">
+              <label htmlFor="m-archivo">O subir un archivo de texto (.md o .txt, hasta 2 MB)</label>
+              <input id="m-archivo" name="archivo" type="file" accept=".md,.txt,text/plain,text/markdown" className="entrada" />
+            </div>
+            <fieldset className="bots-opciones">
+              <legend className="campo__etiqueta">Qué hacer con lo que ya hay</legend>
+              <label className="bots-opcion"><input type="radio" name="reemplazar" value="no" defaultChecked /> <span>Agregar estas secciones a las que ya están</span></label>
+              <label className="bots-opcion"><input type="radio" name="reemplazar" value="si" /> <span>Reemplazar todo el material</span></label>
+            </fieldset>
+            <div className="fila"><button type="submit" className="boton">Cargar</button><a className="texto-chico" href={v.hrefSimulador}>Probarlo en el simulador</a></div>
+          </Forma>
+        ) : null}
+      </Caja>
+      {v.secciones.length ? (
+        <Caja titulo="Secciones" nota="cada versión guarda su copia: lo publicado no cambia">
+          <div className="bots-filas">
+            {v.secciones.map((s) => (
+              <details key={s.codigo} id={s.codigo} className="bots-fila-detalle">
+                <summary>
+                  <strong>{s.codigo} · {s.titulo}</strong>
+                  <span className="texto-mini apagado"> · {s.tokens} tokens{s.temasTexto ? ` · ${s.temasTexto}` : ' · general'}{s.fecha ? ` · ${s.fecha}` : ''}</span>
+                </summary>
+                {v.editable ? (
+                  <Forma b={v} forma="seccion_editar" ancla={s.codigo} extra={{ seccion: s.codigo }}>
+                    <div className="campo"><label htmlFor={`st-${s.codigo}`}>Título</label><input id={`st-${s.codigo}`} name="titulo" className="entrada" defaultValue={s.titulo} maxLength={120} required /></div>
+                    <div className="campo"><label htmlFor={`sx-${s.codigo}`}>Texto</label><textarea id={`sx-${s.codigo}`} name="texto" className="entrada" defaultValue={s.texto} rows={8} required /></div>
+                    <div className="grilla-2">
+                      <div className="campo"><label htmlFor={`sf-${s.codigo}`}>Fuentes</label><input id={`sf-${s.codigo}`} name="fuente" className="entrada" defaultValue={s.fuente} maxLength={600} /></div>
+                      <div className="campo"><label htmlFor={`sd-${s.codigo}`}>Fecha del dato</label><input id={`sd-${s.codigo}`} name="fecha" className="entrada" defaultValue={s.fecha} maxLength={40} placeholder="AAAA-MM-DD" /></div>
+                    </div>
+                    <fieldset className="ed-temas">
+                      <legend className="campo__etiqueta">Temas (sin temas: entra en toda respuesta con base)</legend>
+                      <div className="ed-chips">
+                        {v.temas.map((t) => <label key={t.valor} className="chip ed-chip"><input type="checkbox" name="temas" value={t.valor} defaultChecked={s.temas.includes(t.valor)} /> {t.texto}</label>)}
+                      </div>
+                    </fieldset>
+                    <p className="texto-mini apagado">La usan {s.citadaEn.length ? s.citadaEn.join(', ') : 'ninguna caja de respuesta con base todavía'}.</p>
+                    <div className="fila"><button type="submit" className="boton boton--chico">Guardar</button></div>
+                  </Forma>
+                ) : (
+                  <div className="pila texto-chico">
+                    <p className="bots-texto-largo">{s.texto}</p>
+                    {s.fuente ? <p className="apagado">Fuentes: {s.fuente}</p> : null}
+                  </div>
+                )}
+                {v.editable ? (
+                  <Forma b={v} forma="seccion_quitar" extra={{ seccion: s.codigo }} className="fila">
+                    <button type="submit" className="boton boton--sec boton--chico">Quitar la sección</button>
+                  </Forma>
+                ) : null}
+              </details>
+            ))}
+          </div>
+        </Caja>
+      ) : null}
     </>
   );
 }

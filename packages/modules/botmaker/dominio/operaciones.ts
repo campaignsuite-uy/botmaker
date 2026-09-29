@@ -9,9 +9,10 @@
  */
 import { z } from 'zod';
 import {
-  esquemaCaja, esquemaContenido, esquemaIntencion, esquemaTema, esquemaVariable, idsUsados, letraDeNumero, nuevoId, opcionesDe, problemasDeReferencias,
-  esquemaDefinicion, ubicar, type Caja, type Definicion, type Problema,
+  esquemaCaja, esquemaContenido, esquemaIntencion, esquemaSeccion, esquemaTema, esquemaVariable, idsUsados, letraDeNumero, nuevoId, opcionesDe,
+  problemasDeReferencias, esquemaDefinicion, ubicar, type Caja, type Definicion, type Problema,
 } from './definicion';
+import { asignarCodigos, dividirMaterial } from './material';
 
 export class ErrorOperacion extends Error {
   constructor(readonly codigo: string, mensaje: string, readonly problemas: Problema[] = []) {
@@ -41,6 +42,7 @@ const partes = z.object({
   intenciones: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   temas: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   variables: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
+  material: z.array(z.object({ id: z.string(), indice: z.number().int().min(0), valor: z.unknown() })).default([]),
   sueltos: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -72,7 +74,12 @@ export const esquemaOperacion = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('quitar_variable'), variable: z.string() }),
   z.object({ tipo: z.literal('editar_identidad'), candidato: z.record(z.string(), z.unknown()).optional(), partido: z.record(z.string(), z.unknown()).nullable().optional() }),
   z.object({ tipo: z.literal('editar_contacto'), consultas: z.unknown().optional(), aportes: z.unknown().optional() }),
-  z.object({ tipo: z.literal('editar_sistema'), clave: z.enum(['noEntendi', 'aclaracion', 'cierre', 'sinMotor']), contenido: z.string() }),
+  z.object({ tipo: z.literal('editar_sistema'), clave: z.enum(['noEntendi', 'aclaracion', 'cierre', 'sinMotor', 'tramite']), contenido: z.string() }),
+  z.object({ tipo: z.literal('agregar_seccion'), seccion: z.record(z.string(), z.unknown()) }),
+  z.object({ tipo: z.literal('editar_seccion'), seccion: z.string(), cambios: z.record(z.string(), z.unknown()) }),
+  z.object({ tipo: z.literal('quitar_seccion'), seccion: z.string() }),
+  /** Cargar el material pegado o subido como texto ("## Título" por sección): se agrega o reemplaza todo. */
+  z.object({ tipo: z.literal('cargar_material'), texto: z.string().max(2_000_000), reemplazar: z.boolean().default(false) }),
   z.object({ tipo: z.literal('restaurar'), partes }),
   /** Reemplazar partes enteras con lo que vino de un YAML (operacionImportar arma las partes y el resumen). */
   z.object({ tipo: z.literal('importar'), partes, resumen: z.string().max(400).default('Importó el YAML') }),
@@ -100,17 +107,17 @@ export interface OpcionesOperacion {
 
 // ── Partes: de dónde sale la inversa ───────────────────────────────────────────────────────────
 
-type Coleccion = 'flujos' | 'contenidos' | 'intenciones' | 'temas' | 'variables';
-const COLECCIONES: Coleccion[] = ['flujos', 'contenidos', 'intenciones', 'temas', 'variables'];
-const SUELTOS = ['formato', 'inicio', 'textoLibre', 'ultimoFlujo', 'identidad', 'contacto', 'sistema'] as const;
-const claveDe = (c: Coleccion, x: { id?: string; nombre?: string }) => (c === 'variables' ? x.nombre! : x.id!);
+type Coleccion = 'flujos' | 'contenidos' | 'intenciones' | 'temas' | 'variables' | 'material';
+const COLECCIONES: Coleccion[] = ['flujos', 'contenidos', 'intenciones', 'temas', 'variables', 'material'];
+const SUELTOS = ['formato', 'inicio', 'textoLibre', 'ultimoFlujo', 'ultimaSeccion', 'identidad', 'contacto', 'sistema'] as const;
+const claveDe = (c: Coleccion, x: { id?: string; nombre?: string; codigo?: string }) => (c === 'variables' ? x.nombre! : c === 'material' ? x.codigo! : x.id!);
 const igual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 type Partes = z.infer<typeof partes>;
 
 /** Lo que hay que volver a poner para pasar de `despues` a `antes`. */
 function partesParaVolver(antes: Definicion, despues: Definicion): Partes {
-  const p: Partes = { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], sueltos: {} };
+  const p: Partes = { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], sueltos: {} };
   for (const c of COLECCIONES) {
     const a = antes[c] as { id?: string; nombre?: string }[];
     const d = despues[c] as { id?: string; nombre?: string }[];
@@ -432,6 +439,41 @@ function aplicarSinValidar(d: Definicion, op: Operacion, o: OpcionesOperacion): 
       Object.assign(d, restaurar(d, op.partes));
       return { resumen: op.resumen };
     }
+    case 'agregar_seccion': {
+      const codigo = `S${String(d.ultimaSeccion + 1).padStart(2, '0')}`;
+      const r = esquemaSeccion.safeParse({ ...op.seccion, codigo });
+      if (!r.success) falla('seccion_invalida', `La sección no es válida: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+      d.material.push(r.data!);
+      d.ultimaSeccion += 1;
+      return { resumen: `Agregó la sección ${codigo} (${r.data!.titulo}) al material`, creado: codigo };
+    }
+    case 'editar_seccion': {
+      const i = d.material.findIndex((x) => x.codigo === op.seccion);
+      if (i < 0) falla('seccion_inexistente', 'La sección no existe.');
+      if ('codigo' in op.cambios) falla('campo_fijo', 'El código de una sección no se cambia.');
+      const r = esquemaSeccion.safeParse({ ...d.material[i], ...op.cambios });
+      if (!r.success) falla('seccion_invalida', `La sección no es válida: ${r.error.issues.map((x) => `${x.path.join('.')}: ${x.message}`).join('; ')}`);
+      d.material[i] = r.data!;
+      return { resumen: `Editó la sección ${op.seccion} del material` };
+    }
+    case 'quitar_seccion': {
+      if (!d.material.some((x) => x.codigo === op.seccion)) falla('seccion_inexistente', 'La sección no existe.');
+      d.material = d.material.filter((x) => x.codigo !== op.seccion);
+      return { resumen: `Quitó la sección ${op.seccion} del material` };
+    }
+    case 'cargar_material': {
+      const leido = dividirMaterial(op.texto);
+      if (!leido.secciones.length) falla('material_vacio', leido.avisos[0] ?? 'No se encontró ninguna sección.');
+      const temas = new Set(d.temas.map((t) => t.id));
+      // Los temas que no existen en el bot se descartan (no se inventan temas por el material).
+      for (const x of leido.secciones) x.temas = x.temas.filter((t) => temas.has(t));
+      const usados = op.reemplazar ? new Set<string>() : new Set(d.material.map((x) => x.codigo));
+      const { secciones, ultima } = asignarCodigos(leido.secciones, usados, d.ultimaSeccion);
+      d.material = op.reemplazar ? secciones : [...d.material, ...secciones];
+      d.ultimaSeccion = Math.max(d.ultimaSeccion, ultima);
+      const n = secciones.length;
+      return { resumen: op.reemplazar ? `Cargó el material: ${n} ${n === 1 ? 'sección' : 'secciones'}` : `Agregó ${n} ${n === 1 ? 'sección' : 'secciones'} al material` };
+    }
   }
 }
 
@@ -512,6 +554,7 @@ export function operacionImportar(actual: Definicion, importada: Definicion): Op
   const partes = partesParaVolver(importada, actual);
   const nombres: Record<Coleccion, [string, string]> = {
     flujos: ['flujo', 'flujos'], contenidos: ['contenido', 'contenidos'], intenciones: ['intención', 'intenciones'], temas: ['tema', 'temas'], variables: ['variable', 'variables'],
+    material: ['sección del material', 'secciones del material'],
   };
   const cuantos = (n: number, c: Coleccion) => `${n} ${nombres[c][n === 1 ? 0 : 1]}`;
   const agregados: string[] = [];

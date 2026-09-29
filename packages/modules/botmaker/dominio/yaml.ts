@@ -25,11 +25,14 @@ export type ResultadoYaml = { ok: true; definicion: Definicion } | { ok: false; 
 const LARGO_MAXIMO = 1_500_000;
 
 export function exportarYaml(def: Definicion, encabezado: string[] = []): string {
-  const doc = new Document(def);
+  // El material va aparte (pestaña Material): es largo y se carga como texto. Al importar, si no viene, queda el que está.
+  const { material: _material, ultimaSeccion: _ultima, ...resto } = def;
+  const doc = new Document(resto);
   doc.commentBefore = [
     ...encabezado,
     'Definición de un bot de BotMaker. Cada caja lleva su dirección (flujo.caja) en el comentario de arriba.',
     'Para agregar una caja o una opción, se puede dejar sin id, sin código o sin letra: se completan al importar.',
+    `El material (${def.material.length} ${def.material.length === 1 ? 'sección' : 'secciones'}) no está acá: se edita en la pestaña Material.`,
   ].map((l) => ` ${l}`).join('\n');
   def.flujos.forEach((f, i) => {
     const nodoFlujo = doc.getIn(['flujos', i], true) as Node | undefined;
@@ -47,6 +50,8 @@ const esObjeto = (x: unknown): x is Objeto => !!x && typeof x === 'object' && !A
 
 /** Completa ids, códigos y letras de lo nuevo, sin bajar nunca los últimos asignados del borrador `actual`. */
 function completar(x: Objeto, actual: Definicion | null, azar?: () => number): void {
+  if (x.material === undefined) x.material = actual?.material ?? [];
+  if (x.ultimaSeccion === undefined) x.ultimaSeccion = actual?.ultimaSeccion ?? 0;
   const usados = actual ? idsUsados(actual) : new Set<string>();
   const anotar = (v: unknown) => typeof v === 'string' && usados.add(v);
   const flujos = Array.isArray(x.flujos) ? x.flujos.filter(esObjeto) : [];

@@ -174,3 +174,47 @@ describe('motor de conversación', () => {
     expect(r!.mensajes.length).toBeLessThanOrEqual(25);
   });
 });
+
+describe('respuesta con base: validador de datos y trámites electorales (etapa 3)', () => {
+  const MATERIAL = [
+    { codigo: 'S02', titulo: 'Trayectoria electoral', texto: 'En 2019 obtuvo 368.962 votos (18,78 %).', fuente: 'TE' },
+    { codigo: 'S11', titulo: 'Trámites del Tribunal Electoral', texto: 'Renovar la cédula es gratuito. El duplicado cuesta US$35.', fuente: 'Telemetro' },
+  ];
+  const con = (respuesta: RespuestaConBase, intencion = 'propuesta') => {
+    const sv = servicios({ lecturas: { pregunta: { intencion } }, respuesta });
+    return { ...sv, material: () => MATERIAL };
+  };
+  const preguntar = (sv: Servicios) => guion([{ tipo: 'inicio' }, texto('pregunta')], sv);
+
+  it('una respuesta fiel a lo citado pasa, con sus secciones', async () => {
+    const [, r] = await preguntar(con({ respuesta: 'En 2019 obtuvo 368.962 votos.', secciones: ['S02'], tiene_respuesta: 'si' }));
+    expect(textos(r!)[0]).toBe('En 2019 obtuvo 368.962 votos.');
+    expect(r!.decision.secciones).toEqual(['S02']);
+    expect(r!.decision.corte).toBeUndefined();
+  });
+
+  it('un dato que no está en lo citado se corta: va la respuesta de sin dato y el corte queda en la decisión', async () => {
+    const [, r] = await preguntar(con({ respuesta: 'En 2019 obtuvo 412.000 votos. Más en www.inventado.com', secciones: ['S02'], tiene_respuesta: 'si' }));
+    expect(textos(r!)[0]).toMatch(/^No tengo ese dato/);
+    expect(r!.decision.corte).toEqual(['enlace: www.inventado.com', 'numero: 412.000']);
+    expect(r!.eventos.map((e) => e.nombre)).toContain('dato_cortado');
+  });
+
+  it('un trámite electoral que el material no cubre se deriva al Tribunal Electoral, sin contestar la regla', async () => {
+    for (const respuesta of [
+      { respuesta: 'No tengo ese dato.', secciones: [], tiene_respuesta: 'no' as const },
+      { respuesta: 'Puede renovarla gratis; sobre votar con la cédula vencida no tengo el dato.', secciones: ['S11'], tiene_respuesta: 'parcial' as const },
+      { respuesta: 'Sí, puede votar hasta 60 días después de vencida.', secciones: ['S11'], tiene_respuesta: 'si' as const },
+    ]) {
+      const [, r] = await preguntar(con(respuesta, 'tramite_electoral'));
+      expect(textos(r!)[0], respuesta.respuesta).toMatch(/la información oficial la da el Tribunal Electoral/);
+      expect(r!.eventos.map((e) => e.nombre)).toContain('tramite_electoral');
+      expect(r!.mensajes.at(-1)!.cajaId).toBe('n_masayuda');
+    }
+  });
+
+  it('un trámite que el material sí cubre se contesta', async () => {
+    const [, r] = await preguntar(con({ respuesta: 'Renovar la cédula es gratuito; el duplicado cuesta US$35.', secciones: ['S11'], tiene_respuesta: 'si' }, 'tramite_electoral'));
+    expect(textos(r!)[0]).toBe('Renovar la cédula es gratuito; el duplicado cuesta US$35.');
+  });
+});

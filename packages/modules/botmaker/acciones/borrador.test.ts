@@ -127,7 +127,7 @@ describe('cambios del borrador', () => {
   it('el repositorio corta un guardado con un seq viejo', async () => {
     const b = (await repo.borrador(BOT))!;
     bien(await ejecutarCambio(como('p-lucia'), { botId: BOT, seq: 0, operaciones: [renombrarMenu('Uno')], origen: 'editor' }));
-    await expect(repo.guardarCambio(b.id, 0, { origen: 'editor', operaciones: [], inversa: { tipo: 'restaurar', partes: { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], sueltos: {} } }, resumen: 'x', objetivo: null }, await definicion(), 'p-lucia'))
+    await expect(repo.guardarCambio(b.id, 0, { origen: 'editor', operaciones: [], inversa: { tipo: 'restaurar', partes: { flujos: [], contenidos: [], intenciones: [], temas: [], variables: [], material: [], sueltos: {} } }, resumen: 'x', objetivo: null }, await definicion(), 'p-lucia'))
       .rejects.toMatchObject({ codigo: 'borrador_cambio' });
   });
 });
@@ -259,5 +259,26 @@ describe('formularios de las partes del borrador', () => {
     expect(await ejecutarDeshacerFormulario(como('p-lucia'), fd({ botId: BOT, seq: '1' }))).toEqual({ tipo: 'ok', codigo: 'deshecho' });
     expect((await definicion()).temas.some((t) => t.id === 'deporte')).toBe(false);
     expect(await ejecutarDeshacerFormulario(como('p-lucia'), fd({ botId: BOT, seq: '2', rehacer: 'si' }))).toEqual({ tipo: 'ok', codigo: 'rehecho' });
+  });
+});
+
+describe('material desde el formulario', () => {
+  const enviar = (x: Record<string, string>, extra?: (f: FormData) => void) => {
+    const f = fd({ botId: BOT, seq: '0', ...x });
+    extra?.(f);
+    return ejecutarFormulario(como('p-lucia'), f);
+  };
+
+  it('pegar, subir un archivo, editar y quitar secciones', async () => {
+    expect(await enviar({ forma: 'material_cargar', texto: '## Salud\nPropone más médicos.\nTemas: salud\nFuentes: Diario, 1/9/2026', reemplazar: 'si' })).toMatchObject({ tipo: 'ok' });
+    let d = await definicion();
+    expect(d.material).toEqual([{ codigo: 'S01', titulo: 'Salud', texto: 'Propone más médicos.', fuente: 'Diario, 1/9/2026', fecha: '', temas: ['salud'] }]);
+    expect(await enviar({ forma: 'material_cargar', reemplazar: 'no' }, (f) => f.set('archivo', new File(['## Agua\nMás pozos.'], 'agua.md', { type: 'text/markdown' })))).toMatchObject({ tipo: 'ok' });
+    d = await definicion();
+    expect(d.material.map((s) => s.codigo)).toEqual(['S01', 'S02']);
+    expect(await enviar({ forma: 'seccion_editar', seccion: 'S02', titulo: 'Agua potable', texto: 'Más pozos en Azuero.', fuente: '', fecha: '2026-09-01' }, (f) => f.append('temas', 'agua'))).toMatchObject({ tipo: 'ok' });
+    expect((await definicion()).material[1]).toMatchObject({ titulo: 'Agua potable', temas: ['agua'], fecha: '2026-09-01' });
+    expect(await enviar({ forma: 'seccion_quitar', seccion: 'S01' })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar({ forma: 'material_cargar', texto: 'sin títulos', reemplazar: 'no' })).toEqual({ tipo: 'error', codigo: 'material_vacio' });
   });
 });

@@ -30,7 +30,8 @@ export function interpretarSimulado(e: EntradaInterpretar, semilla = ''): Interp
     if (saludo && /saludo/.test(i.id)) p += 0.5;
     return { id: i.id, p };
   }).sort((a, b) => b.p - a.p);
-  const sinEntender = e.intenciones.find((i) => /^(otra|no_entendido|ninguna|otro)$/.test(i.id))?.id ?? e.intenciones[0]!.id;
+  // Sin ninguna palabra en común: una pregunta para el material (así la demo contesta con base), o lo que haya.
+  const sinEntender = e.intenciones.find((i) => /^(propuesta|otra|no_entendido|ninguna|otro)$/.test(i.id))?.id ?? e.intenciones[0]!.id;
   const empatados = puntaje.filter((x) => x.p > 0 && x.p === puntaje[0]!.p);
   const desempate = empatados.length > 1 ? [...semilla].reduce((a, c) => a + c.charCodeAt(0), 0) % empatados.length : 0;
   const mejor = empatados.length ? empatados[desempate]! : { id: sinEntender, p: 0 };
@@ -51,7 +52,8 @@ export function responderSimulado(e: EntradaResponder): RespuestaConBase {
   }
   const oraciones = mejor.s.texto.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
   const recorte = oraciones.split(' ').slice(0, 90).join(' ');
-  return { respuesta: recorte, secciones: [mejor.s.codigo], tiene_respuesta: mejor.p >= 2 ? 'si' : 'parcial' };
+  // Responde del todo solo si la sección tiene todas las palabras de la pregunta; si no, es una respuesta parcial.
+  return { respuesta: recorte, secciones: [mejor.s.codigo], tiene_respuesta: mejor.p === preg.size ? 'si' : 'parcial' };
 }
 
 export function copilotoSimulado(e: EntradaCopiloto): PropuestaCopiloto {

@@ -22,6 +22,8 @@ export interface ContextoBot {
    * en la prueba del 28/9/2026: las instrucciones decían MOCA y no Movimiento Otro Camino.
    */
   identidad?: { candidato: { nombre: string; alias: string[] }; partido: { nombre: string; alias: string[] } | null };
+  /** Dónde consultar lo que el bot no sabe (el canal de consultas del bot): responder con base lo ofrece. */
+  consultas?: string;
 }
 
 export interface Instrucciones {
@@ -87,7 +89,7 @@ Eres el asistente virtual del bot «${c.nombreBot}» de la campaña «${c.campan
 ## Reglas
 
 1. Responde SOLO con la información del MATERIAL de arriba. No uses lo que sepas por otro lado.
-2. Si el material no tiene el dato, dilo con claridad ("No tengo ese dato") y, si sirve, ofrece un canal de contacto que sí esté en el material. Si tiene solo una parte, responde esa parte y aclara qué falta.
+2. Si el material no tiene el dato, dilo con claridad ("No tengo ese dato") y ${c.consultas ? `ofrece consultar en ${c.consultas}` : 'ofrece un canal de contacto que sí esté en el material'}. Si tiene solo una parte, responde esa parte y aclara qué falta.
 3. Nunca inventes cifras, fechas, nombres, lugares, teléfonos, enlaces, posiciones ni promesas. No atribuyas al candidato opiniones que no estén en el material.
 4. Si la pregunta parte de algo falso, corrígelo con amabilidad usando el material.
 5. Cuando una propuesta o declaración tiene fecha, menciónala si ayuda a entender. No presentes algo viejo como si fuera de hoy.
