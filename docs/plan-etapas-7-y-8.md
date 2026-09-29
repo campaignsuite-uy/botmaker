@@ -19,9 +19,10 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
 - **Respuestas grabadas (1.07):** hechas. `motores/respuestas-openrouter.ts` con los casos de la prueba de motores (los
   mensajes de error, tal cual; los cuerpos, con la forma de OpenRouter) y `motores/openrouter-grabadas.test.ts`. El
   adaptador ahora muestra el motivo de «Provider returned error» (el freno de Mistral estaba en `metadata.raw`).
-- **Lo que sigue, en orden:**
-  1. Semilla de demo para Supabase.
-  2. Manual (8.06).
+- **Semilla de demo para Supabase:** hecha. `pnpm db:sql --demo` arma `3-semilla-demo.sql` desde las mismas funciones que
+  la demo; `pnpm db:probar` la carga en PGlite y compara con la demo (bots, bandeja, base de contactos, analítica y
+  costos). Sin WhatsApp (necesita una clave real). Pesa algo más de 1 MB.
+- **Lo que sigue:** el manual (8.06). Después, Supabase de desarrollo (1.10) y las cuentas.
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 

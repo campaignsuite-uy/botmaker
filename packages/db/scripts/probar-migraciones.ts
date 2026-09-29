@@ -35,6 +35,8 @@ import { sha256 } from '../../modules/botmaker/canal-whatsapp/webhook.ts';
 import { leerPlantilla } from '../../modules/botmaker/dominio/whatsapp.ts';
 import { consultasDeEventos, type ConsultaContacto } from '../../modules/botmaker/dominio/contactos.ts';
 import { agregarPorHora, cierreDeConversacion, ordenFilasHora, type FilaHora } from '../../modules/botmaker/dominio/analitica.ts';
+import { RepositorioDemo } from '../../modules/botmaker/datos/demo/repositorio-demo.ts';
+import { sqlSemillaDemo } from './semilla-demo.ts';
 
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
@@ -1290,6 +1292,40 @@ async function main() {
     afirmar(await cuenta(db2, `select count(*) as n from bots.campaign_settings`) === 1, 'No preparó BotMaker en la campaña');
     const roles = await filas<{ email: string; r: string }>(db2, `select p.email, bots.rol_efectivo(c.id, p.id) as r from core.campaigns c cross join core.profiles p order by p.email`);
     afirmar(JSON.stringify(roles) === JSON.stringify([{ email: 'duena@prueba.test', r: 'administrador' }, { email: 'editora@prueba.test', r: 'editor' }]), JSON.stringify(roles));
+  });
+
+  console.log('\nSemilla de demo (3-semilla-demo.sql)');
+  await prueba('con Supabase se ve lo mismo que en la demo: bots, bandeja, base de contactos, analítica y costos', async () => {
+    const db4 = await baseConMigraciones();
+    await db4.exec(`insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values ('${U(401)}', 'duena@prueba.test', now(), '{"full_name": "Dueña"}');`);
+    await db4.exec(readFileSync(`${DIR_CORE_DEV}semilla-desarrollo.sql`, 'utf8').replace('{{DUENO}}', 'duena@prueba.test'));
+    const ahora = new Date();
+    const sql = sqlSemillaDemo({ ahora, relativo: false });
+    await db4.exec(sql);
+    await db4.exec(sql);
+    const camp = (await uno<{ id: string }>(db4, `select id from core.campaigns where slug = 'pa-2029'`))!.id;
+    const supa = new RepositorioSupabase({ servicio: clienteSimulado(db4, { servicio: true }) as never, persona: async () => clienteSimulado(db4, { persona: U(401) }) as never });
+    const demo = new RepositorioDemo({ ahora });
+    const botsS = (await supa.bots(camp, { archivados: true })).map((b) => `${b.nombre}:${b.estado}:${b.idPublico}`).sort();
+    const botsD = (await demo.bots('c-pa-2029', { archivados: true })).map((b) => `${b.nombre}:${b.estado}:${b.idPublico}`).sort();
+    afirmar(JSON.stringify(botsS) === JSON.stringify(botsD), `bots: ${JSON.stringify(botsS)} · demo ${JSON.stringify(botsD)}`);
+    const conv = (fs: Awaited<ReturnType<typeof supa.conversaciones>>) => fs.map((f) => `${f.conversacion.estado}:${f.contacto.nombre ?? f.contacto.nombrePerfil ?? '-'}:${f.mensajes}`).sort();
+    const convS = conv(await supa.conversaciones(camp));
+    afirmar(JSON.stringify(convS) === JSON.stringify(conv(await demo.conversaciones('c-pa-2029'))), `bandeja: ${JSON.stringify(convS)}`);
+    const base = (p: Awaited<ReturnType<typeof supa.baseContactos>>) => p.filas.map((f) => `${f.contacto.nombre ?? f.contacto.nombrePerfil ?? '-'}:${f.conversaciones}:${f.consultas.map((k) => `${k.tipo}.${k.clave}.${k.veces}`).join('|')}`).sort();
+    const baseS = base(await supa.baseContactos(camp, {}, U(401)));
+    afirmar(baseS.length === 5 && JSON.stringify(baseS) === JSON.stringify(base(await demo.baseContactos('c-pa-2029', {}, 'p-joaquin'))), `base: ${JSON.stringify(baseS)}`);
+    const filtro = { desde: new Date(ahora.getTime() - 40 * 864e5).toISOString(), hasta: new Date(ahora.getTime() + 864e5).toISOString() };
+    const aS = await supa.analitica(camp, filtro, U(401));
+    const aD = await demo.analitica('c-pa-2029', filtro, 'p-joaquin');
+    const distintas = aS.metricas.filter((x, i) => canonico(x) !== canonico(aD.metricas[i])).map((x) => `${canonico(x)} vs ${canonico(aD.metricas.find((y) => y.metrica === x.metrica && y.caja === x.caja && y.clave === x.clave))}`);
+    afirmar(aS.metricas.length > 20 && canonico(aS.metricas) === canonico(aD.metricas), `métricas: ${aS.metricas.length} y ${aD.metricas.length}; ${distintas.slice(0, 5).join(' · ')}`);
+    afirmar(canonico(aS.porDia) === canonico(aD.porDia), `por día: ${canonico(aS.porDia)} · demo ${canonico(aD.porDia)}`);
+    const costo = (x: typeof aS.costos) => (x ?? []).map((k) => `${k.funcion}:${k.motor}:${k.llamadas}:${k.usd.toFixed(4)}`).sort().join();
+    afirmar(costo(aS.costos) === costo(aD.costos), `costos: ${costo(aS.costos)} · demo ${costo(aD.costos)}`);
+    const publicada = await supa.version((await supa.bots(camp)).find((b) => b.estado === 'publicado')!.versionPublicadaId!);
+    afirmar(publicada?.estado === 'publicada' && (publicada.definicion as { material: unknown[] }).material.length === 4, 'La versión publicada no tiene su material');
+    afirmar(await cuenta(db4, `select count(*) as n from bots.spend_daily`) > 0, 'No sumó el gasto por día');
   });
 
   console.log(`\n${total - fallas} de ${total} pruebas bien.${fallas ? ` ${fallas} fallaron.` : ''}\n`);

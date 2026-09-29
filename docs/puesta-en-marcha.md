@@ -71,7 +71,8 @@ Con el Gmail de CampaignSuite (no la cuenta personal que usó AI Positioning), d
 pnpm db:sql --dueno tu-correo@gmail.com
 ```
 
-Deja dos archivos en `packages/db/salida/` (no se suben). En Supabase → **SQL Editor**:
+Deja dos archivos en `packages/db/salida/` (no se suben; con `--demo`, un tercero: ver el paso 6). En Supabase →
+**SQL Editor**:
 
 1. Pegá todo `1-estructura.sql` y corrélo. Tiene que terminar sin errores.
 2. `2-semilla.sql` se corre en el paso 6, después de tu primer ingreso.
@@ -102,6 +103,27 @@ nombres están en `apps/web/.env.ejemplo`.
 
 Para probar los otros roles: ingresá una vez con otra cuenta de Google, volvé a correr `pnpm db:sql` con `--editor`,
 `--agente` o `--lector` y corré de nuevo `2-semilla.sql` (no duplica nada).
+
+### Los bots de ejemplo de la demo (opcional)
+
+`pnpm db:sql --dueno tu-correo@gmail.com --demo` deja también `3-semilla-demo.sql`: los tres bots de la demo con su
+material, las conversaciones de la bandeja, la base de contactos, unas 300 conversaciones inventadas para la analítica y
+sus costos. Todo es inventado (la candidata también) y queda a tu nombre. Se corre después de `2-semilla.sql`, en el SQL
+Editor; se puede correr de nuevo (borra los bots de ejemplo y los vuelve a cargar, con las horas corridas a hoy).
+
+- Pesa algo más de 1 MB. Si el SQL Editor no lo acepta, se corre desde la terminal con `psql` y la cadena de conexión
+  del proyecto (Project Settings → Database → Connection string, que lleva la contraseña de la base). Se pega sin que
+  se vea ni quede guardada:
+
+  ```bash
+  read -rs "URL_BASE?Pegá la cadena de conexión y apretá Enter: " && psql "$URL_BASE" -f packages/db/salida/3-semilla-demo.sql; unset URL_BASE
+  ```
+
+  (Eso es zsh, la Terminal de la Mac; en bash: `read -rs -p "Pegá la cadena de conexión: " URL_BASE`.)
+- Sin WhatsApp: el canal necesita una clave de 360dialog de verdad. La conversación de Marta aparece en la bandeja,
+  pero no se le puede escribir.
+- `pnpm db:probar` controla que con esta semilla Supabase muestre lo mismo que la demo: bots, bandeja, base de
+  contactos, analítica y costos.
 
 ## 7. La prueba que cierra la etapa 1
 
