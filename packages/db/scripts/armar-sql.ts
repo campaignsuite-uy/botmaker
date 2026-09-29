@@ -3,13 +3,16 @@
  *  1-estructura.sql: el núcleo de desarrollo y las migraciones de BotMaker, en orden. Se corre una vez (y de nuevo solo
  *                    con un proyecto vacío). Cuando haya una migración nueva, se corre solo esa.
  *  2-semilla.sql:    la organización, la campaña y el equipo de prueba, con los correos puestos. Se puede correr de nuevo.
+ *  3-semilla-demo.sql (con --demo): los bots de ejemplo de la demo, con conversaciones, analítica y costos inventados,
+ *                    sobre la campaña de 2-semilla.sql. Se puede correr de nuevo (los vuelve a cargar con las horas a hoy).
  *
- * Uso: pnpm db:sql --dueno tu@correo.com [--editor otro@correo.com] [--agente …] [--lector …]
+ * Uso: pnpm db:sql --dueno tu@correo.com [--editor otro@correo.com] [--agente …] [--lector …] [--demo]
  * Los correos no son claves: son los de las cuentas de Google con que se ingresa a la app.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { archivosMigracion, DIR_CORE_DEV } from './supabase-simulado.ts';
+import { sqlSemillaDemo } from './semilla-demo.ts';
 
 const args = process.argv.slice(2);
 const arg = (nombre: string) => {
@@ -42,6 +45,9 @@ let semilla = readFileSync(join(DIR_CORE_DEV, 'semilla-desarrollo.sql'), 'utf8')
 for (const [k, v] of Object.entries(correos)) semilla = semilla.replace(`{{${k}}}`, v);
 writeFileSync(join(salida, '2-semilla.sql'), semilla);
 
+const conDemo = args.includes('--demo');
+if (conDemo) writeFileSync(join(salida, '3-semilla-demo.sql'), sqlSemillaDemo({ ahora: new Date() }));
+
 console.log(`Listo, en packages/db/salida/:
   1-estructura.sql  (${archivos.length} archivos)
-  2-semilla.sql     ${correos.DUENO ? `(Dueño: ${correos.DUENO})` : '(falta el correo del Dueño: completalo en el archivo o volvé a correr con --dueno)'}`);
+  2-semilla.sql     ${correos.DUENO ? `(Dueño: ${correos.DUENO})` : '(falta el correo del Dueño: completalo en el archivo o volvé a correr con --dueno)'}${conDemo ? '\n  3-semilla-demo.sql (los bots de ejemplo: después de 2-semilla.sql)' : ''}`);
