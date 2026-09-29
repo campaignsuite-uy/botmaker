@@ -13,7 +13,7 @@
  * aportes), 4 Atención (derivación en horario), 5 Datos personales (baja con confirmación).
  */
 import type { Trato } from './tipos';
-import type { Caja, Contenido, Definicion, Intencion, Tema, Variable } from './definicion';
+import { esquemaDefinicion, type Caja, type Contenido, type Definicion, type Intencion, type Tema, type Variable } from './definicion';
 
 export interface OpcionesPlantilla {
   candidato: string;
@@ -125,6 +125,9 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     contenido('c_aclaracion', 'Aclaración', t('Para ayudarle mejor, ¿qué quiere saber?', 'Para ayudarte mejor, ¿qué quieres saber?')),
     contenido('c_cierre', 'Cierre', t('Gracias a usted. Cuando quiera, me escribe.', 'Gracias a ti. Cuando quieras, me escribes.')),
     contenido('c_sinmotor', 'Sin motor', t('Ahora puedo ayudarle mejor con las opciones del menú.', 'Ahora puedo ayudarte mejor con las opciones del menú.')),
+    contenido('c_preguntar', 'Pedir la pregunta', t(
+      'Escríbame su pregunta sobre las propuestas de {{bot.candidato}} y le respondo.',
+      'Escríbeme tu pregunta sobre las propuestas de {{bot.candidato}} y te respondo.')),
     contenido('c_masayuda', 'Algo más', t('¿Le ayudo con algo más?', '¿Te ayudo con algo más?')),
     contenido('c_sindato', 'Sin el dato', t(
       'No tengo ese dato. Puede consultarlo con el equipo en {{bot.consultas}}.',
@@ -159,35 +162,38 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     {
       id: 'n_menu', codigo: 2, nombre: 'Menú principal', ultimaLetra: 5, tipo: 'menu', contenido: 'c_menu', modo: 'lista', textoLibre: 'n_interpretar',
       opciones: [
-        { letra: 'A', texto: 'Propuestas', descripcion: 'Qué propone sobre cada tema', destino: 'n_consulta' },
-        { letra: 'B', texto: `Quién es`, descripcion: 'Trayectoria del candidato', destino: 'n_consulta' },
-        { letra: 'C', texto: 'Sumarme', descripcion: 'Ser voluntario', destino: 'n_sumate' },
-        { letra: 'D', texto: 'Aportar', destino: 'n_aporte' },
-        { letra: 'E', texto: 'Hablar con alguien', descripcion: 'Una persona del equipo', destino: 'n_atencion' },
+        { letra: 'A', texto: 'Propuestas', descripcion: 'Qué propone sobre cada tema', destino: 'n_irconsul' },
+        { letra: 'B', texto: 'Quién es', descripcion: 'Trayectoria del candidato', destino: 'n_irquien' },
+        { letra: 'C', texto: 'Sumarme', descripcion: 'Ser voluntario', destino: 'n_irsumate' },
+        { letra: 'D', texto: 'Aportar', destino: 'n_iraporte' },
+        { letra: 'E', texto: 'Hablar con alguien', descripcion: 'Una persona del equipo', destino: 'n_iratenc' },
       ],
     },
     { id: 'n_interpretar', codigo: 3, nombre: 'Interpretar', ultimaLetra: 0, tipo: 'interpretar', rutas: {}, noEntendio: 'n_menu' },
     { id: 'n_noentendi', codigo: 4, nombre: 'No entendí', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_noentendi', opciones: [], siguiente: 'n_menu' },
     { id: 'n_soybot', codigo: 5, nombre: 'Soy un asistente', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_soybot', opciones: [], siguiente: null },
     { id: 'n_limite', codigo: 6, nombre: 'Fuera de lo que hago', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_limite', opciones: [], siguiente: 'n_menu' },
-    { id: 'n_irconsul', codigo: 7, nombre: 'A consultas', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_consultas', caja: 'n_consulta' },
+    { id: 'n_irconsul', codigo: 7, nombre: 'A preguntar', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_consultas', caja: 'n_preguntar' },
   ];
   // El menú y el inicio van a otros flujos a través de cajas "Ir a flujo".
   const saltos: Caja[] = [
     { id: 'n_irsumate', codigo: 8, nombre: 'A sumarse', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_sumarse', caja: 'n_sumate' },
     { id: 'n_iraporte', codigo: 9, nombre: 'A aportes', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_sumarse', caja: 'n_aporte' },
     { id: 'n_iratenc', codigo: 10, nombre: 'A atención', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_atencion', caja: 'n_atencion' },
+    { id: 'n_irquien', codigo: 11, nombre: 'A quién es', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_consultas', caja: 'n_quien' },
   ];
-  const menu = inicio[1] as Extract<Caja, { tipo: 'menu' }>;
-  menu.opciones = menu.opciones.map((op) => ({ ...op, destino: ({ n_consulta: 'n_irconsul', n_sumate: 'n_irsumate', n_aporte: 'n_iraporte', n_atencion: 'n_iratenc' } as Record<string, string>)[op.destino!] ?? op.destino }));
 
   const consultas: Caja[] = [
-    { id: 'n_consulta', codigo: 1, nombre: 'Respuesta con base', ultimaLetra: 0, tipo: 'respuesta_base', temas: [], conDato: 'n_masayuda', sinDato: 'n_masayuda' },
+    { id: 'n_consulta', codigo: 1, nombre: 'Respuesta con base', ultimaLetra: 0, tipo: 'respuesta_base', temas: [], conDato: 'n_masayuda', sinDato: 'n_sindato' },
     {
       id: 'n_masayuda', codigo: 2, nombre: 'Algo más', ultimaLetra: 2, tipo: 'mensaje', contenido: 'c_masayuda', siguiente: null,
       opciones: [{ letra: 'A', texto: 'Ver el menú', destino: 'n_irmenu' }, { letra: 'B', texto: 'No, gracias', destino: null }],
     },
     { id: 'n_irmenu', codigo: 3, nombre: 'Al menú', ultimaLetra: 0, tipo: 'ir_a_flujo', flujo: 'f_inicio', caja: 'n_menu' },
+    { id: 'n_sindato', codigo: 4, nombre: 'Sin el dato', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_sindato', opciones: [], siguiente: 'n_masayuda' },
+    // Desde el menú no llega un texto: "Propuestas" pide la pregunta; "Quién es" contesta una pregunta fija.
+    { id: 'n_preguntar', codigo: 5, nombre: 'Pedir la pregunta', ultimaLetra: 0, tipo: 'mensaje', contenido: 'c_preguntar', opciones: [], siguiente: null },
+    { id: 'n_quien', codigo: 6, nombre: 'Quién es', ultimaLetra: 0, tipo: 'respuesta_base', temas: [], pregunta: '¿Quién es {{bot.candidato}} y cuál es su trayectoria?', conDato: 'n_masayuda', sinDato: 'n_sindato' },
   ];
 
   const sumarse: Caja[] = [
@@ -233,9 +239,11 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     { nombre: 'contacto.zona', descripcion: 'Zona o corregimiento donde vive' },
   ];
 
-  return {
+  // Pasa por el esquema: sale validada y con las claves en el orden de siempre (así se comparan dos versiones).
+  return esquemaDefinicion.parse({
     formato: 1,
     inicio: 'n_bienvenida',
+    textoLibre: 'n_interpretar',
     flujos: [
       flujo('f_inicio', 1, 'Inicio', [...inicio, ...saltos]),
       flujo('f_consultas', 2, 'Consultas', consultas),
@@ -254,5 +262,5 @@ export function plantillaPolitica(o: OpcionesPlantilla): Definicion {
     },
     contacto: { consultas: o.consultas ?? null, aportes: o.aportes ?? null },
     sistema: { noEntendi: 'c_noentendi', aclaracion: 'c_aclaracion', cierre: 'c_cierre', sinMotor: 'c_sinmotor' },
-  };
+  });
 }

@@ -122,6 +122,8 @@ const cajaRespuesta = z.object({
   tipo: z.literal('respuesta_base'),
   /** Solo el material de estos temas (vacío: todo el material). */
   temas: z.array(idCatalogo).default([]),
+  /** Si se llega sin un texto de la persona (desde un botón), contesta esta pregunta. Sin pregunta, espera un texto. */
+  pregunta: texto(300).optional(),
   conDato: destino,
   /** Sin el dato en el material: la respuesta de sin dato y después esta caja. */
   sinDato: destino,
@@ -232,6 +234,8 @@ export const esquemaDefinicion = z.object({
   formato: z.literal(1),
   /** La primera caja de una conversación nueva. */
   inicio: idCaja,
+  /** Adónde va un texto cuando el bot no está esperando nada en particular (normalmente, una caja de interpretar). */
+  textoLibre: idCaja,
   flujos: z.array(esquemaFlujo).min(1).max(LIMITES.flujos),
   /** El último código de flujo asignado (no se reusan). */
   ultimoFlujo: z.number().int().min(0).max(99),
@@ -393,6 +397,7 @@ export function problemasDeReferencias(def: Definicion): Problema[] {
   const variables = new Set(def.variables.map((v) => v.nombre));
 
   if (!idCajas.has(def.inicio)) agregar('destino_inexistente', 'La caja de inicio del bot no existe.', 'inicio');
+  if (!idCajas.has(def.textoLibre)) agregar('destino_inexistente', 'La caja que recibe los textos libres no existe.', 'texto libre');
   for (const [clave, id] of Object.entries(def.sistema)) if (!contenidos.has(id)) agregar('contenido_inexistente', `El mensaje del sistema "${clave}" usa un contenido que no existe.`, `sistema ${clave}`);
 
   for (const f of def.flujos) {
