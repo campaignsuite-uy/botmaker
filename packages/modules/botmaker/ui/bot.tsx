@@ -1,5 +1,6 @@
 /** Ajustes de un bot: datos, motores y gasto, datos personales y archivar. Solo dibuja VistaBot. */
-import { Caja, Encabezado } from '@campaignsuite/ui';
+import { Caja } from '@campaignsuite/ui';
+import { EncabezadoBot } from './encabezado-bot';
 import { archivarBot, guardarBot, guardarDatosPersonales, guardarMotores, probarMotor } from '../acciones/bots';
 import type { VistaBot } from '../vistas/bot';
 import { Dato, MensajeAccion, Ocultos, SoloLectura } from './piezas';
@@ -9,14 +10,8 @@ export function PantallaBot({ v }: { v: VistaBot }) {
   const oc = (ancla: string) => <Ocultos campanaId={v.campanaId} volver={`${v.volver}#${ancla}`} extra={{ botId: b.id }} />;
   return (
     <>
-      <Encabezado
-        ceja={<><a href={v.hrefLista}>Bots</a> · {b.estadoTexto}</>}
-        titulo={b.nombre}
-        bajada={b.resumen}
-        lado={<span className={`bots-estado bots-estado--${b.estado}`}>{b.estadoTexto}</span>}
-      />
+      <EncabezadoBot e={v.encabezado} bajada={b.resumen} />
       <MensajeAccion m={v.mensaje} />
-      {b.archivado ? <div className="aviso" role="status">Este bot está archivado: se puede mirar, no cambiar.</div> : null}
 
       <Caja id="datos" titulo="Datos del bot" nota={`Dirección pública: ${b.idPublico}`}>
         {v.datos.editable ? (

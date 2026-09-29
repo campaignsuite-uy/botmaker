@@ -18,6 +18,8 @@ import type { Bot } from '../dominio/tipos';
 import { pilasDeshacer, type Borrador, type OrigenCambio } from '../dominio/versiones';
 import { exportarYaml, importarYaml, type ProblemaYaml } from '../dominio/yaml';
 import type { ContextoNucleo, Salida } from './ejecutar-bots';
+import { texto } from './comun';
+import { operacionesDeForma } from './formularios-borrador';
 
 /** Cómo queda el borrador después de una acción: lo que necesita la pantalla del editor. */
 export interface EstadoBorrador {
@@ -182,4 +184,25 @@ export async function ejecutarImportarYaml(c: ContextoNucleo, e: { botId: string
   } catch (x) {
     return deError(x);
   }
+}
+
+// ── Formularios (Contenidos, Intenciones y temas, Variables y datos) ───────────────────────────
+
+/** Un formulario de las pantallas del borrador: sus campos → operaciones → un cambio. Vuelve con ?ok= o ?error=. */
+export async function ejecutarFormulario(c: ContextoNucleo, fd: FormData): Promise<Salida> {
+  const botId = texto(fd, 'botId');
+  const b = await botEditable(c, botId);
+  if ('ok' in b) return { tipo: 'error', codigo: b.ok ? 'no_se_pudo' : b.codigo };
+  const l = await leerBorrador(c.repo, b.id);
+  if ('codigo' in l) return { tipo: 'error', codigo: l.codigo };
+  const f = operacionesDeForma(fd, l.definicion);
+  if ('codigo' in f) return { tipo: 'error', codigo: f.codigo };
+  const r = await ejecutarCambio(c, { botId: b.id, seq: Number(texto(fd, 'seq')) || l.borrador.seq, operaciones: f.ops, origen: 'editor' });
+  return r.ok ? { tipo: 'ok', codigo: 'cambio_guardado' } : { tipo: 'error', codigo: r.codigo };
+}
+
+export async function ejecutarDeshacerFormulario(c: ContextoNucleo, fd: FormData): Promise<Salida> {
+  const rehacer = texto(fd, 'rehacer') === 'si';
+  const r = await ejecutarDeshacer(c, { botId: texto(fd, 'botId'), seq: Number(texto(fd, 'seq')), rehacer });
+  return r.ok ? { tipo: 'ok', codigo: rehacer ? 'rehecho' : 'deshecho' } : { tipo: 'error', codigo: r.codigo };
 }

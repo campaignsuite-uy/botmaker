@@ -17,6 +17,7 @@ import { CASOS, TRATOS, type EstadoBot, type FuncionMotor } from '../dominio/tip
 import { simularMotores } from '../motores/claves';
 import { ruta, type ContextoPantalla } from '../ui/contexto';
 import { mensajeDe, type MensajePantalla } from './mensajes';
+import { encabezadoBot, type EncabezadoBotVista } from './bot-comun';
 
 interface Opcion {
   valor: string;
@@ -51,6 +52,7 @@ export interface VistaBot {
   campanaId: string;
   volver: string;
   hrefLista: string;
+  encabezado: EncabezadoBotVista;
   bot: { id: string; nombre: string; idPublico: string; estado: EstadoBot; estadoTexto: string; archivado: boolean; resumen: string; creado: string; actualizado: string };
   datos: {
     editable: boolean;
@@ -142,6 +144,7 @@ export async function vistaBot(repo: Repositorio, ctx: ContextoPantalla, botId: 
     campanaId: ctx.campana.id,
     volver: ruta(ctx, bot.id),
     hrefLista: ruta(ctx),
+    encabezado: encabezadoBot(ctx, bot, 'ajustes', await repo.borrador(bot.id)),
     bot: {
       id: bot.id,
       nombre: bot.nombre,

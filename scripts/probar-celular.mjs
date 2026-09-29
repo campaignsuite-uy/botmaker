@@ -30,7 +30,7 @@ const PERSONAS = ['p-joaquin', 'p-lucia', 'p-andres', 'p-equipo', 'p-mariana'];
 const RECORRIDOS = [[390, 'p-joaquin'], ...PERSONAS.map((p) => [360, p])];
 const MAX_PAGINAS = 90;
 // Rutas que no son pantallas (descargas, salir, callbacks) o que cambian algo al abrirlas.
-const NO_SEGUIR = [/^\/salir/, /^\/auth\//, /^\/descargas\//, /^\/fichas\//, /\/seguir$/];
+const NO_SEGUIR = [/^\/salir/, /^\/auth\//, /^\/descargas\//, /^\/fichas\//, /\/seguir$/, /\/descargar$/];
 // Los informes para imprimir (hojas A4) siguen pensados para la computadora (definición, §15): se abren, pero su
 // ancho no se controla.
 const SIN_CONTROL_DE_ANCHO = [/^\/imprimir\//];

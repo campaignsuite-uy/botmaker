@@ -117,7 +117,7 @@ export function importarYaml(texto: string, actual: Definicion | null = null, op
       ok: false,
       problemas: formato.error.issues.slice(0, 30).map((i) => ({
         linea: lineaDe(i.path as (string | number)[]),
-        mensaje: `${describirCamino(x, i.path as (string | number)[])}: ${traducirZod(i.message, i.code)}`,
+        mensaje: `${describirCamino(x, i.path as (string | number)[])}: ${traducirZod(i.message, i.code, (i as { values?: unknown[] }).values)}`,
       })),
     };
   }
@@ -187,13 +187,16 @@ const CODIGOS_ZOD: Record<string, string> = {
   descripcion_vacia: 'falta la descripción',
 };
 
-function traducirZod(mensaje: string, codigo: string): string {
+function traducirZod(mensaje: string, codigo: string, valores?: unknown[]): string {
   if (CODIGOS_ZOD[mensaje]) return CODIGOS_ZOD[mensaje]!;
+  const numero = mensaje.match(/(\d+)/)?.[1];
   if (codigo === 'invalid_type' && /received undefined/.test(mensaje)) return 'falta este dato';
-  if (codigo === 'invalid_type') return `el tipo no es el esperado (${mensaje})`;
-  if (codigo === 'too_big') return `es demasiado largo o tiene demasiados elementos (${mensaje})`;
-  if (codigo === 'too_small') return `es demasiado corto o le faltan elementos (${mensaje})`;
-  if (codigo === 'invalid_value' || codigo === 'invalid_union') return `no es un valor admitido (${mensaje})`;
+  if (codigo === 'invalid_type') return 'no es del tipo que corresponde (texto, número, lista…)';
+  if (codigo === 'too_big') return numero ? `pasa el máximo (${numero})` : 'es demasiado largo o tiene demasiados elementos';
+  if (codigo === 'too_small') return numero ? `no llega al mínimo (${numero})` : 'es demasiado corto o le faltan elementos';
+  if (codigo === 'invalid_value') return valores?.length ? `no es un valor admitido (se admite: ${valores.map(String).join(', ')})` : 'no es un valor admitido';
+  if (codigo === 'invalid_union') return 'no es un valor admitido';
+  if (codigo === 'invalid_format') return 'no tiene el formato esperado';
   return mensaje;
 }
 

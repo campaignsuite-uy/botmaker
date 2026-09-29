@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import { SinPermiso, SoloLectura } from '../dominio/permisos';
 import { contextoAccion, rutaVolver, SinSesion, texto } from './comun';
 import {
-  ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarImportarYaml, type ResultadoBorrador,
+  ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarDeshacerFormulario, ejecutarFormulario, ejecutarImportarYaml, type ResultadoBorrador,
 } from './ejecutar-borrador';
 import { accesoAccion, conMensaje } from './mensajes';
 
@@ -60,6 +60,26 @@ export async function crearBorrador(fd: FormData): Promise<void> {
   const campanaId = texto(fd, 'campanaId');
   const { persona, rol, repo } = await accesoAccion(campanaId, 'editar_borrador', volver);
   const s = await ejecutarCrearBorrador({ repo, rol, personaId: persona.id, campanaId }, { botId: texto(fd, 'botId'), candidato: texto(fd, 'candidato'), partido: texto(fd, 'partido') });
+  if (s.tipo === 'ok') revalidatePath('/[org]/[campana]/bots', 'layout');
+  redirect(conMensaje(volver, s.tipo, s.codigo));
+}
+
+/** Formularios de Contenidos, Intenciones y temas, y Variables y datos: un cambio del borrador por envío. */
+export async function cambiarBorrador(fd: FormData): Promise<void> {
+  const volver = rutaVolver(fd);
+  const campanaId = texto(fd, 'campanaId');
+  const { persona, rol, repo } = await accesoAccion(campanaId, 'editar_borrador', volver);
+  const s = await ejecutarFormulario({ repo, rol, personaId: persona.id, campanaId }, fd);
+  if (s.tipo === 'ok') revalidatePath('/[org]/[campana]/bots', 'layout');
+  redirect(conMensaje(volver, s.tipo, s.codigo));
+}
+
+/** Deshacer o rehacer desde las pantallas que no son el diagrama. */
+export async function deshacerBorrador(fd: FormData): Promise<void> {
+  const volver = rutaVolver(fd);
+  const campanaId = texto(fd, 'campanaId');
+  const { persona, rol, repo } = await accesoAccion(campanaId, 'editar_borrador', volver);
+  const s = await ejecutarDeshacerFormulario({ repo, rol, personaId: persona.id, campanaId }, fd);
   if (s.tipo === 'ok') revalidatePath('/[org]/[campana]/bots', 'layout');
   redirect(conMensaje(volver, s.tipo, s.codigo));
 }

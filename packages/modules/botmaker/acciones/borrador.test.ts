@@ -6,7 +6,7 @@ import { CANDIDATA_DEMO } from '../datos/demo/semilla';
 import { direccion, ubicar, validarDefinicion, type Definicion } from '../dominio/definicion';
 import { rolEfectivo } from './comun';
 import { ejecutarCrearBot, type ContextoNucleo } from './ejecutar-bots';
-import { ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarImportarYaml, leerBorrador, yamlDelBorrador, type ResultadoBorrador } from './ejecutar-borrador';
+import { ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarDeshacerFormulario, ejecutarFormulario, ejecutarImportarYaml, leerBorrador, yamlDelBorrador, type ResultadoBorrador } from './ejecutar-borrador';
 
 const CAMPANA = 'c-pa-2029';
 const BOT = 'bot-demo-1';
@@ -210,5 +210,54 @@ describe('YAML sobre el borrador', () => {
     expect(r).toMatchObject({ ok: false, codigo: 'yaml' });
     expect(!r.ok && r.problemasYaml?.[0]?.linea).toBeGreaterThan(1);
     expect(await ejecutarImportarYaml(como('p-equipo'), { botId: BOT, texto: y })).toMatchObject({ ok: false, codigo: 'sin_permiso' });
+  });
+});
+
+describe('formularios de las partes del borrador', () => {
+  const enviar = (p: string, x: Record<string, string>) => ejecutarFormulario(como(p), fd({ botId: BOT, seq: '0', ...x }));
+
+  it('contenidos: editar, agregar y quitar (solo si no se usa)', async () => {
+    expect(await enviar('p-lucia', { forma: 'contenido_editar', contenido: 'c_menu', nombre: 'Menú', texto: '¿Qué necesita hoy?' })).toEqual({ tipo: 'ok', codigo: 'cambio_guardado' });
+    expect((await definicion()).contenidos.find((c) => c.id === 'c_menu')).toMatchObject({ nombre: 'Menú', texto: '¿Qué necesita hoy?' });
+    expect(await enviar('p-lucia', { forma: 'contenido_agregar', nombre: 'Afiche', tipo: 'imagen', texto: 'Nuestro afiche', archivoUrl: 'https://ejemplo.org/afiche.png' })).toMatchObject({ tipo: 'ok' });
+    const afiche = (await definicion()).contenidos.find((c) => c.nombre === 'Afiche')!;
+    expect(afiche.archivo).toEqual({ url: 'https://ejemplo.org/afiche.png', nombre: 'afiche.png' });
+    expect(await enviar('p-lucia', { forma: 'contenido_quitar', contenido: 'c_menu' })).toEqual({ tipo: 'error', codigo: 'contenido_en_uso' });
+    expect(await enviar('p-lucia', { forma: 'contenido_quitar', contenido: afiche.id })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar('p-equipo', { forma: 'contenido_quitar', contenido: afiche.id })).toEqual({ tipo: 'error', codigo: 'sin_permiso' });
+  });
+
+  it('intenciones y temas: el destino que cambia se nota en la definición', async () => {
+    expect(await enviar('p-lucia', { forma: 'intencion_editar', intencion: 'agenda', nombre: 'Agenda', descripcion: 'Eventos y giras.', limite: '', frases: '¿Cuándo viene?\n\n¿Dónde es el acto?', destino: 'n_masayuda', tema: '' })).toMatchObject({ tipo: 'ok' });
+    expect((await definicion()).intenciones.find((i) => i.id === 'agenda')).toMatchObject({ destino: 'n_masayuda', frases: ['¿Cuándo viene?', '¿Dónde es el acto?'], tema: null });
+    expect(await enviar('p-lucia', { forma: 'intencion_agregar', nombre: 'Voto en el exterior', descripcion: 'Cómo votar desde afuera.', destino: 'n_irconsul' })).toMatchObject({ tipo: 'ok' });
+    expect((await definicion()).intenciones.at(-1)).toMatchObject({ id: 'voto_en_el_exterior', destino: 'n_irconsul' });
+    expect(await enviar('p-lucia', { forma: 'intencion_agregar', nombre: 'Voto en el exterior', descripcion: 'x' })).toEqual({ tipo: 'error', codigo: 'id_repetido' });
+    expect(await enviar('p-lucia', { forma: 'tema_agregar', nombre: 'Deporte' })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar('p-lucia', { forma: 'tema_quitar', tema: 'deporte' })).toMatchObject({ tipo: 'ok' });
+  });
+
+  it('variables, identidad, contacto y sistema', async () => {
+    expect(await enviar('p-lucia', { forma: 'identidad', candidato: 'Ana Ríos', candidatoAlias: 'Ana, la doctora', partido: '', partidoAlias: '' })).toMatchObject({ tipo: 'ok' });
+    let d = await definicion();
+    expect(d.identidad).toEqual({ candidato: { nombre: 'Ana Ríos', alias: ['Ana', 'la doctora'] }, partido: null });
+    expect(d.variables.find((v) => v.nombre === 'bot.candidato')?.valor).toBe('Ana Ríos');
+    expect(await enviar('p-lucia', { forma: 'contacto', consultasCanal: 'whatsapp', consultasValor: '+507 6000-0000', aportesCanal: '', aportesValor: '' })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar('p-lucia', { forma: 'variable_agregar', ambito: 'bot', nombre: 'Sitio web', valor: 'ejemplo.org' })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar('p-lucia', { forma: 'variable_editar', variable: 'bot.sitio_web', valor: 'otro.org', descripcion: 'El sitio' })).toMatchObject({ tipo: 'ok' });
+    expect(await enviar('p-lucia', { forma: 'variable_quitar', variable: 'contacto.nombre' })).toEqual({ tipo: 'error', codigo: 'variable_en_uso' });
+    expect(await enviar('p-lucia', { forma: 'sistema', noEntendi: 'c_noentendi', aclaracion: 'c_aclaracion', cierre: 'c_masayuda', sinMotor: 'c_sinmotor' })).toMatchObject({ tipo: 'ok' });
+    d = await definicion();
+    expect(d.contacto.consultas).toEqual({ canal: 'whatsapp', valor: '+507 6000-0000' });
+    expect(d.variables.find((v) => v.nombre === 'bot.sitio_web')).toMatchObject({ valor: 'otro.org', descripcion: 'El sitio' });
+    expect(d.sistema.cierre).toBe('c_masayuda');
+    expect(await enviar('p-lucia', { forma: 'sistema', noEntendi: 'c_noentendi', aclaracion: 'c_aclaracion', cierre: 'c_masayuda', sinMotor: 'c_sinmotor' })).toEqual({ tipo: 'error', codigo: 'sin_cambios' });
+  });
+
+  it('deshacer desde el formulario', async () => {
+    await enviar('p-lucia', { forma: 'tema_agregar', nombre: 'Deporte' });
+    expect(await ejecutarDeshacerFormulario(como('p-lucia'), fd({ botId: BOT, seq: '1' }))).toEqual({ tipo: 'ok', codigo: 'deshecho' });
+    expect((await definicion()).temas.some((t) => t.id === 'deporte')).toBe(false);
+    expect(await ejecutarDeshacerFormulario(como('p-lucia'), fd({ botId: BOT, seq: '2', rehacer: 'si' }))).toEqual({ tipo: 'ok', codigo: 'rehecho' });
   });
 });

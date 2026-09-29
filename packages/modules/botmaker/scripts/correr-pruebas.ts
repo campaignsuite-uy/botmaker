@@ -21,6 +21,8 @@ import { PantallaMotores } from '../ui/motores';
 import { PantallaNuevoBot } from '../ui/nuevo';
 import { PantallaFlujos } from '../ui/flujos';
 import { vistaEditor } from '../vistas/editor';
+import { PantallaContenidos, PantallaIntenciones, PantallaVariables, PantallaYaml } from '../ui/partes';
+import { vistaContenidos, vistaIntenciones, vistaVariables, vistaYaml } from '../vistas/partes';
 import { vistaBot } from '../vistas/bot';
 import { vistaBots } from '../vistas/bots';
 import { vistaCostos } from '../vistas/costos';
@@ -107,6 +109,15 @@ async function main() {
       const flujos = html(createElement(PantallaFlujos, { v: (await vistaEditor(repo, c, 'bot-demo-1'))! }));
       prueba('flujos: el editor con los flujos y las pestañas del bot', tiene(flujos, 'Partes del bot') && tiene(flujos, 'ed-barra') && tiene(flujos, 'Datos personales</button>'));
       prueba(`flujos: ${e.datos ? 'se edita (+ Caja, deshacer)' : 'solo mirar'}`, tiene(flujos, '+ Caja') === e.datos && tiene(flujos, 'Deshacer') === e.datos);
+
+      const contenidos = html(createElement(PantallaContenidos, { v: (await vistaContenidos(repo, c, 'bot-demo-1'))! }));
+      prueba(`contenidos: vista previa web y WhatsApp; ${e.datos ? 'se editan' : 'solo mirar'}`, tiene(contenidos, 'WhatsApp') && tiene(contenidos, 'Bienvenida') && tiene(contenidos, 'Agregar contenido') === e.datos);
+      const intenciones = html(createElement(PantallaIntenciones, { v: (await vistaIntenciones(repo, c, 'bot-demo-1'))! }));
+      prueba(`intenciones y temas: las 23 y los temas; ${e.datos ? 'se editan' : 'solo mirar'}`, tiene(intenciones, 'Intenciones (23)') && tiene(intenciones, 'Temas (') && tiene(intenciones, 'Agregar intención') === e.datos);
+      const variables = html(createElement(PantallaVariables, { v: (await vistaVariables(repo, c, 'bot-demo-1'))! }));
+      prueba(`variables y datos: ${e.datos ? 'se editan' : 'solo mirar'}`, tiene(variables, 'Candidato y partido') && tiene(variables, '{{bot.horario}}') && tiene(variables, 'Agregar variable') === e.datos);
+      const yaml = html(createElement(PantallaYaml, { v: (await vistaYaml(repo, c, 'bot-demo-1'))! }));
+      prueba(`yaml: exportar${e.datos ? ' e importar' : ''}`, tiene(yaml, 'Descargar .yaml') && tiene(yaml, 'Importar</button>') === e.datos);
 
       const motores = html(createElement(PantallaMotores, { v: await vistaMotores(repo, c) }));
       prueba('motores: fichas y por defecto', tiene(motores, 'Ficha de cada motor') && tiene(motores, 'gpt-oss-120b (Groq)'));
