@@ -119,15 +119,17 @@ material, las conversaciones de la bandeja, la base de contactos, unas 300 conve
 sus costos. Todo es inventado (la candidata también) y queda a tu nombre. Se corre después de `2-semilla.sql`, en el SQL
 Editor; se puede correr de nuevo (borra los bots de ejemplo y los vuelve a cargar, con las horas corridas a hoy).
 
-- Pesa algo más de 1 MB. Si el SQL Editor no lo acepta, se corre desde la terminal con `psql` y la cadena de conexión
-  del proyecto (Project Settings → Database → Connection string, que lleva la contraseña de la base). Se pega sin que
-  se vea ni quede guardada:
+- Pesa algo más de 1 MB y el SQL Editor no lo acepta («Query is too large to be run via the SQL Editor»). Se corre
+  desde la terminal con `psql` (una vez: `brew install libpq`) y la dirección del **Session pooler** (botón **Connect**
+  del proyecto; la conexión directa necesita IPv6, que muchas redes de casa no tienen), sin `:[YOUR-PASSWORD]`. La
+  contraseña de la base se pide sin que se vea ni quede en el historial:
 
   ```bash
-  read -rs "URL_BASE?Pegá la cadena de conexión y apretá Enter: " && psql "$URL_BASE" -f packages/db/salida/3-semilla-demo.sql; unset URL_BASE
+  read -rs "PGPASSWORD?Contraseña de la base (no se ve): " && echo && export PGPASSWORD && "$(brew --prefix libpq)/bin/psql" "postgresql://postgres.<ref>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres" -q -P pager=off -v ON_ERROR_STOP=1 -f packages/db/salida/3-semilla-demo.sql; unset PGPASSWORD
   ```
 
-  (Eso es zsh, la Terminal de la Mac; en bash: `read -rs -p "Pegá la cadena de conexión: " URL_BASE`.)
+  (Eso es zsh, la Terminal de la Mac; en bash: `read -rs -p "Contraseña de la base: " PGPASSWORD`.) La línea se pega y
+  se corre primero, y la contraseña se pega recién cuando la pide: pegar la dirección sola en la Terminal no hace nada.
 - Sin WhatsApp: el canal necesita una clave de 360dialog de verdad. La conversación de Marta aparece en la bandeja,
   pero no se le puede escribir.
 - `pnpm db:probar` controla que con esta semilla Supabase muestre lo mismo que la demo: bots, bandeja, base de
