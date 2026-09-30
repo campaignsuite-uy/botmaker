@@ -30,7 +30,7 @@ import { chromium } from 'playwright';
 const RAIZ = fileURLToPath(new URL('..', import.meta.url));
 const PUERTO = Number(process.env.PUERTO || 3192);
 const BASE = process.env.URL || `http://localhost:${PUERTO}`;
-const CAMPANA = `${BASE}/otro-camino/pa-2029/bots`;
+const CAMPANA = `${BASE}/pruebas/pa-pruebas/bots`;
 
 let fallas = 0;
 let total = 0;

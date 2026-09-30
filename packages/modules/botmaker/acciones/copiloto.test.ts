@@ -12,11 +12,11 @@ import type { ContextoNucleo } from './ejecutar-bots';
 import { ejecutarDeshacer } from './ejecutar-borrador';
 import { ejecutarAplicarCopiloto, ejecutarPedirCopiloto } from './ejecutar-copiloto';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 const BOT = 'bot-demo-1';
 let repo: RepositorioDemo;
 let capa: CapaMotores;
-const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Generales 2029' } });
+const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Panamá · Pruebas' } });
 const plantilla = () => plantillaPolitica({ candidato: 'Candidata', partido: 'Partido Uno', trato: 'usted', mercado: 'PA' });
 
 beforeEach(() => {
@@ -77,7 +77,7 @@ describe('copiloto: borrador legible y direcciones', () => {
   it('las instrucciones llevan la tarea, el catálogo, el borrador legible y los avisos', () => {
     const d = plantilla();
     const i = instruccionesCopiloto(
-      { nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral', trato: 'usted' },
+      { nombreBot: 'Asistente', campana: 'Panamá · Pruebas', mercado: 'PA', caso: 'electoral', trato: 'usted' },
       { pedido: 'En 1.2 agregá Voluntariado', modo: 'frases', borrador: borradorLegible(d), avisos: ['Aviso en 2.2: sin probar'] },
     );
     expect(i.sistema).toContain('## Tarea: Frases de ejemplo');

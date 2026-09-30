@@ -11,10 +11,10 @@ import {
   ejecutarResponder, ejecutarRevisar, ejecutarTareas, ejecutarTomar,
 } from './ejecutar-bandeja';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 let repo: RepositorioDemo;
 let capa: CapaMotores;
-const como = (p: string): ContextoNucleo & { campana: { nombre: string; zonaHoraria: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Generales 2029', zonaHoraria: 'America/Panama' } });
+const como = (p: string): ContextoNucleo & { campana: { nombre: string; zonaHoraria: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Panamá · Pruebas', zonaHoraria: 'America/Panama' } });
 
 beforeEach(() => {
   reiniciarNucleoMemoria();

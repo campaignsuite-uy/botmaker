@@ -73,7 +73,7 @@ describe('claves e instrucciones', () => {
     expect(simularMotores({ CAMPAIGNSUITE_DATOS: 'supabase', BOTS_SIMULAR: '1' })).toBe(true);
   });
   it('las instrucciones llevan el catálogo, los modismos del mercado y el material primero', () => {
-    const ctx = { nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const };
+    const ctx = { nombreBot: 'Asistente', campana: 'Panamá · Pruebas', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const };
     const i = instruccionesInterpretar(ctx, ENTRADA_PRUEBA.interpretar);
     expect(i.sistema).toContain('- tramite_electoral:');
     expect(i.sistema).toContain('xopá');
@@ -85,7 +85,7 @@ describe('claves e instrucciones', () => {
   });
   it('interpretar sabe cómo le dice la gente al partido y los límites de cada intención', () => {
     const ctx = {
-      nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const,
+      nombreBot: 'Asistente', campana: 'Panamá · Pruebas', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const,
       identidad: { candidato: { nombre: 'Ricardo Lombana', alias: [] }, partido: { nombre: 'Movimiento Otro Camino', alias: ['MOCA', 'Otro Camino'] } },
     };
     const entrada = { ...ENTRADA_PRUEBA.interpretar, intenciones: [{ id: 'partido', descripcion: 'El partido.', limite: 'Trámites del organismo electoral van en tramite_electoral.' }, { id: 'otra', descripcion: 'Otra cosa.' }] };

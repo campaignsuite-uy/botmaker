@@ -12,7 +12,7 @@ export interface ContextoPantalla {
   organizacion: { slug: string; nombre: string; demo?: boolean };
   campana: CampanaBots;
   rol: RolEfectivo;
-  /** Ruta base del producto en esta campaña: /otro-camino/pa-2029/bots. */
+  /** Ruta base del producto en esta campaña: /pruebas/pa-pruebas/bots. */
   base: string;
   /** El inicio de la campaña y su configuración (solo si la persona la administra). */
   plataforma: { inicio: string; configuracion: string | null };

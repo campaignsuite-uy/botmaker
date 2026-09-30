@@ -4,7 +4,7 @@
  * analítica (con la historia inventada del bot publicado) y las llamadas a motores. Sale de las mismas funciones que
  * arman la demo (datos/demo/semilla*.ts): lo que se ve con Supabase es lo mismo que en la demo.
  *
- * - Va sobre la organización y la campaña de 2-semilla.sql (otro-camino / pa-2029). Todo lo que en la demo hizo una
+ * - Va sobre la organización y la campaña de 2-semilla.sql (pruebas / pa-pruebas). Todo lo que en la demo hizo una
  *   persona inventada (Lucía, Andrés…) queda a nombre del Dueño: en Supabase las personas son cuentas de verdad.
  * - Se puede correr de nuevo: borra los bots de ejemplo (sus ids son fijos) y los vuelve a cargar.
  * - Las horas quedan corridas a la hora en que se corre: la historia siempre termina "hoy".
@@ -77,7 +77,7 @@ create temp table demo on commit drop as
 select c.organization_id as org, c.id as campana,
        (select m.profile_id from core.organization_members m where m.organization_id = c.organization_id and m.role = 'dueno' order by m.profile_id limit 1) as dueno
 from core.campaigns c join core.organizations o on o.id = c.organization_id
-where o.slug = 'otro-camino' and c.slug = 'pa-2029';
+where o.slug = 'pruebas' and c.slug = 'pa-pruebas';
 
 create or replace function pg_temp.org() returns uuid language sql stable as $$ select org from demo $$;
 create or replace function pg_temp.campana() returns uuid language sql stable as $$ select campana from demo $$;
@@ -86,7 +86,7 @@ create or replace function pg_temp.dueno() returns uuid language sql stable as $
 do $$
 begin
   if not exists (select 1 from demo where dueno is not null) then
-    raise exception 'Falta la campaña pa-2029 de otro-camino con su Dueño: corré primero 2-semilla.sql.';
+    raise exception 'Falta la campaña pa-pruebas de la organización pruebas, con su Dueño: corré primero 2-semilla.sql.';
   end if;
 end $$;
 

@@ -7,6 +7,10 @@ import type { DatosNucleo } from './accesos';
  * otra diferencia con la plataforma de CampaignSuite (ver catalogo.ts). El día de la mudanza, las personas y los
  * accesos de BotMaker se suman a la demo de CampaignSuite.
  *
+ * La organización es de pruebas de CampaignSuite («CampaignSuite · Pruebas», campaña «Panamá · Pruebas»): ningún
+ * nombre de cliente (decidido el 30/9/2026; antes se llamaba como el primer cliente). Para la mudanza: si la demo de
+ * CampaignSuite usa el nombre de un cliente, conviene cambiarlo allá también.
+ *
  * Joaquín es Dueño: administra la campaña y es Administrador de BotMaker sin fila (cascada, D-081). Los demás son
  * Miembros de la organización e Integrantes de la campaña, con un rol en BotMaker; Mariana está en la campaña sin
  * acceso a BotMaker.
@@ -20,24 +24,24 @@ export const NUCLEO_DEMO: DatosNucleo = {
     { id: 'p-mariana', nombre: 'Mariana Díaz', email: 'mariana@ejemplo.org', iniciales: 'MD' },
   ],
   organizaciones: [
-    { id: 'org-moca', slug: 'otro-camino', nombre: 'Movimiento Otro Camino', tipo: 'partido', paisIso: 'PA' },
+    { id: 'org-pruebas', slug: 'pruebas', nombre: 'CampaignSuite · Pruebas', tipo: 'agencia', paisIso: 'PA' },
   ],
   miembros: [
-    { organizacionId: 'org-moca', personaId: 'p-joaquin', rol: 'dueno' },
-    { organizacionId: 'org-moca', personaId: 'p-lucia', rol: 'miembro' },
-    { organizacionId: 'org-moca', personaId: 'p-andres', rol: 'miembro' },
-    { organizacionId: 'org-moca', personaId: 'p-equipo', rol: 'miembro' },
-    { organizacionId: 'org-moca', personaId: 'p-mariana', rol: 'miembro' },
+    { organizacionId: 'org-pruebas', personaId: 'p-joaquin', rol: 'dueno' },
+    { organizacionId: 'org-pruebas', personaId: 'p-lucia', rol: 'miembro' },
+    { organizacionId: 'org-pruebas', personaId: 'p-andres', rol: 'miembro' },
+    { organizacionId: 'org-pruebas', personaId: 'p-equipo', rol: 'miembro' },
+    { organizacionId: 'org-pruebas', personaId: 'p-mariana', rol: 'miembro' },
   ],
   contratados: [
-    { organizacionId: 'org-moca', productoId: 'botmaker', estado: 'activo' },
+    { organizacionId: 'org-pruebas', productoId: 'botmaker', estado: 'activo' },
   ],
   campanas: [
     {
-      id: 'c-pa-2029',
-      organizacionId: 'org-moca',
-      slug: 'pa-2029',
-      nombre: 'Generales 2029',
+      id: 'c-pa-pruebas',
+      organizacionId: 'org-pruebas',
+      slug: 'pa-pruebas',
+      nombre: 'Panamá · Pruebas',
       estado: 'activa',
       ubicacion: {
         paisIso: 'PA', pais: 'Panamá', ciudad: 'Ciudad de Panamá', region: 'Panamá', zonaHoraria: 'America/Panama',
@@ -49,14 +53,14 @@ export const NUCLEO_DEMO: DatosNucleo = {
     },
   ],
   integrantes: [
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', personaId: 'p-lucia', rol: 'integrante' },
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', personaId: 'p-andres', rol: 'integrante' },
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', personaId: 'p-equipo', rol: 'integrante' },
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', personaId: 'p-mariana', rol: 'integrante' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', personaId: 'p-lucia', rol: 'integrante' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', personaId: 'p-andres', rol: 'integrante' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', personaId: 'p-equipo', rol: 'integrante' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', personaId: 'p-mariana', rol: 'integrante' },
   ],
   accesos: [
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', productoId: 'botmaker', personaId: 'p-lucia', rol: 'editor' },
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', productoId: 'botmaker', personaId: 'p-andres', rol: 'agente' },
-    { organizacionId: 'org-moca', campanaId: 'c-pa-2029', productoId: 'botmaker', personaId: 'p-equipo', rol: 'lector' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', productoId: 'botmaker', personaId: 'p-lucia', rol: 'editor' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', productoId: 'botmaker', personaId: 'p-andres', rol: 'agente' },
+    { organizacionId: 'org-pruebas', campanaId: 'c-pa-pruebas', productoId: 'botmaker', personaId: 'p-equipo', rol: 'lector' },
   ],
 };

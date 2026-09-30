@@ -44,6 +44,9 @@ BotMaker se construye con la forma exacta de un producto de CampaignSuite (su `d
 14. **Efectos de React con llaves:** `useEffect(() => { … }, [...])`. Un efecto solo puede devolver una función de
     limpieza; con una flecha sin llaves devuelve lo que devuelva la llamada. En Chrome 153 `scrollIntoView` devuelve una
     promesa, React la llamaba como limpieza y el simulador se caía. Lo controla `ui/efectos.test.ts`.
+15. **Datos de prueba sin nombres de clientes:** la organización y la campaña de prueba son «CampaignSuite · Pruebas» y
+    «Panamá · Pruebas»; los candidatos y partidos de ejemplo son inventados (`CANDIDATA_DEMO`, `PARTIDO_DEMO`). La única
+    excepción decidida es el bot 2, el de prueba del creador, con Ricardo Lombana y su material (3.01).
 
 ## Cómo sumar…
 

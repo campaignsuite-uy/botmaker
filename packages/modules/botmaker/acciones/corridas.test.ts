@@ -17,9 +17,9 @@ import type { ContextoPantalla } from '../ui/contexto';
 import { vistaPublicacion } from '../vistas/publicacion';
 import { vistaSimulador } from '../vistas/simulador';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 let repo: RepositorioDemo;
-const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Generales 2029' } });
+const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Panamá · Pruebas' } });
 const fabrica = (motores?: MotorFuncion[]) => new CapaMotores({
   repo: motores ? { ...repo, fichas: () => repo.fichas(), topesBot: (id) => repo.topesBot(id), gastoBot: (a, b, c) => repo.gastoBot(a, b, c), registrarLlamada: (l) => repo.registrarLlamada(l), motoresDeBot: async () => motores } : repo,
   adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true,
@@ -160,9 +160,9 @@ describe('publicación', () => {
       const n = nucleoMemoria();
       const x = n.personas.find((y) => y.id === p)!;
       return {
-        persona: { id: x.id, nombre: x.nombre, iniciales: x.iniciales }, organizacion: { slug: 'otro-camino', nombre: 'Movimiento Otro Camino', demo: false },
-        campana: { id: CAMPANA, organizacionId: 'org-moca', slug: 'pa-2029', nombre: 'Generales 2029', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
-        rol: rolEfectivo(n, p, CAMPANA)!, base: '/otro-camino/pa-2029/bots', plataforma: { inicio: '/otro-camino/pa-2029', configuracion: null }, nucleo: n, parametros,
+        persona: { id: x.id, nombre: x.nombre, iniciales: x.iniciales }, organizacion: { slug: 'pruebas', nombre: 'CampaignSuite · Pruebas', demo: false },
+        campana: { id: CAMPANA, organizacionId: 'org-pruebas', slug: 'pa-pruebas', nombre: 'Panamá · Pruebas', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
+        rol: rolEfectivo(n, p, CAMPANA)!, base: '/pruebas/pa-pruebas/bots', plataforma: { inicio: '/pruebas/pa-pruebas', configuracion: null }, nucleo: n, parametros,
       };
     };
     let v = (await vistaPublicacion(repo, pantalla('p-lucia'), 'bot-demo-1'))!;

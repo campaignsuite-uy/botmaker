@@ -1,6 +1,6 @@
 /**
  * Punto único para obtener el repositorio. CAMPAIGNSUITE_DATOS (la misma variable que lee la plataforma) elige:
- *  - "demo" (por defecto): memoria, con dos bots de prueba en Generales 2029 (Panamá);
+ *  - "demo" (por defecto): memoria, con dos bots de prueba en Panamá · Pruebas (Panamá);
  *  - "supabase": el esquema `bots`, con la sesión de la persona (tokenSupabase de la plataforma).
  */
 import { tokenSupabase } from '@campaignsuite/platform/sesion';

@@ -1,6 +1,9 @@
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- semilla-desarrollo.sql — SOLO DESARROLLO. Una organización, una campaña con BotMaker habilitado y el equipo de
 -- prueba, sobre el proyecto de Supabase de desarrollo (después de 0000, 0001 y las migraciones bots_*).
+-- La organización es de pruebas de CampaignSuite («CampaignSuite · Pruebas») y la campaña, «Panamá · Pruebas»: nada
+-- se llama como un cliente. Hasta el 30/9/2026 se llamaban como el primer cliente; para renombrarlas en una base que ya
+-- las tiene, renombrar-organizacion-de-pruebas.sql.
 --
 -- Antes de correrla:
 --  1. Ingresá una vez a la app con Google con cada cuenta que vayas a usar (así Supabase crea su usuario y el
@@ -31,9 +34,9 @@ begin
   end if;
 
   -- La organización (el cliente) y su Dueño.
-  insert into core.organizations (slug, name, kind, country_iso) values ('otro-camino', 'Movimiento Otro Camino', 'partido', 'PA')
+  insert into core.organizations (slug, name, kind, country_iso) values ('pruebas', 'CampaignSuite · Pruebas', 'agencia', 'PA')
   on conflict (slug) do nothing;
-  select id into org from core.organizations where slug = 'otro-camino';
+  select id into org from core.organizations where slug = 'pruebas';
   insert into core.organization_members (organization_id, profile_id, role) values (org, dueno, 'dueno')
   on conflict (organization_id, profile_id) do nothing;
 
@@ -44,10 +47,10 @@ begin
   -- La campaña (el espacio de trabajo de BotMaker), con el producto habilitado y preparado.
   insert into core.campaigns (organization_id, slug, name, country_iso, country_name, city, region, timezone,
                               latitude, longitude, language, election_date, stage, created_by)
-  values (org, 'pa-2029', 'Generales 2029', 'PA', 'Panamá', 'Ciudad de Panamá', 'Panamá', 'America/Panama',
+  values (org, 'pa-pruebas', 'Panamá · Pruebas', 'PA', 'Panamá', 'Ciudad de Panamá', 'Panamá', 'America/Panama',
           8.9824, -79.5199, 'es', '2029-05-06', 'precampana', dueno)
   on conflict (organization_id, slug) do nothing;
-  select id into campana from core.campaigns where organization_id = org and slug = 'pa-2029';
+  select id into campana from core.campaigns where organization_id = org and slug = 'pa-pruebas';
   insert into core.campaign_products (organization_id, campaign_id, product_id, status, enabled_by)
   values (org, campana, 'botmaker', 'activo', dueno)
   on conflict (campaign_id, product_id) do update set status = 'activo';
@@ -73,7 +76,7 @@ begin
     on conflict (campaign_id, product_id, profile_id) do update set role = excluded.role;
   end loop;
 
-  raise notice 'Listo: organización otro-camino, campaña pa-2029 con BotMaker.';
+  raise notice 'Listo: organización pruebas (CampaignSuite · Pruebas), campaña pa-pruebas con BotMaker.';
 end $$;
 
 -- Comprobación: el rol de cada persona en BotMaker (el Dueño tiene que dar administrador).
@@ -81,7 +84,7 @@ select p.email, core.rol_en_campana(c.id, 'botmaker', p.id) as rol_en_botmaker
 from core.campaigns c
 join core.organization_members m on m.organization_id = c.organization_id
 join core.profiles p on p.id = m.profile_id
-where c.slug = 'pa-2029'
+where c.slug = 'pa-pruebas'
 order by p.email;
 
 commit;

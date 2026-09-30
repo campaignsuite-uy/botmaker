@@ -8,7 +8,7 @@ import { rolEfectivo } from './comun';
 import { ejecutarCrearBot, type ContextoNucleo } from './ejecutar-bots';
 import { ejecutarCambio, ejecutarCrearBorrador, ejecutarDeshacer, ejecutarDeshacerFormulario, ejecutarFormulario, ejecutarImportarYaml, leerBorrador, yamlDelBorrador, type ResultadoBorrador } from './ejecutar-borrador';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 const BOT = 'bot-demo-1';
 let repo: RepositorioDemo;
 const como = (personaId: string): ContextoNucleo => ({ repo, rol: rolEfectivo(nucleoMemoria(), personaId, CAMPANA), personaId, campanaId: CAMPANA });

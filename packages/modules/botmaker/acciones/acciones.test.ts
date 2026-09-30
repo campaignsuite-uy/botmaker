@@ -10,7 +10,7 @@ import {
 } from './ejecutar-bots';
 import { ejecutarRolEquipo } from './ejecutar-equipo';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 const fd = (x: Record<string, string>) => {
   const f = new FormData();
   for (const [k, v] of Object.entries(x)) f.set(k, v);
@@ -18,7 +18,7 @@ const fd = (x: Record<string, string>) => {
 };
 
 let repo: RepositorioDemo;
-const como = (personaId: string): ContextoNucleo => ({ repo, rol: rolEfectivo(nucleoMemoria(), personaId, CAMPANA), personaId, campanaId: CAMPANA, campana: { nombre: 'Generales 2029' } });
+const como = (personaId: string): ContextoNucleo => ({ repo, rol: rolEfectivo(nucleoMemoria(), personaId, CAMPANA), personaId, campanaId: CAMPANA, campana: { nombre: 'Panamá · Pruebas' } });
 const nuevo = (extra: Record<string, string> = {}) => fd({ nombre: 'Bot nuevo', caso: 'electoral', mercado: 'PA', trato: 'usted', candidato: 'Candidata', partido: '', clave: randomUUID(), ...extra });
 
 beforeEach(() => {
@@ -136,7 +136,7 @@ describe('equipo y roles', () => {
 describe('ruta de vuelta', () => {
   it('solo rutas internas', () => {
     const v = (x: string) => rutaVolver(fd({ volver: x }));
-    expect(v('/otro-camino/pa-2029/bots?ok=1#datos')).toBe('/otro-camino/pa-2029/bots?ok=1#datos');
+    expect(v('/pruebas/pa-pruebas/bots?ok=1#datos')).toBe('/pruebas/pa-pruebas/bots?ok=1#datos');
     for (const mala of ['//evil.com', '/\\evil.com', '/\tevil.com', 'https://evil.com', 'evil', '/a\u0000b']) expect(v(mala)).toBe('/');
   });
 });
