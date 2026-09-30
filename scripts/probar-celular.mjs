@@ -15,7 +15,8 @@
  *
  * Uso: pnpm probar:celular
  *   CHROMIUM=/ruta/al/chrome  si el navegador de Playwright no está instalado (se instala con
- *                             `pnpm exec playwright install chromium`).
+ *                             `pnpm exec playwright install chromium`). En GitHub corre con el de Playwright, que es
+ *                             más nuevo: conviene probar también con ese (ver docs/guia-desarrollo.md, Pruebas).
  *   URL=http://localhost:3000 para probar contra una app que ya está andando (no levanta ninguna).
  */
 import { spawn } from 'node:child_process';
@@ -90,7 +91,7 @@ function medir() {
 }
 
 async function probarMenu(pagina, ancho, persona, url) {
-  await pagina.click('.menu-movil__boton');
+  await pagina.click('.menu-movil__boton', { timeout: 5000 });
   const panel = await pagina.evaluate(() => {
     const p = document.querySelector('.menu-movil__panel');
     if (!p) return null;
@@ -105,7 +106,7 @@ async function probarMenu(pagina, ancho, persona, url) {
   if (!panel) return falla(ancho, persona, url, 'el botón "Menú" no abre ningún panel');
   if (!panel.dentro) falla(ancho, persona, url, `el panel del menú no queda dentro de la pantalla (alto ${panel.alto})`);
   if (panel.items === 0 || panel.items !== panel.lateral) falla(ancho, persona, url, `el menú del celular tiene ${panel.items} secciones y el lateral ${panel.lateral}`);
-  await pagina.click('.menu-movil__boton');
+  await pagina.click('.menu-movil__boton', { timeout: 5000 });
   const cerrado = await pagina.evaluate(() => !document.querySelector('.menu-movil')?.hasAttribute('open'));
   if (!cerrado) falla(ancho, persona, url, 'el menú no se cierra con el mismo botón');
 }
@@ -146,7 +147,14 @@ try {
         if (m.marco) {
           if (m.menuLateral) falla(ancho, persona, url, 'el menú lateral se ve en el celular');
           if (!m.boton) falla(ancho, persona, url, 'no está el botón "Menú" (o queda fuera de la pantalla)');
-          else await probarMenu(pagina, ancho, persona, url);
+          else {
+            // Si el menú no responde (la página se cayó en el navegador, por ejemplo), se anota con lo que mostró y los
+            // errores de la página, y se sigue con la próxima: una falla no corta el recorrido con un tiempo agotado.
+            await probarMenu(pagina, ancho, persona, url).catch(async (e) => {
+              const vio = await pagina.evaluate(() => document.querySelector('h1')?.textContent?.trim() ?? '').catch(() => '');
+              falla(ancho, persona, url, `el menú no responde (${String(e.message).split('\n')[0].slice(0, 80)}); la página muestra «${vio.slice(0, 60)}»${errores.length ? `; errores: ${errores.join(' · ')}` : ''}`);
+            });
+          }
         }
         // La hidratación termina poco después de "load": se le da un momento antes de mirar los errores.
         await pagina.waitForTimeout(80);

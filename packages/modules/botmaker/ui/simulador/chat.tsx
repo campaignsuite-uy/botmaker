@@ -83,7 +83,11 @@ export function ChatSimulador({ s }: { s: EstadoSimulador }) {
     arranco.current = true;
     reiniciar();
   });
-  useEffect(() => fin.current?.scrollIntoView({ block: 'nearest' }), [turnos.length]);
+  // Con llaves: un efecto solo puede devolver una función de limpieza. En Chrome 153 scrollIntoView devuelve una
+  // promesa, y React la llamaba como limpieza al volver a correr el efecto («i is not a function»: la página se caía).
+  useEffect(() => {
+    fin.current?.scrollIntoView({ block: 'nearest' });
+  }, [turnos.length]);
 
   const ultimoBot = [...turnos].reverse().find((t) => t.quien === 'bot');
   const derivada = (sesion as { estado?: string } | null)?.estado === 'derivada';

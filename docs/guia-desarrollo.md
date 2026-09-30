@@ -41,6 +41,9 @@ BotMaker se construye con la forma exacta de un producto de CampaignSuite (su `d
 12. **Estilos:** los de `@campaignsuite/ui`; lo propio va en `ui/estilos.css` con prefijo `bots-`. Solo modo oscuro.
 13. **Las copias de la plataforma** (`packages/platform`, `packages/ui`) no se tocan salvo las dos diferencias
     documentadas: la entrada `botmaker` del catálogo y la demo con BotMaker (`demo.ts`).
+14. **Efectos de React con llaves:** `useEffect(() => { … }, [...])`. Un efecto solo puede devolver una función de
+    limpieza; con una flecha sin llaves devuelve lo que devuelva la llamada. En Chrome 153 `scrollIntoView` devuelve una
+    promesa, React la llamaba como limpieza y el simulador se caía. Lo controla `ui/efectos.test.ts`.
 
 ## Cómo sumar…
 
@@ -66,6 +69,11 @@ pnpm build
 pnpm probar:celular # todas las pantallas a 360 y 390 px (necesita el build)
 pnpm probar:recorrido # lo que se prueba a mano en la aceptación, en el navegador contra la demo (necesita el build)
 ```
+
+Las pruebas en el navegador usan Chromium: en GitHub, el de Playwright (el más nuevo, Chrome 153 con Playwright 1.63);
+en otra máquina, el que diga `CHROMIUM`. Si es más viejo, una falla que solo aparece en Chrome nuevo pasa en la
+computadora y se ve recién en GitHub (así pasó con el simulador). `probar:celular` anota cada pantalla cuyo menú no
+responde con lo que mostró y los errores de la página, en lugar de cortar con un tiempo agotado.
 
 ## Copiloto, pruebas y publicación (etapa 4)
 
