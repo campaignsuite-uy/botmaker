@@ -9,7 +9,8 @@
  *     integrante sin acceso, alguien de otra organización y el observador de una demo), con dos organizaciones.
  *  5. El repositorio de Supabase (datos/supabase/repositorio-supabase.ts) contra esta base, con el cliente simulado:
  *     lo que lee y cambia cada persona pasa por las mismas reglas.
- *  6. La semilla de desarrollo (core-dev/semilla-desarrollo.sql) se aplica dos veces sin duplicar.
+ *  6. La semilla de desarrollo (core-dev/semilla-desarrollo.sql) se aplica dos veces sin duplicar, y el renombre de la
+ *     organización de pruebas (core-dev/renombrar-organizacion-de-pruebas.sql) no pierde ni duplica nada.
  *
  * Imprime ✓/✗ por prueba y sale con código 1 si alguna falla. Uso: pnpm db:probar (desde la raíz).
  */
@@ -1303,21 +1304,21 @@ async function main() {
     const sql = sqlSemillaDemo({ ahora, relativo: false });
     await db4.exec(sql);
     await db4.exec(sql);
-    const camp = (await uno<{ id: string }>(db4, `select id from core.campaigns where slug = 'pa-2029'`))!.id;
+    const camp = (await uno<{ id: string }>(db4, `select id from core.campaigns where slug = 'pa-pruebas'`))!.id;
     const supa = new RepositorioSupabase({ servicio: clienteSimulado(db4, { servicio: true }) as never, persona: async () => clienteSimulado(db4, { persona: U(401) }) as never });
     const demo = new RepositorioDemo({ ahora });
     const botsS = (await supa.bots(camp, { archivados: true })).map((b) => `${b.nombre}:${b.estado}:${b.idPublico}`).sort();
-    const botsD = (await demo.bots('c-pa-2029', { archivados: true })).map((b) => `${b.nombre}:${b.estado}:${b.idPublico}`).sort();
+    const botsD = (await demo.bots('c-pa-pruebas', { archivados: true })).map((b) => `${b.nombre}:${b.estado}:${b.idPublico}`).sort();
     afirmar(JSON.stringify(botsS) === JSON.stringify(botsD), `bots: ${JSON.stringify(botsS)} · demo ${JSON.stringify(botsD)}`);
     const conv = (fs: Awaited<ReturnType<typeof supa.conversaciones>>) => fs.map((f) => `${f.conversacion.estado}:${f.contacto.nombre ?? f.contacto.nombrePerfil ?? '-'}:${f.mensajes}`).sort();
     const convS = conv(await supa.conversaciones(camp));
-    afirmar(JSON.stringify(convS) === JSON.stringify(conv(await demo.conversaciones('c-pa-2029'))), `bandeja: ${JSON.stringify(convS)}`);
+    afirmar(JSON.stringify(convS) === JSON.stringify(conv(await demo.conversaciones('c-pa-pruebas'))), `bandeja: ${JSON.stringify(convS)}`);
     const base = (p: Awaited<ReturnType<typeof supa.baseContactos>>) => p.filas.map((f) => `${f.contacto.nombre ?? f.contacto.nombrePerfil ?? '-'}:${f.conversaciones}:${f.consultas.map((k) => `${k.tipo}.${k.clave}.${k.veces}`).join('|')}`).sort();
     const baseS = base(await supa.baseContactos(camp, {}, U(401)));
-    afirmar(baseS.length === 5 && JSON.stringify(baseS) === JSON.stringify(base(await demo.baseContactos('c-pa-2029', {}, 'p-joaquin'))), `base: ${JSON.stringify(baseS)}`);
+    afirmar(baseS.length === 5 && JSON.stringify(baseS) === JSON.stringify(base(await demo.baseContactos('c-pa-pruebas', {}, 'p-joaquin'))), `base: ${JSON.stringify(baseS)}`);
     const filtro = { desde: new Date(ahora.getTime() - 40 * 864e5).toISOString(), hasta: new Date(ahora.getTime() + 864e5).toISOString() };
     const aS = await supa.analitica(camp, filtro, U(401));
-    const aD = await demo.analitica('c-pa-2029', filtro, 'p-joaquin');
+    const aD = await demo.analitica('c-pa-pruebas', filtro, 'p-joaquin');
     const distintas = aS.metricas.filter((x, i) => canonico(x) !== canonico(aD.metricas[i])).map((x) => `${canonico(x)} vs ${canonico(aD.metricas.find((y) => y.metrica === x.metrica && y.caja === x.caja && y.clave === x.clave))}`);
     afirmar(aS.metricas.length > 20 && canonico(aS.metricas) === canonico(aD.metricas), `métricas: ${aS.metricas.length} y ${aD.metricas.length}; ${distintas.slice(0, 5).join(' · ')}`);
     afirmar(canonico(aS.porDia) === canonico(aD.porDia), `por día: ${canonico(aS.porDia)} · demo ${canonico(aD.porDia)}`);
@@ -1326,6 +1327,35 @@ async function main() {
     const publicada = await supa.version((await supa.bots(camp)).find((b) => b.estado === 'publicado')!.versionPublicadaId!);
     afirmar(publicada?.estado === 'publicada' && (publicada.definicion as { material: unknown[] }).material.length === 4, 'La versión publicada no tiene su material');
     afirmar(await cuenta(db4, `select count(*) as n from bots.spend_daily`) > 0, 'No sumó el gasto por día');
+  });
+
+  await prueba('renombre de la organización de pruebas (30/9): sin perder nada ni duplicar los bots de ejemplo', async () => {
+    // El estado de antes: la semilla y los bots de ejemplo con los nombres viejos (otro-camino / pa-2029).
+    const viejo = (t: string) => t
+      .replaceAll("('pruebas', 'CampaignSuite · Pruebas', 'agencia'", "('otro-camino', 'Movimiento Otro Camino', 'partido'")
+      .replaceAll("slug = 'pruebas'", "slug = 'otro-camino'")
+      .replaceAll("'pa-pruebas', 'Panamá · Pruebas'", "'pa-2029', 'Generales 2029'")
+      .replaceAll("'pa-pruebas'", "'pa-2029'");
+    const db5 = await baseConMigraciones();
+    await db5.exec(`insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values ('${U(401)}', 'duena@prueba.test', now(), '{"full_name": "Dueña"}');`);
+    const semilla = readFileSync(`${DIR_CORE_DEV}semilla-desarrollo.sql`, 'utf8').replace('{{DUENO}}', 'duena@prueba.test');
+    await db5.exec(viejo(semilla));
+    const demoSql = sqlSemillaDemo({ ahora: new Date(), relativo: false });
+    await db5.exec(viejo(demoSql));
+    const antes = await uno<{ org: string; camp: string; bots: number }>(db5, `select o.id as org, c.id as camp, (select count(*) from bots.bots) as bots from core.organizations o join core.campaigns c on c.organization_id = o.id where o.slug = 'otro-camino' and c.slug = 'pa-2029'`);
+    afirmar(antes && Number(antes.bots) === 3, `El estado de antes no quedó armado: ${JSON.stringify(antes)}`);
+    // El renombre, dos veces (la segunda no hace nada), y después la semilla y los bots de ejemplo nuevos.
+    const renombre = readFileSync(`${DIR_CORE_DEV}renombrar-organizacion-de-pruebas.sql`, 'utf8');
+    await db5.exec(renombre);
+    await db5.exec(renombre);
+    await db5.exec(semilla);
+    await db5.exec(demoSql);
+    const despues = await filas<{ org: string; camp: string; nombre: string; kind: string; campana: string }>(db5, `select o.id as org, c.id as camp, o.name as nombre, o.kind, c.name as campana from core.organizations o join core.campaigns c on c.organization_id = o.id`);
+    afirmar(despues.length === 1 && despues[0]!.org === antes.org && despues[0]!.camp === antes.camp, `Cambió o se duplicó la organización o la campaña: ${JSON.stringify(despues)}`);
+    afirmar(despues[0]!.nombre === 'CampaignSuite · Pruebas' && despues[0]!.kind === 'agencia' && despues[0]!.campana === 'Panamá · Pruebas', JSON.stringify(despues[0]));
+    afirmar(await cuenta(db5, `select count(*) as n from bots.bots`) === 3, 'Quedaron bots de ejemplo repetidos');
+    const partidos = await filas<{ p: string }>(db5, `select distinct v.definition->'identidad'->'partido'->>'nombre' as p from bots.versions v order by 1`);
+    afirmar(JSON.stringify(partidos.map((x) => x.p)) === JSON.stringify(['Movimiento Otro Camino', 'Partido Ejemplo']), `Partidos de los bots: ${JSON.stringify(partidos)}`);
   });
 
   console.log(`\n${total - fallas} de ${total} pruebas bien.${fallas ? ` ${fallas} fallaron.` : ''}\n`);

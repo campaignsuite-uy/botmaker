@@ -69,11 +69,11 @@ function ctx(personaId: string, demo = false): ContextoPantalla {
   const p = n.personas.find((x) => x.id === personaId)!;
   return {
     persona: { id: p.id, nombre: p.nombre, iniciales: p.iniciales },
-    organizacion: { slug: 'otro-camino', nombre: 'Movimiento Otro Camino', demo },
-    campana: { id: 'c-pa-2029', organizacionId: 'org-moca', slug: 'pa-2029', nombre: 'Generales 2029', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
-    rol: demo ? 'observador' : rolEfectivo(n, personaId, 'c-pa-2029')!,
-    base: '/otro-camino/pa-2029/bots',
-    plataforma: { inicio: '/otro-camino/pa-2029', configuracion: null },
+    organizacion: { slug: 'pruebas', nombre: 'CampaignSuite · Pruebas', demo },
+    campana: { id: 'c-pa-pruebas', organizacionId: 'org-pruebas', slug: 'pa-pruebas', nombre: 'Panamá · Pruebas', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
+    rol: demo ? 'observador' : rolEfectivo(n, personaId, 'c-pa-pruebas')!,
+    base: '/pruebas/pa-pruebas/bots',
+    plataforma: { inicio: '/pruebas/pa-pruebas', configuracion: null },
     nucleo: n,
     parametros: {},
   };
@@ -148,7 +148,7 @@ async function main() {
       prueba(`simulador: ${e.datos ? 'el chat' : 'no lo usa (tiene costo)'}`, tiene(simulador, 'sim-controles') === e.datos && tiene(simulador, 'lo usan el editor y el administrador') === !e.datos);
 
       // Etapa 4: una corrida terminada (la corre la editora, así hay qué ver con cualquier persona), comparar y publicar.
-      const lucia = { repo, rol: rolEfectivo(nucleoMemoria(), 'p-lucia', 'c-pa-2029'), personaId: 'p-lucia', campanaId: 'c-pa-2029', campana: { nombre: 'Generales 2029' } };
+      const lucia = { repo, rol: rolEfectivo(nucleoMemoria(), 'p-lucia', 'c-pa-pruebas'), personaId: 'p-lucia', campanaId: 'c-pa-pruebas', campana: { nombre: 'Panamá · Pruebas' } };
       const capa = () => new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true });
       const i = await ejecutarIniciarCorrida(lucia, { botId: 'bot-demo-1' });
       for (let k = 0; k < 50 && i.corridaId; k++) if ((await ejecutarAvanzarCorrida(lucia, capa, { corridaId: i.corridaId })).terminada) break;

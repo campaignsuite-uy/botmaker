@@ -15,13 +15,13 @@ import type { Version } from '../../dominio/versiones';
 import { leerPlantilla, ventanaHasta, type Plantilla } from '../../dominio/whatsapp';
 import { CLAVE_DEMO, NUMERO_DEMO, PLANTILLAS_DEMO, SECRETO_DEMO } from '../../canal-whatsapp/demo';
 import { sha256 } from '../../canal-whatsapp/webhook';
-import { CAMPANA_DEMO, CANDIDATA_DEMO, ORGANIZACION_DEMO } from './semilla';
+import { ALIAS_PARTIDO_DEMO, CAMPANA_DEMO, CANDIDATA_DEMO, ORGANIZACION_DEMO, PARTIDO_DEMO } from './semilla';
 
 export const BOT_PUBLICADO = 'bot-demo-3';
 export const ID_PUBLICO_DEMO = 'p5v9c3h7pa';
 
 const MATERIAL = `## Quién es Ana Lucía Ríos
-Ana Lucía Ríos es ingeniera civil y fue concejal de San Miguelito entre 2019 y 2024. Es candidata a presidenta por el Movimiento Otro Camino. Este material es inventado para la demo.
+Ana Lucía Ríos es ingeniera civil y fue concejal de San Miguelito entre 2019 y 2024. Es candidata a presidenta por el Partido Ejemplo. Este material es inventado para la demo.
 Fuentes: material de prueba de la demo
 
 ## Transporte
@@ -73,7 +73,7 @@ export function semillaCanal(ahora: Date): SemillaCanal {
     diasGuardado: 90, topeDiarioUsd: 5, topeMensualUsd: 100, creadoPor: 'p-lucia', creadoEn: hace(20 * 1440), actualizadoEn: hace(10 * 1440), archivadoEn: null,
   };
   const definicion = aplicarOperacion(plantillaPolitica({
-    candidato: CANDIDATA_DEMO, partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'], trato: 'usted', mercado: 'PA',
+    candidato: CANDIDATA_DEMO, partido: PARTIDO_DEMO, aliasPartido: ALIAS_PARTIDO_DEMO, trato: 'usted', mercado: 'PA',
     consultas: { canal: 'correo', valor: 'consultas@ejemplo.org' }, aportes: { canal: 'web', valor: 'ejemplo.org/aportes' },
   }), { tipo: 'cargar_material', texto: MATERIAL, reemplazar: true }).definicion;
   const version = {

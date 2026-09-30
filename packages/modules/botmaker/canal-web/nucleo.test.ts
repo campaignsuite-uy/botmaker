@@ -21,7 +21,7 @@ const ok = (r: RespuestaWeb): Ok => {
   if (!r.ok) throw new Error(`${r.codigo} (${r.status})`);
   return r;
 };
-const llamadasEnVivo = async () => (await repo.llamadas('c-pa-2029', { limite: 10000 })).filter((l) => l.uso === 'en_vivo').length;
+const llamadasEnVivo = async () => (await repo.llamadas('c-pa-pruebas', { limite: 10000 })).filter((l) => l.uso === 'en_vivo').length;
 
 beforeEach(() => {
   reiniciarNucleoMemoria();
@@ -44,7 +44,7 @@ describe('canal web: una conversación', () => {
     expect(r.mensajes[2]).toMatchObject({ opcionesDe: 'n_menu', modo: 'lista' });
     const t = ok(await pedir({ entrada: { tipo: 'texto', texto: 'Quiero ser voluntario, ¿cómo me sumo?' } }));
     expect(t.mensajes.map((m) => m.texto).join(' ')).toMatch(/¿Cómo se llama\?/);
-    const lista = await repo.conversaciones('c-pa-2029', { botId: BOT_PUBLICADO });
+    const lista = await repo.conversaciones('c-pa-pruebas', { botId: BOT_PUBLICADO });
     const c = (await repo.conversacion(lista[0]!.conversacion.id))!;
     expect(c.mensajes.map((m) => m.autor)).toEqual(['sistema', 'bot', 'bot', 'contacto', 'bot']);
     expect(c.mensajes[4]!.decision).toMatchObject({ intencion: 'voluntariado' });
@@ -63,7 +63,7 @@ describe('canal web: una conversación', () => {
     const a = ok(await pedir({ id, entrada: { tipo: 'texto', texto: 'Rosa' } }));
     const b = ok(await pedir({ id, entrada: { tipo: 'texto', texto: 'Rosa' } }));
     expect(b.mensajes).toEqual(a.mensajes);
-    const c = (await repo.conversaciones('c-pa-2029', { botId: BOT_PUBLICADO }))[0]!;
+    const c = (await repo.conversaciones('c-pa-pruebas', { botId: BOT_PUBLICADO }))[0]!;
     expect(c.contacto.nombre).toBe('Rosa');
     expect((await repo.conversacion(c.conversacion.id))!.mensajes.filter((m) => m.texto === 'Rosa')).toHaveLength(1);
     const otra = ok(await pedir({ entrada: { tipo: 'inicio' } }));
@@ -77,7 +77,7 @@ describe('canal web: una conversación', () => {
     expect(d.estado).toBe('derivada');
     const s = ok(await pedir({ entrada: { tipo: 'texto', texto: '¿Hay alguien?' } }));
     expect(s.mensajes).toEqual([]);
-    const conv = (await repo.conversaciones('c-pa-2029', { estado: 'derivada', botId: BOT_PUBLICADO }))[0]!;
+    const conv = (await repo.conversaciones('c-pa-pruebas', { estado: 'derivada', botId: BOT_PUBLICADO }))[0]!;
     expect(conv.conversacion.motivoDerivacion).toBe('Pidió hablar con el equipo');
     await repo.responderConversacion(conv.conversacion.id, 'Hola, soy Andrés del equipo.', 'p-andres');
     const nuevos = ok(await consultarMensajes(repo, entorno, { bot: ID_PUBLICO_DEMO, contacto: 'contacto-de-prueba-0001', desde: s.ultimo }));
@@ -88,7 +88,7 @@ describe('canal web: una conversación', () => {
   it('al publicar otra versión, la conversación en curso sigue donde estaba y contesta la versión nueva', async () => {
     await pedir({ entrada: { tipo: 'inicio' }, verificacion: 'token' });
     await pedir({ entrada: { tipo: 'texto', texto: 'Quiero ser voluntario, ¿cómo me sumo?' } });
-    const antes = (await repo.conversaciones('c-pa-2029', { botId: BOT_PUBLICADO }))[0]!.conversacion;
+    const antes = (await repo.conversaciones('c-pa-pruebas', { botId: BOT_PUBLICADO }))[0]!.conversacion;
     expect(antes.versionId).toBe('ver-demo-3');
     // Versión 2: mismo bot, otro texto para pedir la zona.
     const v2 = await repo.crearBorrador(BOT_PUBLICADO, null, 'p-lucia');
@@ -158,7 +158,7 @@ describe('canal web: disponibilidad, pausa y condiciones', () => {
     expect(i.mensajes[0]!.texto).toMatch(/en pausa/);
     const r = ok(await pedir({ entrada: { tipo: 'texto', texto: 'Hola' } }));
     expect(r.estado).toBe('derivada');
-    const c = (await repo.conversaciones('c-pa-2029', { estado: 'derivada', botId: BOT_PUBLICADO }))[0]!;
+    const c = (await repo.conversaciones('c-pa-pruebas', { estado: 'derivada', botId: BOT_PUBLICADO }))[0]!;
     expect(c.conversacion.motivoDerivacion).toBe('Bot en pausa');
     await expect(repo.pausarBot(BOT_PUBLICADO, false, 'p-lucia')).rejects.toThrow(/no permite/);
   });
@@ -171,7 +171,7 @@ describe('canal web: disponibilidad, pausa y condiciones', () => {
     const a = ok(await pedir({ entrada: { tipo: 'aceptar', numero: 1 } }));
     expect(a.pedirCondiciones).toBeNull();
     expect(a.mensajes.some((m) => m.opcionesDe === 'n_menu')).toBe(true);
-    const c = (await repo.conversaciones('c-pa-2029', { botId: BOT_PUBLICADO }))[0]!;
+    const c = (await repo.conversaciones('c-pa-pruebas', { botId: BOT_PUBLICADO }))[0]!;
     expect((await repo.conversacion(c.conversacion.id))!.contacto.condicionesVersion).toBe(1);
     // Condiciones nuevas: hay que aceptarlas otra vez.
     await repo.publicarCondiciones(BOT_PUBLICADO, 'Condiciones nuevas.', 'p-joaquin');

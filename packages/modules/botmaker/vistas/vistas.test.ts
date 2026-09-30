@@ -26,11 +26,11 @@ function ctx(personaId: string, parametros: Record<string, string> = {}, demo = 
   const p = n.personas.find((x) => x.id === personaId)!;
   return {
     persona: { id: p.id, nombre: p.nombre, iniciales: p.iniciales },
-    organizacion: { slug: 'otro-camino', nombre: 'Movimiento Otro Camino', demo },
-    campana: { id: 'c-pa-2029', organizacionId: 'org-moca', slug: 'pa-2029', nombre: 'Generales 2029', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
-    rol: demo ? 'observador' : rolEfectivo(n, personaId, 'c-pa-2029')!,
-    base: '/otro-camino/pa-2029/bots',
-    plataforma: { inicio: '/otro-camino/pa-2029', configuracion: null },
+    organizacion: { slug: 'pruebas', nombre: 'CampaignSuite · Pruebas', demo },
+    campana: { id: 'c-pa-pruebas', organizacionId: 'org-pruebas', slug: 'pa-pruebas', nombre: 'Panamá · Pruebas', paisIso: 'PA', pais: 'Panamá', zonaHoraria: 'America/Panama', fechaEleccion: '2029-05-06' },
+    rol: demo ? 'observador' : rolEfectivo(n, personaId, 'c-pa-pruebas')!,
+    base: '/pruebas/pa-pruebas/bots',
+    plataforma: { inicio: '/pruebas/pa-pruebas', configuracion: null },
     nucleo: n,
     parametros,
   };
@@ -102,7 +102,7 @@ describe('motores, costos y equipo', () => {
   it('costos: 30 días, totales que cuadran', async () => {
     const v = await vistaCostos(repo, ctx('p-joaquin'));
     expect(v.porDia.length).toBe(30);
-    const suma = (await repo.llamadas('c-pa-2029', { limite: 9999 })).reduce((a, l) => a + l.costoUsd, 0);
+    const suma = (await repo.llamadas('c-pa-pruebas', { limite: 9999 })).reduce((a, l) => a + l.costoUsd, 0);
     expect(v.total).toBe(new Intl.NumberFormat('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: suma < 1 ? 4 : 2 }).format(suma).replace(/^/, 'USD '));
     expect(v.ultimas.length).toBeLessThanOrEqual(25);
   });
@@ -129,7 +129,7 @@ describe('base de contactos', () => {
     expect(v.filas.map((f) => f.nombre)).toEqual(['Contacto EMO2', 'Rosa', 'Marta G.', 'Contacto EMO1', 'Marcos']);
     const marcos = v.filas.find((f) => f.nombre === 'Marcos')!;
     expect(marcos.consultas.map((c) => c.texto)).toEqual(['Propuesta', 'Agua']);
-    expect(marcos.consultas[1]!.href).toBe('/otro-camino/pa-2029/bots/contactos?consulta=tema%3Aagua');
+    expect(marcos.consultas[1]!.href).toBe('/pruebas/pa-pruebas/bots/contactos?consulta=tema%3Aagua');
     expect(marcos.datos).toBe('zona: Arraiján');
     expect(v.filas[2]).toMatchObject({ numero: '+50761234567', canal: 'WhatsApp' });
     expect(v.descarga).toBeNull();
@@ -147,7 +147,7 @@ describe('base de contactos', () => {
   it('la ficha: lo que consultó con enlace al filtro y sus conversaciones con enlace a la bandeja', async () => {
     const f = (await vistaFichaContacto(repo, ctx('p-joaquin'), 'ct-demo-4'))!;
     expect(f.consultas.map((g) => [g.tipo, g.items.map((i) => i.texto)])).toEqual([['Consultas', ['Propuesta']], ['Temas', ['Agua']]]);
-    expect(f.conversaciones[0]).toMatchObject({ href: '/otro-camino/pa-2029/bots/bandeja/conv-demo-4', estado: 'cerrada' });
+    expect(f.conversaciones[0]).toMatchObject({ href: '/pruebas/pa-pruebas/bots/bandeja/conv-demo-4', estado: 'cerrada' });
     expect(f.pedidos).toMatchObject({ puedeBorrar: true });
     expect(await vistaFichaContacto(repo, ctx('p-equipo'), 'ct-demo-4')).toBeNull();
   });
@@ -156,13 +156,13 @@ describe('base de contactos', () => {
     await expect(descargaContactos(repo, ctx('p-andres'))).rejects.toMatchObject({ codigo: 'sin_permiso' });
     const d = await descargaContactos(repo, ctx('p-joaquin', { canal: 'whatsapp' }));
     expect(d.cantidad).toBe(1);
-    expect(d.archivo).toMatch(/^contactos-generales-2029-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(d.archivo).toMatch(/^contactos-panama-pruebas-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(d.csv.startsWith('\uFEFFBot,Canal,Nombre')).toBe(true);
     expect(d.csv).toContain('Asistente publicado,WhatsApp,,Marta G.,+50761234567,');
     expect(d.csv).toContain(',Agenda,');
     const v = await vistaContactos(repo, ctx('p-joaquin'));
     expect(v.descarga?.registro).toEqual([expect.objectContaining({ bot: 'Todos', filtro: 'WhatsApp', cantidad: '1' })]);
-    expect(v.descarga?.href).toBe('/otro-camino/pa-2029/bots/contactos/descargar');
+    expect(v.descarga?.href).toBe('/pruebas/pa-pruebas/bots/contactos/descargar');
   });
 });
 

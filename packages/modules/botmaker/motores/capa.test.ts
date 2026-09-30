@@ -6,8 +6,8 @@ import { ENTRADA_PRUEBA } from './prueba';
 import { AdaptadorSimulado } from './simulado';
 import type { Adaptador, LlamadaCruda, PedidoAdaptador } from './tipos';
 
-const CTX = { nombreBot: 'Asistente', campana: 'Generales 2029', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const };
-const BOT = { id: 'bot-demo-1', campanaId: 'c-pa-2029' };
+const CTX = { nombreBot: 'Asistente', campana: 'Panamá · Pruebas', mercado: 'PA', caso: 'electoral' as const, trato: 'usted' as const };
+const BOT = { id: 'bot-demo-1', campanaId: 'c-pa-pruebas' };
 
 /** Adaptador que responde lo que le digan por motor y guarda lo que recibió. */
 class AdaptadorFalso implements Adaptador {
@@ -40,7 +40,7 @@ describe('capa de motores: interpretar en doble lectura (así nacen los bots)', 
 
   it('los dos leen el mismo mensaje a la vez; si coinciden, sigue con la del principal', async () => {
     const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': lee('tramite_electoral', { demoraMs: 300 }) });
-    const antes = (await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 })).length;
+    const antes = (await repo.llamadas('c-pa-pruebas', { botId: 'bot-demo-1', limite: 9999 })).length;
     const r = await capaCon(falso).llamar(pedido());
     expect(falso.recibidos.map((x) => x.ficha.id).sort()).toEqual(['gemini-3.1-flash-lite', 'gpt-oss-120b']);
     expect(r.lectura).toEqual({ principal: 'tramite_electoral', respaldo: 'tramite_electoral', resultado: 'coinciden' });
@@ -49,7 +49,7 @@ describe('capa de motores: interpretar en doble lectura (así nacen los bots)', 
     // La persona espera al más lento, no la suma; se pagan las dos.
     expect(r.demoraMs).toBe(300);
     expect(r.costoUsd).toBeCloseTo(0.002);
-    const despues = await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 9999 });
+    const despues = await repo.llamadas('c-pa-pruebas', { botId: 'bot-demo-1', limite: 9999 });
     expect(despues.length).toBe(antes + 2);
   });
 
@@ -124,7 +124,7 @@ describe('capa de motores: en serie (responder, copiloto y probar un motor)', ()
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
     const r = await capa.llamar(pedidoResponder());
     expect([r.motorId, r.respaldo, r.lectura]).toEqual(['gemini-3.1-flash-lite', false, null]);
-    expect((await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 1 }))[0]).toMatchObject({ uso: 'en_vivo', funcion: 'responder', motorId: 'gemini-3.1-flash-lite', ok: true, costoUsd: 0.001 });
+    expect((await repo.llamadas('c-pa-pruebas', { botId: 'bot-demo-1', limite: 1 }))[0]).toMatchObject({ uso: 'en_vivo', funcion: 'responder', motorId: 'gemini-3.1-flash-lite', ok: true, costoUsd: 0.001 });
   });
 
   it('si el principal falla, responde el respaldo; se registran los dos intentos y la demora se suma', async () => {
@@ -134,13 +134,13 @@ describe('capa de motores: en serie (responder, copiloto y probar un motor)', ()
     expect([r.motorId, r.respaldo]).toEqual(['claude-haiku-4.5', true]);
     expect(r.intentos.map((i) => i.ok)).toEqual([false, true]);
     expect(r.demoraMs).toBe(200);
-    const ult = await repo.llamadas('c-pa-2029', { botId: 'bot-demo-1', limite: 2 });
+    const ult = await repo.llamadas('c-pa-pruebas', { botId: 'bot-demo-1', limite: 2 });
     expect(ult.map((l) => [l.motorId, l.ok, l.respaldo])).toEqual([['claude-haiku-4.5', true, true], ['gemini-3.1-flash-lite', false, false]]);
   });
 
   it('con el tope diario alcanzado no llama a nadie; el simulador sigue andando', async () => {
     const falso = new AdaptadorFalso({ 'gemini-3.1-flash-lite': BIEN, 'gpt-oss-120b': BIEN });
-    await repo.registrarLlamada({ botId: 'bot-demo-1', campanaId: 'c-pa-2029', uso: 'en_vivo', funcion: 'responder', motorId: 'gpt-oss-120b', modelo: 'm', proveedor: 'p', respaldo: false, ok: true, error: null, demoraMs: 1, tokensEntrada: 1, tokensSalida: 1, tokensCache: 0, tokensRazonamiento: 0, costoUsd: 5, idGeneracion: null, personaId: null });
+    await repo.registrarLlamada({ botId: 'bot-demo-1', campanaId: 'c-pa-pruebas', uso: 'en_vivo', funcion: 'responder', motorId: 'gpt-oss-120b', modelo: 'm', proveedor: 'p', respaldo: false, ok: true, error: null, demoraMs: 1, tokensEntrada: 1, tokensSalida: 1, tokensCache: 0, tokensRazonamiento: 0, costoUsd: 5, idGeneracion: null, personaId: null });
     const capa = new CapaMotores({ repo, adaptadores: { openrouter: falso, simulado: new AdaptadorSimulado() }, simular: false });
     const r = await capa.llamar(pedido());
     expect(r.motivo).toBe('tope_diario');

@@ -107,7 +107,11 @@ nombres están en `apps/web/.env.ejemplo`.
 1. `pnpm dev` y entrá a http://localhost:3000 con Google. Vas a ver "Tu cuenta no tiene acceso": es lo esperado (todavía
    no hay organización).
 2. En el SQL Editor, pegá y corré `2-semilla.sql`. Al final muestra tu rol: tiene que decir `administrador`.
-3. Recargá la app: entrás a **Movimiento Otro Camino › Generales 2029 › BotMaker**.
+3. Recargá la app: entrás a **CampaignSuite · Pruebas › Panamá · Pruebas › BotMaker**.
+
+La organización y la campaña son de pruebas de CampaignSuite: ningún nombre de cliente. Si tu base se armó antes del
+30/9/2026, se llaman «Movimiento Otro Camino» y «Generales 2029»: corré una vez en el SQL Editor
+`packages/db/core-dev/renombrar-organizacion-de-pruebas.sql` (no pierde nada) y volvé a cargar los bots de ejemplo.
 
 Para probar los otros roles: ingresá una vez con otra cuenta de Google, volvé a correr `pnpm db:sql` con `--editor`,
 `--agente` o `--lector` y corré de nuevo `2-semilla.sql` (no duplica nada).

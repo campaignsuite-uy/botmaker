@@ -14,7 +14,7 @@ import { Simulador360 } from './simulado';
 import { sha256 } from './webhook';
 
 const MIERCOLES = new Date('2026-09-30T20:00:00Z');
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 const TELEFONO = '50760001111';
 const URL_AVISO = `/publico/api/whatsapp/${ID_PUBLICO_DEMO}`;
 

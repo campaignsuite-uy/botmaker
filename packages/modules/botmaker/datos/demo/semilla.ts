@@ -1,5 +1,5 @@
 /**
- * Datos de la demo en memoria: dos bots en la campaña de prueba (Generales 2029, Panamá) y dos semanas de llamadas a
+ * Datos de la demo en memoria: dos bots en la campaña de prueba (Panamá · Pruebas) y dos semanas de llamadas a
  * motores para que Costos tenga algo que mostrar. Las llamadas son inventadas (la demo nunca llama a un motor real) y la
  * barra de arriba lo dice: "Datos de prueba". Siempre las mismas: salen de un generador con semilla fija.
  */
@@ -12,8 +12,8 @@ import preguntas from '../../pruebas/preguntas-con-base.json';
 import type { Bot, FuncionMotor, LlamadaMotor, MotorFuncion, UsoMotor } from '../../dominio/tipos';
 import type { Version } from '../../dominio/versiones';
 
-export const CAMPANA_DEMO = 'c-pa-2029';
-export const ORGANIZACION_DEMO = 'org-moca';
+export const CAMPANA_DEMO = 'c-pa-pruebas';
+export const ORGANIZACION_DEMO = 'org-pruebas';
 
 /** Generador pseudoaleatorio con semilla (mulberry32): la demo sale igual cada vez. */
 function generador(semilla: number) {
@@ -29,6 +29,9 @@ function generador(semilla: number) {
 
 /** La candidata de la demo es inventada: los textos del bot la nombran, y no se pone a hablar a nadie real. */
 export const CANDIDATA_DEMO = 'Ana Lucía Ríos';
+/** Su partido también es inventado (decidido el 30/9/2026: nada de la organización de pruebas se parece a un cliente). */
+export const PARTIDO_DEMO = 'Partido Ejemplo';
+export const ALIAS_PARTIDO_DEMO = ['Ejemplo'];
 
 export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, MotorFuncion[]>; llamadas: LlamadaMotor[]; versiones: (Version & { definicion: unknown })[] } {
   const hace = (dias: number, horas = 0) => new Date(ahora.getTime() - dias * 864e5 - horas * 36e5).toISOString();
@@ -90,12 +93,13 @@ export function semillaDemo(ahora: Date): { bots: Bot[]; motores: Map<string, Mo
       }
     }
   }
-  // Cada bot arranca con su borrador (v1) armado con la plantilla política. El primero, con una candidata inventada y sin
-  // material (muestra el camino de "no tengo ese dato"); el segundo, con el material de prueba de la prueba de motores
-  // (fuentes públicas al 28/9/2026), para probar la respuesta con base en el simulador.
+  // Cada bot arranca con su borrador (v1) armado con la plantilla política. El primero, con una candidata y un partido
+  // inventados y sin material (muestra el camino de "no tengo ese dato"); el segundo, con el material de prueba de la
+  // prueba de motores (fuentes públicas al 28/9/2026), para probar la respuesta con base en el simulador: es el bot de
+  // prueba del creador con un candidato real (decisión 3.01), y vive en la organización de pruebas.
   const definiciones = [
     plantillaPolitica({
-      candidato: CANDIDATA_DEMO, partido: 'Movimiento Otro Camino', aliasPartido: ['MOCA', 'Otro Camino'], trato: bots[0]!.trato, mercado: bots[0]!.mercado,
+      candidato: CANDIDATA_DEMO, partido: PARTIDO_DEMO, aliasPartido: ALIAS_PARTIDO_DEMO, trato: bots[0]!.trato, mercado: bots[0]!.mercado,
       consultas: { canal: 'correo', valor: 'consultas@ejemplo.org' }, aportes: { canal: 'web', valor: 'ejemplo.org/aportes' },
     }),
     aplicarOperacion(plantillaPolitica({

@@ -8,11 +8,11 @@ import type { ContextoNucleo } from './ejecutar-bots';
 import { ejecutarCambio } from './ejecutar-borrador';
 import { ejecutarTurnoSimulador, type ResultadoSimulador } from './ejecutar-simulador';
 
-const CAMPANA = 'c-pa-2029';
+const CAMPANA = 'c-pa-pruebas';
 const BOT = 'bot-demo-1';
 let repo: RepositorioDemo;
 let capa: CapaMotores;
-const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Generales 2029' } });
+const como = (p: string): ContextoNucleo & { campana: { nombre: string } } => ({ repo, rol: rolEfectivo(nucleoMemoria(), p, CAMPANA), personaId: p, campanaId: CAMPANA, campana: { nombre: 'Panamá · Pruebas' } });
 
 type Ok = Extract<ResultadoSimulador, { ok: true }>;
 async function conversar(pasos: (string | { letra: string } | 'inicio')[], opciones: { horario?: 'dentro' | 'fuera'; persona?: string } = {}) {

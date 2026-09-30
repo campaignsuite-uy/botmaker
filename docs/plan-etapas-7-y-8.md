@@ -30,6 +30,10 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   quiere, los bots de ejemplo. Los pasos, en orden y con casillas, están en la lista guiada
   (https://claude.ai/code/artifact/baf3585d-8ffd-4a10-834f-c24ac9e2e473); la referencia sigue en
   `docs/puesta-en-marcha.md`.
+- **Cuentas, al 30/9:** hechos los pasos 1 a 8 de la lista guiada (1.09 a 1.13 y 5.01). BotMaker anda en
+  https://botmaker-gamma.vercel.app con Supabase (`botmaker-dev`, São Paulo), con los bots de ejemplo; la app pública,
+  en https://botmaker-publico.vercel.app. Faltan las tareas automáticas (paso 9), Turnstile (5.02), Sentry (8.02) y
+  360dialog (7.01).
 - **Pruebas de aceptación: con la app publicada.** Decidido con Joaquín el 29/9: se hacen en Vercel con Supabase, después
   del paso 8 de la lista guiada, y no en la demo.
 
@@ -279,6 +283,14 @@ Con Joaquín:
   cortesía. Más adelante, una marca «final» por caja.
 - **Una dirección de aviso por bot:** cada bot con su canal, sin mezclar la información de uno con otro.
 - **Pruebas de aceptación:** con la app publicada en Vercel y la base en Supabase, no en la demo.
+- **Organización de pruebas (30/9):** la organización y la campaña de desarrollo y de la demo son de pruebas de
+  CampaignSuite: «CampaignSuite · Pruebas» (`pruebas`, tipo agencia) y «Panamá · Pruebas» (`pa-pruebas`). Antes se
+  llamaban como el primer cliente («Movimiento Otro Camino», «Generales 2029»). Los bots 1 y 3 llevan un partido
+  inventado («Partido Ejemplo»), como la candidata; el bot 2 sigue con Ricardo Lombana y su material, como bot de
+  prueba del creador (3.01). En `botmaker-dev` se renombró con `core-dev/renombrar-organizacion-de-pruebas.sql`.
+  Para la mudanza: los clientes reales se crean en CampaignSuite con su flujo; una organización de pruebas interna
+  también sirve allá (común, no «demo», que es solo para mirar); si la demo de CampaignSuite usa el nombre de un
+  cliente, conviene cambiarlo allá también.
 
 Técnicas: las toma Claude y quedan en la sección «Decisiones técnicas» de la guía de pruebas, para verlas juntos.
 
