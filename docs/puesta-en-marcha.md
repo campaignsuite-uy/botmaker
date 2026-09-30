@@ -113,8 +113,24 @@ La organización y la campaña son de pruebas de CampaignSuite: ningún nombre d
 30/9/2026, se llaman «Movimiento Otro Camino» y «Generales 2029»: corré una vez en el SQL Editor
 `packages/db/core-dev/renombrar-organizacion-de-pruebas.sql` (no pierde nada) y volvé a cargar los bots de ejemplo.
 
-Para probar los otros roles: ingresá una vez con otra cuenta de Google, volvé a correr `pnpm db:sql` con `--editor`,
-`--agente` o `--lector` y corré de nuevo `2-semilla.sql` (no duplica nada).
+Para sumar a otra persona, lo más simple es una **invitación**: se crea antes de que entre, y al ingresar con Google
+por primera vez queda sumada a la organización, a la campaña y a BotMaker con su rol (el ingreso acepta las invitaciones
+de su correo). Su correo tiene que estar en los Test users de Google. En el SQL Editor (el rol: `administrador`,
+`editor`, `agente` o `lector`):
+
+```sql
+insert into core.invitations (organization_id, email, role, assignments, invited_by)
+select o.id, lower(x.correo), 'miembro',
+       jsonb_build_array(jsonb_build_object('campana', c.id, 'rolCampana', 'integrante',
+         'productos', jsonb_build_array(jsonb_build_object('producto', 'botmaker', 'rol', 'administrador')))),
+       (select id from core.profiles where lower(email) = 'tu-correo@gmail.com')
+from core.organizations o join core.campaigns c on c.organization_id = o.id
+cross join (values ('otra-persona@gmail.com')) as x(correo)
+where o.slug = 'pruebas' and c.slug = 'pa-pruebas';
+```
+
+Mientras no entra, aparece en **Equipo** como invitación pendiente. La otra forma: que ingrese una vez, volver a correr
+`pnpm db:sql` con `--editor`, `--agente` o `--lector` y correr de nuevo `2-semilla.sql` (no duplica nada).
 
 ### Los bots de ejemplo de la demo (opcional)
 
