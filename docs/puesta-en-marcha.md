@@ -248,7 +248,8 @@ repositorio (la región, `gru1`, y los comandos están en el `vercel.json` de ca
 
 - **Autor de los commits:** el plan Hobby publica solo commits de su dueño (Vercel compara el correo del commit con la
   cuenta de GitHub conectada o con los correos de la cuenta de Vercel). Los commits del repositorio llevan
-  `memestudiouy@gmail.com`: si la cuenta de Vercel usa otro, se agrega y se verifica en Account Settings → Emails.
+  `campaignsuite@gmail.com`, verificado en la cuenta de GitHub `campaignsuite-uy` (la historia se reescribió el 29/9
+  con ese correo).
 - **Sin variables**, la app del equipo en Vercel es la demo de solo lectura. Con `CAMPAIGNSUITE_DATOS=supabase` pide
   el ingreso con Google.
 - **Variables:** en cada proyecto, Settings → Environment Variables, para Production y Preview, las claves con
@@ -268,10 +269,12 @@ repositorio (la región, `gru1`, y los comandos están en el `vercel.json` de ca
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | | de Cloudflare (sección 8) |
 | `SENTRY_DSN` | el DSN | el DSN |
 
-- **Claves que se inventan** (tareas y HMAC): `openssl rand -hex 32 | pbcopy` y se pegan sin que se vean. La de tareas
-  va, con el mismo valor, en `BOTS_TAREAS_SECRET`, en `CRON_SECRET`, en Vault como `bots_tareas` (sección 9) y en la Mac
-  con `pbpaste | scripts/cargar-variable.sh BOTS_TAREAS_SECRET` (para la prueba de Sentry de la sección 10). Al
-  terminar, `pbcopy < /dev/null`.
+- **Claves que se inventan** (tareas y HMAC): se generan en la Terminal y se pegan sin que se vean. La de tareas va,
+  con el mismo valor, en `BOTS_TAREAS_SECRET`, en `CRON_SECRET`, en Vault como `bots_tareas` (sección 9) y en la Mac
+  (para la prueba de Sentry de la sección 10). Conviene empezar por la Mac, porque copiar un comando pisa el
+  portapapeles: `openssl rand -hex 32 | tee >(pbcopy) | scripts/cargar-variable.sh BOTS_TAREAS_SECRET` la guarda en
+  `apps/web/.env.local` y la deja en el portapapeles para pegarla en los otros tres lugares. La del HMAC:
+  `openssl rand -hex 32 | pbcopy`. Al terminar, `pbcopy < /dev/null`.
 - **Supabase → Authentication → URL Configuration:** Site URL, la dirección de botmaker; en Redirect URLs,
   `<dirección de botmaker>/auth/callback` además de la de localhost. En Google no cambia nada.
 - **Primer ingreso:** como en la sección 6, pero en la dirección de botmaker.
