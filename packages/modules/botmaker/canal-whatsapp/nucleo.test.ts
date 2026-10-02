@@ -14,6 +14,11 @@ import { Simulador360 } from './simulado';
 import { sha256 } from './webhook';
 
 const MIERCOLES = new Date('2026-09-30T20:00:00Z');
+// Un reloj que arranca el miércoles y avanza con el tiempo real. Lo comparten el repositorio, el núcleo y el
+// simulado de 360dialog: si cada uno usara el suyo (el fijo o el real), la prueba dependería del día en que corre
+// (pasó el 2/10: los envíos quedaban «para más adelante» que el miércoles y no salían).
+let inicio = Date.now();
+const reloj = () => new Date(MIERCOLES.getTime() + (Date.now() - inicio));
 const CAMPANA = 'c-pa-pruebas';
 const TELEFONO = '50760001111';
 const URL_AVISO = `/publico/api/whatsapp/${ID_PUBLICO_DEMO}`;
@@ -26,12 +31,12 @@ const hash = (t: string) => createHmac('sha256', 'clave-de-prueba').update(t).di
 
 function conectar(cliente: Cliente360 = sim) {
   entorno = {
-    ahora: () => MIERCOLES, hash, cliente, urlPublica: '/publico',
-    capa: new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true, ahora: () => MIERCOLES }),
+    ahora: reloj, hash, cliente, urlPublica: '/publico',
+    capa: new CapaMotores({ repo, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true, ahora: reloj }),
   };
   // El simulado entrega los avisos a la misma función que atiende la ruta del webhook.
   sim.entregar = async (url, encabezados, cuerpo) => {
-    const r = await recibirWebhook(repo, entorno, url.split('/').pop()!, new Headers(encabezados), cuerpo, Date.now());
+    const r = await recibirWebhook(repo, entorno, url.split('/').pop()!, new Headers(encabezados), cuerpo, reloj().getTime());
     if (r.procesar) await r.procesar();
     return r.status;
   };
@@ -41,8 +46,10 @@ beforeEach(async () => {
   // Los avisos de estado que quedaron en camino de la prueba anterior no tienen que llegar a esta.
   await sim?.esperar();
   reiniciarNucleoMemoria();
-  repo = new RepositorioDemo({ ahora: MIERCOLES });
+  inicio = Date.now();
+  repo = new RepositorioDemo({ ahora: MIERCOLES, reloj });
   sim = new Simulador360({ demo: { urlAviso: URL_AVISO } });
+  sim.reloj = () => reloj().getTime();
   conectar();
 });
 
@@ -65,11 +72,11 @@ const textos = (ms: { mensaje: MensajeWhatsapp | { type: 'entrante'; texto: stri
 describe('WhatsApp: el aviso de 360dialog', () => {
   it('sin el secreto del canal no entra; un bot que no existe tampoco; un cuerpo roto es 400', async () => {
     const cuerpo = JSON.stringify({ entry: [] });
-    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': 'otro' }), cuerpo, Date.now())).status).toBe(401);
-    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers(), cuerpo, Date.now())).status).toBe(401);
-    expect((await recibirWebhook(repo, entorno, 'noexiste01', new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), cuerpo, Date.now())).status).toBe(404);
-    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), '{roto', Date.now())).status).toBe(400);
-    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), cuerpo, Date.now())).status).toBe(200);
+    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': 'otro' }), cuerpo, reloj().getTime())).status).toBe(401);
+    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers(), cuerpo, reloj().getTime())).status).toBe(401);
+    expect((await recibirWebhook(repo, entorno, 'noexiste01', new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), cuerpo, reloj().getTime())).status).toBe(404);
+    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), '{roto', reloj().getTime())).status).toBe(400);
+    expect((await recibirWebhook(repo, entorno, ID_PUBLICO_DEMO, new Headers({ 'x-botmaker-secreto': SECRETO_DEMO }), cuerpo, reloj().getTime())).status).toBe(200);
   });
 
   it('con el canal apagado contesta que llegó y no guarda nada', async () => {
@@ -92,7 +99,7 @@ describe('WhatsApp: una conversación', () => {
     const c = await conversacionDe();
     expect(c.conversacion.canal).toBe('whatsapp');
     expect(c.contacto).toMatchObject({ telefono: TELEFONO, nombrePerfil: 'Pedro del Teléfono', condicionesVersion: 1 });
-    expect(new Date(c.conversacion.ventanaHasta!).getTime()).toBeGreaterThan(Date.now() + 23 * 36e5);
+    expect(new Date(c.conversacion.ventanaHasta!).getTime()).toBeGreaterThan(reloj().getTime() + 23 * 36e5);
     // Lo que salió: enviado, y al mirarlo el teléfono, leído (Meta avisa los estados).
     await sim.esperar();
     const leidos = (await conversacionDe()).mensajes.filter((m) => m.autor !== 'contacto');
@@ -242,7 +249,7 @@ describe('WhatsApp: envíos, reintentos y salud', () => {
 
   it('lo recibido que quedó sin procesar lo retoma la tarea programada', async () => {
     const perdido = sim.entregar!;
-    sim.entregar = async (url, enc, cuerpo) => (await recibirWebhook(repo, entorno, url.split('/').pop()!, new Headers(enc), cuerpo, Date.now())).status; // sin procesar
+    sim.entregar = async (url, enc, cuerpo) => (await recibirWebhook(repo, entorno, url.split('/').pop()!, new Headers(enc), cuerpo, reloj().getTime())).status; // sin procesar
     await sim.escribir(CLAVE_DEMO, TELEFONO, null, { tipo: 'texto', texto: 'Hola' });
     expect(sim.conversacion(CLAVE_DEMO, TELEFONO).filter((m) => m.sentido === 'para')).toHaveLength(0);
     sim.entregar = perdido;
@@ -255,8 +262,8 @@ describe('WhatsApp: envíos, reintentos y salud', () => {
 
 describe('WhatsApp: gestor de plantillas', () => {
   it('se crea en 360dialog, queda en revisión y Meta la aprueba (o la rechaza); la tarea actualiza el estado', async () => {
-    let reloj = Date.now();
-    sim.reloj = () => reloj;
+    let relojSim = reloj().getTime();
+    sim.reloj = () => relojSim;
     const nueva = { nombre: 'seguimiento', categoria: 'utility' as const, idioma: 'es', texto: 'Hola {{1}}, ¿pudimos resolver tu consulta?', ejemplos: { 1: 'Rosa' } };
     const r = await sim.crearPlantilla(CLAVE_DEMO, nueva);
     expect(r).toMatchObject({ ok: true, valor: { estado: 'en_revision' } });
@@ -264,7 +271,7 @@ describe('WhatsApp: gestor de plantillas', () => {
     await sincronizarPlantillas(repo, entorno, 'wa-demo-1');
     expect((await repo.plantillas(BOT_PUBLICADO)).find((p) => p.nombre === 'seguimiento')).toMatchObject({ estado: 'en_revision', usable: false });
     expect(await repo.canalesParaRevisarPlantillas(MIERCOLES)).toContain('wa-demo-1');
-    reloj += 20_000;
+    relojSim += 20_000;
     await tareasWhatsapp(repo, entorno);
     const ps = await repo.plantillas(BOT_PUBLICADO);
     expect(ps.find((p) => p.nombre === 'seguimiento')).toMatchObject({ estado: 'aprobada', usable: true, variables: ['1'] });

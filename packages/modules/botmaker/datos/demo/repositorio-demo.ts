@@ -142,9 +142,15 @@ const ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789';
 
 export class RepositorioDemo implements Repositorio, RepositorioPublico, RepositorioTareas, RepositorioWhatsapp {
   private e: EstadoDemo;
+  /**
+   * La hora de lo que pasa en la demo (mensajes, envíos, cambios). Por defecto, el reloj real. Las pruebas pasan uno
+   * que arranca en una fecha fija y avanza con el tiempo, así no dependen del día en que corren.
+   */
+  private readonly reloj: () => Date;
 
-  constructor(opciones: { ahora?: Date; vacio?: boolean } = {}) {
-    const ahora = opciones.ahora ?? new Date();
+  constructor(opciones: { ahora?: Date; vacio?: boolean; reloj?: () => Date } = {}) {
+    this.reloj = opciones.reloj ?? (() => new Date());
+    const ahora = opciones.ahora ?? this.reloj();
     const s: ReturnType<typeof semillaDemo> = opciones.vacio ? { bots: [], motores: new Map(), llamadas: [], versiones: [] } : semillaDemo(ahora);
     const c = opciones.vacio ? null : semillaCanal(ahora);
     if (c) {
@@ -295,7 +301,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (!(await this.campanaPreparada(campanaId))) throw new ErrorDatos('campana', 'BotMaker no está preparado en esta campaña.');
     const v = esquemaNuevoBot.parse(datos);
     const campana = nucleoMemoria().campanas.find((c) => c.id === campanaId)!;
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     const id = `bot-${this.e.siguienteBot++}`;
     this.e.bots.push({
       id, campanaId, organizacionId: campana.organizacionId, nombre: v.nombre, idPublico: this.nuevoIdPublico(), caso: v.caso, mercado: v.mercado,
@@ -318,7 +324,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (v.mercado !== undefined) b.mercado = v.mercado;
     if (v.trato !== undefined) b.trato = v.trato;
     if (v.avisoIa !== undefined) b.avisoIa = v.avisoIa;
-    b.actualizadoEn = new Date().toISOString();
+    b.actualizadoEn = this.reloj().toISOString();
   }
 
   async guardarMotores(botId: string, motores: EleccionMotores, topes: Topes | null, por: string): Promise<void> {
@@ -348,7 +354,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       b.topeDiarioUsd = t.diarioUsd;
       b.topeMensualUsd = t.mensualUsd;
     }
-    b.actualizadoEn = new Date().toISOString();
+    b.actualizadoEn = this.reloj().toISOString();
   }
 
   async guardarDatosPersonales(botId: string, personalizacion: boolean, diasGuardado: number, por: string): Promise<void> {
@@ -358,7 +364,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const v = esquemaDatosPersonales.parse({ personalizacion, diasGuardado });
     b.personalizacion = v.personalizacion;
     b.diasGuardado = v.diasGuardado;
-    b.actualizadoEn = new Date().toISOString();
+    b.actualizadoEn = this.reloj().toISOString();
   }
 
   async archivarBot(botId: string, por: string): Promise<void> {
@@ -366,7 +372,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     this.exigir(b.campanaId, por, 'publicar');
     if (b.estado === 'archivado') return;
     b.estado = 'archivado';
-    b.archivadoEn = new Date().toISOString();
+    b.archivadoEn = this.reloj().toISOString();
   }
 
   async asignarRol(campanaId: string, personaId: string, rol: RolModulo | null, por: string): Promise<void> {
@@ -375,7 +381,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   }
 
   async registrarLlamada(l: NuevaLlamada): Promise<void> {
-    this.e.llamadas.push({ ...l, id: this.e.siguienteLlamada++, fecha: l.fecha ?? new Date().toISOString() });
+    this.e.llamadas.push({ ...l, id: this.e.siguienteLlamada++, fecha: l.fecha ?? this.reloj().toISOString() });
   }
 
   // ── Versiones y borrador ──────────────────────────────────────────────────────────────────────
@@ -427,7 +433,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (v.seq !== seqEsperada) throw new ErrorDatos('borrador_cambio', 'El borrador cambió mientras lo editabas.');
     v.seq += 1;
     v.definicion = structuredClone(definicion);
-    v.actualizadaEn = new Date().toISOString();
+    v.actualizadaEn = this.reloj().toISOString();
     const lista = this.e.cambios.get(versionId) ?? [];
     lista.push({ ...structuredClone(cambio), resumen, seq: v.seq, personaId: por, fecha: v.actualizadaEn });
     this.e.cambios.set(versionId, lista);
@@ -468,7 +474,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const id = `corrida-${this.e.corridas.length + 1}`;
     this.e.corridas.push({
       id, botId: v.botId, versionId, versionSeq: v.seq, motores: structuredClone(motores), etiqueta: etiqueta.trim().slice(0, 200), estado: 'en_curso',
-      total, hechos: 0, resumen: null, costoUsd: 0, creadaPor: por, creadaEn: new Date().toISOString(), terminadaEn: null, resultados: [],
+      total, hechos: 0, resumen: null, costoUsd: 0, creadaPor: por, creadaEn: this.reloj().toISOString(), terminadaEn: null, resultados: [],
     });
     return id;
   }
@@ -485,7 +491,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const r = this.corridaEditable(corridaId, por);
     r.estado = estado;
     r.resumen = resumen ? structuredClone(resumen) : null;
-    r.terminadaEn = new Date().toISOString();
+    r.terminadaEn = this.reloj().toISOString();
   }
 
   async corridas(botId: string): Promise<Corrida[]> {
@@ -507,7 +513,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   }
 
   private evento(v: VersionDemo, accion: EventoPublicacion['accion'], nota: string, por: string, corridaId: string | null = null) {
-    this.e.eventos.push({ id: this.e.eventos.length + 1, botId: v.botId, versionId: v.id, accion, nota: nota.slice(0, 2000), corridaId, personaId: por, fecha: new Date().toISOString() });
+    this.e.eventos.push({ id: this.e.eventos.length + 1, botId: v.botId, versionId: v.id, accion, nota: nota.slice(0, 2000), corridaId, personaId: por, fecha: this.reloj().toISOString() });
   }
 
   async pedirPublicacion(versionId: string, seqEsperada: number, nota: string, por: string): Promise<void> {
@@ -538,7 +544,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     v.estado = 'publicada';
     b.versionPublicadaId = v.id;
     if (b.estado !== 'pausado') b.estado = 'publicado';
-    b.actualizadoEn = new Date().toISOString();
+    b.actualizadoEn = this.reloj().toISOString();
     this.evento(v, 'aprobado', nota, por);
   }
 
@@ -570,7 +576,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
       if (b.estado !== 'pausado') throw new ErrorDatos('no_pausado', 'El bot no está en pausa.');
       b.estado = 'publicado';
     }
-    b.actualizadoEn = new Date().toISOString();
+    b.actualizadoEn = this.reloj().toISOString();
   }
 
   // ── Canal web y condiciones ───────────────────────────────────────────────────────────────────
@@ -596,7 +602,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const t = texto.trim();
     if (!t || t.length > 20000) throw new ErrorDatos('datos', 'Las condiciones tienen que tener texto (hasta 20.000 caracteres).');
     const numero = Math.max(0, ...this.e.condiciones.filter((c) => c.botId === botId).map((c) => c.numero)) + 1;
-    this.e.condiciones.push({ botId, numero, texto: t, publicadasEn: new Date().toISOString(), publicadasPor: por });
+    this.e.condiciones.push({ botId, numero, texto: t, publicadasEn: this.reloj().toISOString(), publicadasPor: por });
     return numero;
   }
 
@@ -800,7 +806,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   async tomarConversacion(conversacionId: string, por: string): Promise<void> {
     const c = this.convDelEquipo(conversacionId, por);
     if (c.estado === 'cerrada') throw new ErrorDatos('conversacion_cerrada', 'La conversación está cerrada.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     if (c.estado === 'bot') {
       c.derivadaEn = ahora;
       c.motivoDerivacion = 'La tomó el equipo';
@@ -816,7 +822,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const t = texto.trim();
     if (!t || t.length > 4096) throw new ErrorDatos('datos', 'La respuesta tiene que tener texto (hasta 4.096 caracteres).');
     if (c.estado !== 'derivada' && c.estado !== 'en_atencion') throw new ErrorDatos('no_derivada', 'Para responder, primero hay que tomar la conversación.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     if (c.estado === 'derivada') {
       c.estado = 'en_atencion';
       c.asignadaA = por;
@@ -845,7 +851,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   async devolverConversacion(conversacionId: string, turno: TurnoDevuelto, por: string): Promise<void> {
     const c = this.convDelEquipo(conversacionId, por);
     if (c.estado !== 'derivada' && c.estado !== 'en_atencion') throw new ErrorDatos('no_derivada', 'La conversación no está derivada.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     let primero = true;
     const canalWa = this.canalWaDeConversacion(c);
     const abierta = ventanaAbierta(c.ventanaHasta, new Date(ahora));
@@ -867,12 +873,12 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const c = this.convDelEquipo(conversacionId, por);
     c.estado = 'cerrada';
     c.asignadaA = null;
-    c.actualizadaEn = new Date().toISOString();
+    c.actualizadaEn = this.reloj().toISOString();
   }
 
   async alertas(campanaId: string, opciones: { abiertas?: boolean } = {}): Promise<Alerta[]> {
     // La demo no tiene tareas programadas: revisa al leer.
-    await this.revisarAlertas(new Date());
+    await this.revisarAlertas(this.reloj());
     return this.e.alertas
       .filter((a) => a.campanaId === campanaId && (!opciones.abiertas || !a.cerradaEn))
       .sort((a, b) => b.abiertaEn.localeCompare(a.abiertaEn))
@@ -932,7 +938,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const m = (this.e.mensajes.get(c.id) ?? []).find((x) => x.n === n);
     if (!m?.muestra) throw new ErrorDatos('no_muestra', 'Ese mensaje no está en la muestra.');
     if (!['correcta', 'incorrecta'].includes(veredicto)) throw new ErrorDatos('datos', 'Veredicto inválido.');
-    this.e.revisiones.set(`${c.id}|${n}`, { veredicto, convertida, por, fecha: new Date().toISOString() });
+    this.e.revisiones.set(`${c.id}|${n}`, { veredicto, convertida, por, fecha: this.reloj().toISOString() });
   }
 
   async buscarContactos(campanaId: string, texto: string, por: string): Promise<FilaContacto[]> {
@@ -951,7 +957,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   }
 
   private pedido(ct: Contacto, tipo: PedidoDatos['tipo'], nota: string, por: string) {
-    this.e.pedidos.push({ id: this.nuevoId('pd'), campanaId: ct.campanaId, contactoId: ct.id, tipo, nota: nota.slice(0, 500), hechoPor: por, hechoEn: new Date().toISOString() });
+    this.e.pedidos.push({ id: this.nuevoId('pd'), campanaId: ct.campanaId, contactoId: ct.id, tipo, nota: nota.slice(0, 500), hechoPor: por, hechoEn: this.reloj().toISOString() });
   }
 
   async exportarContacto(contactoId: string, por: string): Promise<ExportacionContacto> {
@@ -962,7 +968,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     return {
       contacto: structuredClone(ct),
       conversaciones: this.e.conversaciones.filter((c) => c.contactoId === ct.id).map(({ sesion: _, ...c }) => ({ conversacion: structuredClone(c), mensajes: structuredClone(this.e.mensajes.get(c.id) ?? []) })),
-      exportadoEn: new Date().toISOString(),
+      exportadoEn: this.reloj().toISOString(),
     };
   }
 
@@ -970,7 +976,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const ct = this.e.contactos.find((x) => x.id === contactoId);
     if (!ct) throw new ErrorDatos('no_existe', 'No existe el contacto.');
     this.exigir(ct.campanaId, por, 'gestionar_datos_contactos');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     ct.nombre = null;
     ct.datos = {};
     ct.telefono = null;
@@ -1043,7 +1049,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     const filas = this.filtrarBase(campanaId, filtro, true);
     this.e.exportaciones.push({
       id: this.nuevoId('ex'), campanaId, botId: filtro.botId ?? null, canal: filtro.canal ?? null, consulta: filtro.consulta ? claveConsulta(filtro.consulta) : null,
-      conBusqueda: !!filtro.buscar?.trim(), cantidad: filas.length, hechoPor: por, hechoEn: new Date().toISOString(),
+      conBusqueda: !!filtro.buscar?.trim(), cantidad: filas.length, hechoPor: por, hechoEn: this.reloj().toISOString(),
     });
     return filas;
   }
@@ -1057,7 +1063,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
 
   async analitica(campanaId: string, filtro: FiltroAnalitica, por: string): Promise<DatosAnalitica> {
     this.exigir(campanaId, por, 'ver');
-    const ahora = new Date();
+    const ahora = this.reloj();
     const bots = new Set(this.e.bots.filter((b) => b.campanaId === campanaId).map((b) => b.id));
     const desde = Date.parse(filtro.desde);
     const hasta = Date.parse(filtro.hasta);
@@ -1183,7 +1189,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   async canalWhatsapp(botId: string): Promise<CanalWhatsapp | null> {
     const c = this.e.wa.canales.find((x) => x.botId === botId);
     if (!c) return null;
-    const ahora = new Date();
+    const ahora = this.reloj();
     const mes = ahora.toISOString().slice(0, 7);
     return {
       id: c.id, botId: c.botId, estado: c.estado, numero: c.numero, webhookUrl: c.webhookUrl, conectadoEn: c.conectadoEn, ultimoRecibido: c.ultimoRecibido,
@@ -1197,7 +1203,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     this.exigir(b.campanaId, por, 'configurar_canales');
     if (b.estado === 'archivado') throw new ErrorDatos('archivado', 'El bot está archivado.');
     if (!/^[0-9a-f]{64}$/.test(d.secretoHash) || !d.clave.trim() || !d.webhookUrl) throw new ErrorDatos('datos', 'Faltan datos para conectar el canal.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     let c = this.e.wa.canales.find((x) => x.botId === botId);
     if (!c) {
       c = {
@@ -1231,7 +1237,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     if (!pl?.usable) throw new ErrorDatos('plantilla_no_usable', 'Esa plantilla no está aprobada o no se puede mandar desde la bandeja.');
     const texto = p.texto.trim();
     if (!texto || texto.length > 4096 || pl.variables.some((v) => !(p.valores[v] ?? '').trim())) throw new ErrorDatos('datos', 'Completá todos los espacios de la plantilla.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     if (c.estado === 'bot') {
       c.derivadaEn = ahora;
       c.motivoDerivacion = 'La retomó el equipo con una plantilla';
@@ -1256,7 +1262,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
     this.exigir(b.campanaId, por, 'configurar_canales');
     const c = this.e.wa.canales.find((x) => x.botId === botId);
     if (!c) throw new ErrorDatos('sin_canal', 'El bot no tiene WhatsApp conectado.');
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     this.e.wa.plantillas = this.e.wa.plantillas.filter((x) => !(x.canalId === c.id && x.nombre === p.nombre && x.idioma === p.idioma));
     this.e.wa.plantillas.push({ ...structuredClone(p), canalId: c.id, creadaPor: por, creadaEn: ahora, revisadaEn: ahora });
   }
@@ -1331,7 +1337,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   async entradaProcesada(canalId: string, clave: string): Promise<void> {
     const x = this.e.wa.entradas.get(`${canalId}|${clave}`);
     if (!x) return;
-    x.procesadaEn = new Date().toISOString();
+    x.procesadaEn = this.reloj().toISOString();
     // Queda la clave (para descartar reintentos); lo de la persona se borra.
     x.entrada = null;
   }
@@ -1458,7 +1464,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   /** Solo la demo: simula que pasaron 24 horas desde el último mensaje de la persona (para probar las plantillas). */
   cerrarVentana(conversacionId: string): void {
     const c = this.e.conversaciones.find((x) => x.id === conversacionId);
-    if (c) c.ventanaHasta = new Date(Date.now() - 60_000).toISOString();
+    if (c) c.ventanaHasta = new Date(this.reloj().getTime() - 60_000).toISOString();
   }
 
   /** Solo para pruebas: los eventos de analítica que se guardaron. */
@@ -1467,7 +1473,7 @@ export class RepositorioDemo implements Repositorio, RepositorioPublico, Reposit
   }
 
   private agregarVersion(b: Bot, definicion: unknown, basadaEn: string | null, por: string): VersionDemo {
-    const ahora = new Date().toISOString();
+    const ahora = this.reloj().toISOString();
     const numero = Math.max(0, ...this.e.versiones.filter((x) => x.botId === b.id).map((x) => x.numero)) + 1;
     const v: VersionDemo = {
       id: `ver-${this.e.siguienteVersion++}`, botId: b.id, campanaId: b.campanaId, numero, estado: 'borrador', basadaEn, seq: 0,

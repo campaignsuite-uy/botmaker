@@ -39,6 +39,18 @@ import { agregarPorHora, cierreDeConversacion, ordenFilasHora, type FilaHora } f
 import { RepositorioDemo } from '../../modules/botmaker/datos/demo/repositorio-demo.ts';
 import { sqlSemillaDemo } from './semilla-demo.ts';
 
+// ── Fechas de las pruebas ───────────────────────────────────────────────────────────────────────
+// Las fechas fijas se escribieron el 30/9/2026 y conviven con now(): la ventana de 24 horas, la salud de los últimos
+// 7 días y el orden de la base de contactos. Se corren de a semanas enteras (el día de la semana importa: el horario de
+// atención) hasta quedar en hoy o después; si no, las pruebas dependen del día en que corren (pasó el 2/10).
+const ESCRITAS_EL = Date.parse('2026-09-30T00:00:00Z');
+const SEMANA = 7 * 864e5;
+const CORRIMIENTO = Math.max(0, Math.ceil((Math.floor(Date.now() / 864e5) * 864e5 - ESCRITAS_EL) / SEMANA)) * SEMANA;
+/** Una fecha de las pruebas, corrida a hoy (ISO). */
+const F = (iso: string) => new Date(Date.parse(iso) + CORRIMIENTO).toISOString();
+/** Lo mismo, como Date. */
+const FD = (iso: string) => new Date(Date.parse(iso) + CORRIMIENTO);
+
 // ── Mini arnés ──────────────────────────────────────────────────────────────────────────────────
 
 let fallas = 0;
@@ -724,14 +736,14 @@ async function main() {
     afirmar(e2 && /permission denied/.test(e2) || (await comoPersona(db, P.dueno, (tx) => cuenta(tx, `select count(*) as n from bots.rate_limits`))) === 0, `rate_limits a la vista: ${e2}`);
   });
   await prueba('conteos por ventana fija; conversación nueva, la misma, y otra después de 30 minutos', async () => {
-    const t0 = new Date('2026-09-30T20:00:10Z');
+    const t0 = FD('2026-09-30T20:00:10Z');
     afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }, { clave: 'ip:x:d', ventanaSegundos: 86400 }], t0)).join() === '1,1', 'primer conteo');
     afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }], t0)).join() === '2', 'segundo conteo');
-    afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }], new Date('2026-09-30T20:01:01Z'))).join() === '1', 'ventana nueva');
+    afirmar((await pub.contar([{ clave: 'ip:x:m', ventanaSegundos: 60 }], FD('2026-09-30T20:01:01Z'))).join() === '1', 'ventana nueva');
     const h = hmac('contacto-1');
     const a = await pub.abrirConversacion({ botId: botP, contactoHash: h, canal: 'web', verificadoAhora: true, ahora: t0 });
     afirmar(a.nueva && a.conversacion.verificada && a.conversacion.estado === 'bot' && a.contacto.hash === h, JSON.stringify(a.conversacion));
-    const b = await pub.abrirConversacion({ botId: botP, contactoHash: h, canal: 'web', verificadoAhora: false, ahora: new Date('2026-09-30T20:05:00Z') });
+    const b = await pub.abrirConversacion({ botId: botP, contactoHash: h, canal: 'web', verificadoAhora: false, ahora: FD('2026-09-30T20:05:00Z') });
     afirmar(!b.nueva && b.conversacion.id === a.conversacion.id, 'No siguió la misma');
     convWeb = a.conversacion.id;
   });
@@ -740,7 +752,7 @@ async function main() {
       entrante: { tipo: 'texto' as const, texto: `Hola ${n}`, datos: null, idCanal: `m-${n}` }, salientes: [{ autor: 'bot' as const, texto: 'Hola, ¿cómo se llama?', cajaId: 'n_sumate', datos: null }, { autor: 'bot' as const, texto: 'Otra', cajaId: null, datos: { opciones: [{ letra: 'A', texto: 'Sí' }], modo: 'botones' as const } }],
       decision: { recorrido: ['n_sumate'], costoUsd: 0.001, secciones: ['S01'] }, sesion: { espera: null, variables: { 'contacto.nombre': 'Rosa' }, estado: 'bot' as const, turnos: [], iniciada: true },
       estado: 'bot' as const, cajaActual: 'n_sumate', versionId: null, eventos: [{ nombre: 'texto_recibido' as const, cajaId: null, datos: { largo: 6 } }],
-      derivacion: null, datosContacto: { 'contacto.nombre': 'Rosa' }, muestra: true, ahora: '2026-09-30T20:06:00Z',
+      derivacion: null, datosContacto: { 'contacto.nombre': 'Rosa' }, muestra: true, ahora: F('2026-09-30T20:06:00Z'),
     });
     const ms = await pub.guardarTurno(convWeb, 0, t(1));
     afirmar(ms.map((m) => `${m.n}:${m.autor}`).join() === '1:contacto,2:bot,3:bot' && ms[1]!.decision && !ms[2]!.decision && ms[1]!.muestra && !ms[2]!.muestra, JSON.stringify(ms.map((m) => [m.n, m.autor, !!m.decision, m.muestra])));
@@ -799,7 +811,7 @@ async function main() {
   });
   await prueba('de punta a punta: el núcleo del canal web contra la base (turno con motor simulado, derivación y mensaje en espera)', async () => {
     const capa = new CapaMotores({ repo: pub, adaptadores: { openrouter: new AdaptadorSimulado() as never, simulado: new AdaptadorSimulado() }, simular: true });
-    const entorno = { ahora: () => new Date('2026-09-30T20:10:00Z'), ip: '203.0.113.9', hash: hmac, verificar: async () => true, verificacionConfigurada: true, capa };
+    const entorno = { ahora: () => FD('2026-09-30T20:10:00Z'), ip: '203.0.113.9', hash: hmac, verificar: async () => true, verificacionConfigurada: true, capa };
     let n = 0;
     const pedir = (entrada: unknown) => atenderMensaje(pub, entorno, { bot: idPublico, contacto: 'contacto-punta-0000001', canal: 'landing', id: `p-${String(++n).padStart(8, '0')}`, entrada, verificacion: 'ok' });
     const i = await pedir({ tipo: 'inicio' });
@@ -892,8 +904,8 @@ async function main() {
     afirmar(e && /permission denied|solo admite agregar/.test(e), `Se cambió un pedido: ${e}`);
   });
   await prueba('borrado por vencimiento: vacía los textos pasados los días de guardado (fechas simuladas)', async () => {
-    afirmar(await pub.borrarVencidos(new Date('2026-10-30T00:00:00Z')) === 0, 'Borró antes de tiempo');
-    const n = await pub.borrarVencidos(new Date('2027-02-01T00:00:00Z'));
+    afirmar(await pub.borrarVencidos(FD('2026-10-30T00:00:00Z')) === 0, 'Borró antes de tiempo');
+    const n = await pub.borrarVencidos(FD('2027-02-01T00:00:00Z'));
     afirmar(n > 0 && await cuenta(db, `select count(*) as n from bots.messages where campaign_id = $1 and text is not null`, [CAMP_A]) === 0, `Borró ${n}`);
     afirmar(await cuenta(db, `select count(*) as n from bots.events where campaign_id = $1`, [CAMP_A]) > 0, 'Se borraron los eventos');
   });
@@ -945,7 +957,7 @@ async function main() {
     afirmar(await cuenta(db, `select count(*) as n from core.audit_log where action = 'bots.conectar_whatsapp' and detail::text not like '%${CLAVE_WA}%'`) === 2, 'actividad sin la clave');
   });
   await prueba('el aviso: lo repetido se descarta; lo pendiente se toma una vez y vuelve a los 2 minutos si se cortó', async () => {
-    const t0 = new Date('2026-10-01T12:00:00Z');
+    const t0 = FD('2026-10-01T12:00:00Z');
     const entrada = (clave: string) => ({ clave, tipo: 'estado' as const, hora: t0.toISOString(), idProveedor: 'wamid.no-existe', estado: 'entregado' as const, error: null });
     const r = await pub.recibirEntradas(canalWa, [entrada('e:x:1'), entrada('e:x:2')], { ahora: t0, demoraMs: 40, numero: null });
     const r2 = await pub.recibirEntradas(canalWa, [entrada('e:x:1')], { ahora: t0, demoraMs: 60, numero: null });
@@ -1048,7 +1060,7 @@ async function main() {
     afirmar(!(await repoDe(P.agente).alertas(CAMP_A, { abiertas: true })).some((a) => a.tipo === 'canal_desconectado'), 'La alerta sigue abierta');
   });
   await prueba('base de contactos: el vencimiento no borra el número ni el nombre; borrar a pedido sí', async () => {
-    await pub.borrarVencidos(new Date('2027-06-01T00:00:00Z'));
+    await pub.borrarVencidos(FD('2027-06-01T00:00:00Z'));
     const c = await uno<{ id: string; phone: string; profile_name: string }>(db, `select id, phone, profile_name from bots.contacts where phone = $1`, [TEL]);
     afirmar(c?.phone === TEL && c.profile_name === 'Pedro', JSON.stringify(c));
     afirmar(await cuenta(db, `select count(*) as n from bots.outbound o join bots.sessions s on s.id = o.session_id join bots.contacts c on c.id = s.contact_id where c.phone = $1 and o.payload ->> 'type' <> 'borrado'`, [TEL]) === 0, 'Quedó texto en lo que salió');
@@ -1067,30 +1079,30 @@ async function main() {
   let ctLucia = '';
   let ctWa = '';
   await prueba('lo que consultó: el SQL da lo mismo que el código sobre los mismos eventos', async () => {
-    const a = await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: true, ahora: new Date('2026-10-02T10:00:00Z') });
+    const a = await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: true, ahora: FD('2026-10-02T10:00:00Z') });
     ctLucia = a.contacto.id;
-    await pub.guardarTurno(a.conversacion.id, 0, turnoCon('Hola', 'b-1', '2026-10-02T10:00:00Z', [
+    await pub.guardarTurno(a.conversacion.id, 0, turnoCon('Hola', 'b-1', F('2026-10-02T10:00:00Z'), [
       { nombre: 'interpretado', cajaId: 'n_interpretar', datos: { intencion: 'propuesta', tema: 'agua' } },
       { nombre: 'interpretado', cajaId: 'n_interpretar', datos: { intencion: 'cortesia', tema: 'ninguno' } },
       { nombre: 'opcion_elegida', cajaId: 'n_menu', datos: { letra: 'A' } },
     ], { 'contacto.nombre': 'Lucía Pérez', 'contacto.zona': 'Chilibre' }));
     // Casos de borde, directo en la tabla: valores que no son texto, vacíos, sin caja, empates de cantidad y de hora.
-    const sesion2 = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: false, ahora: new Date('2026-10-02T11:00:00Z') })).conversacion.id;
+    const sesion2 = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('contacto-base-lucia'), canal: 'web', verificadoAhora: false, ahora: FD('2026-10-02T11:00:00Z') })).conversacion.id;
     const ev = (sesionId: string, nombre: string, caja: string | null, datos: unknown, hora: string) =>
       db.query(`insert into bots.events (campaign_id, bot_id, channel_kind, session_id, name, box_id, data, occurred_at) values ($1, $2, 'web', $3, $4, $5, $6::jsonb, $7)`, [CAMP_A, botP, sesionId, nombre, caja, JSON.stringify(datos), hora]);
     const s1 = a.conversacion.id;
-    await ev(s1, 'interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'transporte' }, '2026-10-02T10:05:00Z');
-    await ev(s1, 'interpretado', null, { intencion: 'fuera_de_tema' }, '2026-10-02T10:06:00Z');
-    await ev(s1, 'interpretado', null, { intencion: '', tema: null }, '2026-10-02T10:07:00Z');
-    await ev(s1, 'interpretado', null, { intencion: 5, tema: ['agua'] }, '2026-10-02T10:08:00Z');
-    await ev(s1, 'opcion_elegida', null, { letra: 'B' }, '2026-10-02T10:09:00Z');
-    await ev(s1, 'opcion_elegida', 'n_menu', { letra: '' }, '2026-10-02T10:09:00Z');
-    await ev(s1, 'opcion_elegida', 'n_menu', { letra: 3 }, '2026-10-02T10:09:00Z');
-    await ev(sesion2, 'opcion_elegida', 'n_menu', { letra: 'A' }, '2026-10-02T11:01:00Z');
-    await ev(sesion2, 'opcion_elegida', 'n_masayuda', { letra: 'B' }, '2026-10-02T11:30:00Z');
-    await ev(sesion2, 'interpretado', null, { intencion: 'agenda', tema: 'vivienda' }, '2026-10-02T11:30:00Z');
-    await ev(sesion2, 'respondido_con_base', 'n_consulta', { secciones: ['S01'] }, '2026-10-02T11:31:00Z');
-    await ev(convWeb, 'interpretado', null, { intencion: 'propuesta', tema: 'salud' }, '2026-10-02T11:32:00Z');
+    await ev(s1, 'interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'transporte' }, F('2026-10-02T10:05:00Z'));
+    await ev(s1, 'interpretado', null, { intencion: 'fuera_de_tema' }, F('2026-10-02T10:06:00Z'));
+    await ev(s1, 'interpretado', null, { intencion: '', tema: null }, F('2026-10-02T10:07:00Z'));
+    await ev(s1, 'interpretado', null, { intencion: 5, tema: ['agua'] }, F('2026-10-02T10:08:00Z'));
+    await ev(s1, 'opcion_elegida', null, { letra: 'B' }, F('2026-10-02T10:09:00Z'));
+    await ev(s1, 'opcion_elegida', 'n_menu', { letra: '' }, F('2026-10-02T10:09:00Z'));
+    await ev(s1, 'opcion_elegida', 'n_menu', { letra: 3 }, F('2026-10-02T10:09:00Z'));
+    await ev(sesion2, 'opcion_elegida', 'n_menu', { letra: 'A' }, F('2026-10-02T11:01:00Z'));
+    await ev(sesion2, 'opcion_elegida', 'n_masayuda', { letra: 'B' }, F('2026-10-02T11:30:00Z'));
+    await ev(sesion2, 'interpretado', null, { intencion: 'agenda', tema: 'vivienda' }, F('2026-10-02T11:30:00Z'));
+    await ev(sesion2, 'respondido_con_base', 'n_consulta', { secciones: ['S01'] }, F('2026-10-02T11:31:00Z'));
+    await ev(convWeb, 'interpretado', null, { intencion: 'propuesta', tema: 'salud' }, F('2026-10-02T11:32:00Z'));
     const eventos = await filas<{ nombre: string; cajaId: string | null; datos: Record<string, unknown>; fecha: string }>(db,
       `select e.name as nombre, e.box_id as "cajaId", e.data as datos, e.occurred_at as fecha from bots.events e join bots.sessions s on s.id = e.session_id where s.contact_id = $1`, [ctLucia]);
     const norm = (xs: ConsultaContacto[]) => xs.map((x) => ({ ...x, ultima: new Date(x.ultima).toISOString() }));
@@ -1102,10 +1114,10 @@ async function main() {
     afirmar(e && /permission denied/.test(e), `Una persona llamó a consultas_contacto: ${e}`);
   });
   await prueba('la base: la leen administradora, agente y editor; el número solo quien atiende; el lector y el ajeno no', async () => {
-    const w = await pub.abrirConversacion({ botId: botP, contactoHash: hmac(`contacto:${botP}:wa:${TEL_BASE}`), canal: 'whatsapp', verificadoAhora: true, ahora: new Date('2026-10-03T09:00:00Z') });
+    const w = await pub.abrirConversacion({ botId: botP, contactoHash: hmac(`contacto:${botP}:wa:${TEL_BASE}`), canal: 'whatsapp', verificadoAhora: true, ahora: FD('2026-10-03T09:00:00Z') });
     ctWa = w.contacto.id;
     await pub.guardarTelefono(ctWa, TEL_BASE, 'Julio M.');
-    await pub.guardarTurno(w.conversacion.id, 0, turnoCon('¿Cuándo viene?', 'wa-b-1', '2026-10-03T09:00:00Z', [{ nombre: 'interpretado', cajaId: null, datos: { intencion: 'agenda', tema: 'ninguno' } }]));
+    await pub.guardarTurno(w.conversacion.id, 0, turnoCon('¿Cuándo viene?', 'wa-b-1', F('2026-10-03T09:00:00Z'), [{ nombre: 'interpretado', cajaId: null, datos: { intencion: 'agenda', tema: 'ninguno' } }]));
     const ag = await repoDe(P.agente).baseContactos(CAMP_A, {}, P.agente);
     const julio = ag.filas.find((f) => f.contacto.id === ctWa);
     afirmar(ag.total === ag.filas.length && ag.filas[0]!.contacto.id === ctWa && julio?.contacto.telefono === TEL_BASE && julio.contacto.nombrePerfil === 'Julio M.', JSON.stringify(ag.filas.map((f) => [f.contacto.id, f.contacto.telefono, f.ultima])));
@@ -1174,7 +1186,7 @@ async function main() {
   });
 
   console.log('\nAnalítica (bots_0010)');
-  const FUTURO = new Date('2028-01-01T00:00:00Z');
+  const FUTURO = FD('2028-01-01T00:00:00Z');
   const todosLosEventos = async () => (await filas<{ botId: string; canal: 'web'; versionId: string | null; fecha: string; nombre: string; cajaId: string | null; datos: Record<string, unknown> }>(db,
     `select e.bot_id as "botId", e.channel_kind as canal, e.version_id as "versionId", e.occurred_at as fecha, e.name as nombre, e.box_id as "cajaId", e.data as datos from bots.events e order by e.id`))
     .map((e) => ({ ...e, fecha: new Date(e.fecha).toISOString() }));
@@ -1185,7 +1197,7 @@ async function main() {
   const evAn = (nombre: string, caja: string | null, datos: unknown, hora: string) =>
     db.query(`insert into bots.events (campaign_id, bot_id, channel_kind, session_id, name, box_id, data, occurred_at) values ($1, $2, 'web', $3, $4, $5, $6::jsonb, $7)`, [CAMP_A, botP, sesionAn, nombre, caja, JSON.stringify(datos), hora]);
   await prueba('las sumas por hora: el SQL da lo mismo que el código sobre todos los eventos de la base', async () => {
-    sesionAn = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('analitica-1'), canal: 'web', verificadoAhora: true, ahora: new Date('2026-10-05T14:00:00Z') })).conversacion.id;
+    sesionAn = (await pub.abrirConversacion({ botId: botP, contactoHash: hmac('analitica-1'), canal: 'web', verificadoAhora: true, ahora: FD('2026-10-05T14:00:00Z') })).conversacion.id;
     const casos: [string, string | null, unknown][] = [
       ['sesion_iniciada', null, {}], ['caja_mostrada', 'n_bienvenida', {}], ['caja_mostrada', 'n_menu', {}], ['caja_mostrada', '', {}], ['opcion_elegida', 'n_menu', { letra: 'A' }],
       ['opcion_elegida', null, { aclaracion: 'propuesta' }], ['opcion_elegida', 'n_menu', { letra: 7 }], ['texto_recibido', null, { largo: 20 }], ['interpretado', 'n_interpretar', { intencion: 'propuesta', tema: 'agua' }],
@@ -1195,7 +1207,7 @@ async function main() {
       ['baja', 'n_baja', {}], ['tramite_electoral', 'n_consulta', {}], ['condiciones_aceptadas', null, {}], ['estado_mensaje', null, { estado: 'leido' }], ['valoracion', null, {}],
     ];
     let k = 0;
-    for (const [n, c, d] of casos) await evAn(n, c, d, new Date(Date.parse('2026-10-05T14:00:00Z') + (k++) * 150_000).toISOString());
+    for (const [n, c, d] of casos) await evAn(n, c, d, new Date(Date.parse(F('2026-10-05T14:00:00Z')) + (k++) * 150_000).toISOString());
     const r = await pub.agregarAnalitica(FUTURO);
     afirmar(r.eventos === await cuenta(db, `select count(*) as n from bots.events`), JSON.stringify(r));
     const codigo = agregarPorHora(await todosLosEventos());
@@ -1206,20 +1218,20 @@ async function main() {
     afirmar(otra.eventos === 0 && JSON.stringify(await sumasDeLaBase()) === JSON.stringify(base), 'Una segunda corrida volvió a sumar');
   });
   await prueba('los eventos nuevos se suman de a tramos y los del último minuto esperan a la próxima corrida', async () => {
-    const ahora = new Date('2026-10-06T10:00:00Z');
-    await evAn('caja_mostrada', 'n_masayuda', {}, '2026-10-06T09:50:00Z');
-    await evAn('caja_mostrada', 'n_cierre', {}, '2026-10-06T09:59:30Z');
-    await evAn('caja_mostrada', 'n_menu', {}, '2026-10-06T09:40:00Z');
+    const ahora = FD('2026-10-06T10:00:00Z');
+    await evAn('caja_mostrada', 'n_masayuda', {}, F('2026-10-06T09:50:00Z'));
+    await evAn('caja_mostrada', 'n_cierre', {}, F('2026-10-06T09:59:30Z'));
+    await evAn('caja_mostrada', 'n_menu', {}, F('2026-10-06T09:40:00Z'));
     const a = await pub.agregarAnalitica(ahora);
     afirmar(a.eventos === 1, `primera: ${JSON.stringify(a)}`);
-    const b = await pub.agregarAnalitica(new Date('2026-10-06T10:02:00Z'));
+    const b = await pub.agregarAnalitica(FD('2026-10-06T10:02:00Z'));
     afirmar(b.eventos === 2, `segunda: ${JSON.stringify(b)}`);
     afirmar(JSON.stringify(await sumasDeLaBase()) === JSON.stringify(agregarPorHora(await todosLosEventos())), 'No da lo mismo después de sumar de a tramos');
   });
   await prueba('cómo terminó cada conversación: el SQL da lo mismo que el código; si siguió, se vuelve a calcular', async () => {
-    await evAn('regla', null, { regla: 'cortesia', intencion: 'cortesia' }, '2026-10-06T09:59:40Z');
+    await evAn('regla', null, { regla: 'cortesia', intencion: 'cortesia' }, F('2026-10-06T09:59:40Z'));
     // Los eventos de arriba entraron directo a la tabla: la conversación se movió (como con un turno de verdad).
-    await db.query(`update bots.sessions set updated_at = '2026-10-06T09:59:40Z' where id = $1`, [sesionAn]);
+    await db.query(`update bots.sessions set updated_at = '${F('2026-10-06T09:59:40Z')}' where id = $1`, [sesionAn]);
     await pub.agregarAnalitica(FUTURO);
     const sesiones = await filas<{ id: string; atendida: boolean }>(db, `select id, last_team_at is not null as atendida from bots.sessions`);
     const cierres = await filas<{ session_id: string; result: string; last_box: string; path: string }>(db, `select session_id, result, last_box, path from bots.session_outcomes`);
@@ -1232,22 +1244,22 @@ async function main() {
     }
     const an = cierres.find((x) => x.session_id === sesionAn)!;
     afirmar(an.result === 'derivada' && an.path === 'n_bienvenida>n_menu>n_masayuda>n_cierre', JSON.stringify(an));
-    await db.query(`update bots.sessions set last_team_at = '2026-10-07T12:00:00Z' where id = $1`, [sesionAn]);
+    await db.query(`update bots.sessions set last_team_at = '${F('2026-10-07T12:00:00Z')}' where id = $1`, [sesionAn]);
     const r = await pub.agregarAnalitica(FUTURO);
     afirmar(r.conversaciones === 1 && (await uno<{ result: string }>(db, `select result from bots.session_outcomes where session_id = $1`, [sesionAn]))?.result === 'resuelta', JSON.stringify(r));
     const e = await error(() => comoPersona(db, P.dueno, (tx) => tx.query(`select bots.tarea_agregar_analitica(now())`)));
     afirmar(e && /permission denied/.test(e), `Una persona corrió la tarea: ${e}`);
   });
   await prueba('la pantalla lee lo sumado: la ve quien entra al producto; el costo, solo quien ve costos', async () => {
-    const filtro = { desde: '2026-01-01T00:00:00Z', hasta: FUTURO.toISOString() };
+    const filtro = { desde: F('2026-01-01T00:00:00Z'), hasta: FUTURO.toISOString() };
     const lector = await repoDe(P.lector).analitica(CAMP_A, filtro, P.lector);
     const total = await cuenta(db, `select coalesce(sum(n), 0) as n from bots.stats_hourly where campaign_id = $1`, [CAMP_A]);
     afirmar(lector.metricas.reduce((s, x) => s + x.n, 0) === total && lector.costos === null && lector.actualizadaEn, `lector: ${lector.metricas.length} métricas, costos ${JSON.stringify(lector.costos)}`);
     afirmar(lector.conversaciones.reduce((s, x) => s + x.n, 0) === await cuenta(db, `select count(*) as n from bots.session_outcomes where campaign_id = $1`, [CAMP_A]), 'cierres');
-    afirmar(lector.porDia.find((d) => d.dia === '2026-10-05')?.n === 1, JSON.stringify(lector.porDia));
+    afirmar(lector.porDia.find((d) => d.dia === F('2026-10-05T00:00:00Z').slice(0, 10))?.n === 1, JSON.stringify(lector.porDia));
     const admin = await repoDe(P.adminCamp).analitica(CAMP_A, { ...filtro, botId: botP, canal: 'web' }, P.adminCamp);
     afirmar(Array.isArray(admin.costos) && admin.metricas.every((x) => x.n > 0), JSON.stringify(admin.costos));
-    const soloOctubre = await repoDe(P.adminCamp).analitica(CAMP_A, { desde: '2026-10-06T00:00:00Z', hasta: '2026-10-07T00:00:00Z' }, P.adminCamp);
+    const soloOctubre = await repoDe(P.adminCamp).analitica(CAMP_A, { desde: F('2026-10-06T00:00:00Z'), hasta: F('2026-10-07T00:00:00Z') }, P.adminCamp);
     afirmar(soloOctubre.metricas.filter((x) => x.metrica === 'caja').reduce((s, x) => s + x.n, 0) === 3, JSON.stringify(soloOctubre.metricas));
     afirmar((await repoDe(P.adminCamp).analitica(CAMP_A, { ...filtro, botId: 'no-es-un-id' }, P.adminCamp)).metricas.length === 0, 'Un bot que no existe filtró algo');
     try {
