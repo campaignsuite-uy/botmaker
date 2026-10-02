@@ -30,10 +30,11 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   quiere, los bots de ejemplo. Los pasos, en orden y con casillas, están en la lista guiada
   (https://claude.ai/code/artifact/baf3585d-8ffd-4a10-834f-c24ac9e2e473); la referencia sigue en
   `docs/puesta-en-marcha.md`.
-- **Cuentas, al 30/9:** hechos los pasos 1 a 9 de la lista guiada (1.09 a 1.13, 5.01 y las tareas de pg_cron, con
-  la llamada de cada minuto a la app pública contestando 200). BotMaker anda en
+- **Cuentas, al 2/10:** hechos los pasos 1 a 11 de la lista guiada (1.09 a 1.13, 5.01, las tareas de pg_cron con la
+  llamada de cada minuto a la app pública contestando 200, Turnstile 5.02 y Sentry 8.02/8.03, probado en las dos apps).
+  Hay dos administradores más invitados (invitaciones en `core.invitations`). BotMaker anda en
   https://botmaker-gamma.vercel.app con Supabase (`botmaker-dev`, São Paulo), con los bots de ejemplo; la app pública,
-  en https://botmaker-publico.vercel.app. Faltan Turnstile (5.02), Sentry (8.02) y 360dialog (7.01).
+  en https://botmaker-publico.vercel.app. Falta 360dialog (7.01), que espera la cuenta de prueba.
 - **Pruebas de aceptación: con la app publicada.** Decidido con Joaquín el 29/9: se hacen en Vercel con Supabase, después
   del paso 8 de la lista guiada, y no en la demo.
 
