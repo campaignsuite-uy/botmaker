@@ -39,6 +39,13 @@ jobs:
         env: { VERCEL: '1', CAMPAIGNSUITE_DATOS: supabase }
       - name: Base de datos (migraciones, matriz y reglas por fila, con PGlite)
         run: pnpm db:probar
+      # Ninguna prueba puede depender del día en que corre (el 2/10/2026 fallaron dos que mezclaban una fecha fija con el
+      # reloj real). Se corren las unitarias y las de base con la fecha corrida 45 días.
+      - name: Unitarias y base con la fecha corrida 45 días
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq faketime > /dev/null
+          faketime -f +45d pnpm --filter @campaignsuite/botmaker test
+          faketime -f +45d pnpm db:probar
       - name: Pantallas con cada persona
         run: pnpm probar
       - name: Build de la app

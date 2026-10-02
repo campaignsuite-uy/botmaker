@@ -47,6 +47,12 @@ BotMaker se construye con la forma exacta de un producto de CampaignSuite (su `d
 15. **Datos de prueba sin nombres de clientes:** la organización y la campaña de prueba son «CampaignSuite · Pruebas» y
     «Panamá · Pruebas»; los candidatos y partidos de ejemplo son inventados (`CANDIDATA_DEMO`, `PARTIDO_DEMO`). La única
     excepción decidida es el bot 2, el de prueba del creador, con Ricardo Lombana y su material (3.01).
+16. **Pruebas que no vencen:** una prueba no mezcla una fecha fija con el reloj real. El repositorio de la demo acepta un
+    `reloj` (por defecto, el real) y las pruebas le pasan uno que arranca en una fecha fija y avanza, el mismo que usan
+    el núcleo y el simulado de 360dialog; en `pnpm db:probar`, las fechas fijas van con `F()` o `FD()`, que las corren de
+    a semanas hasta hoy. GitHub corre las unitarias y las de base con la fecha corrida 45 días (`faketime`); acá se
+    prueba igual con `faketime -f +45d pnpm --filter @campaignsuite/botmaker test`. Así pasó el 2/10/2026: dos pruebas de
+    WhatsApp y dos de la base empezaron a fallar solas y frenaron el armado en Vercel.
 
 ## Cómo sumar…
 
