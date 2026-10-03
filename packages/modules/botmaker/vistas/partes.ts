@@ -4,10 +4,11 @@
  * como cualquier otro, también desde la barra de arriba de cada pantalla.
  */
 import type { Repositorio } from '../datos/repositorio';
-import { ETIQUETA_TIPO_CAJA, LIMITES, opcionesDe, type Definicion } from '../dominio/definicion';
+import { ETIQUETA_TIPO_CAJA, LIMITES, opcionesDe, validarDefinicion, type Definicion } from '../dominio/definicion';
 import { puede } from '../dominio/permisos';
 import { yamlDelBorrador } from '../acciones/ejecutar-borrador';
 import { tokensAproximados } from '../dominio/material';
+import { ETIQUETA_ESTADO_VERSION, type Version } from '../dominio/versiones';
 import { costoEstimado, fichaMotor } from '../dominio/motores';
 import type { ContextoPantalla } from '../ui/contexto';
 import { cargarBot, encabezadoBot, hrefBot, type BotConBorrador, type EncabezadoBotVista, type PestanaBot } from './bot-comun';
@@ -31,14 +32,43 @@ export interface BaseParte {
   rehacer: string | null;
   /** Sin borrador (o inválido): la pantalla manda a Flujos para armarlo. */
   sinBorrador: { hrefFlujos: string } | null;
+  /**
+   * Sin borrador, en Contenidos, Material, Intenciones y Variables: la versión que copiaría un borrador nuevo (la
+   * pedida, si no la publicada, si no la última), solo para leer. hrefFlujos, solo para quien puede armar el borrador.
+   */
+  lectura: { numero: number; texto: string; hrefFlujos: string | null } | null;
+}
+
+/** Las pestañas que, sin borrador, muestran para leer la versión de la que partiría uno nuevo. */
+const PESTANAS_LECTURA: ReadonlySet<PestanaBot> = new Set(['contenidos', 'material', 'intenciones', 'variables']);
+
+/** La versión que copiaría un borrador nuevo: el mismo orden que bots.crear_borrador (bots_0005). */
+export function versionDeLectura(versiones: Version[], publicadaId: string | null): Version | null {
+  const delBot = [...versiones].sort((x, y) => y.numero - x.numero);
+  return delBot.find((v) => v.estado === 'pedida') ?? delBot.find((v) => v.id === publicadaId) ?? delBot[0] ?? null;
+}
+
+/** "Esto es lo publicado (v3)" o "Esto es la v4 (publicación pedida)". */
+function textoLectura(v: Version): string {
+  return v.estado === 'publicada' ? `Esto es lo publicado (v${v.numero})` : `Esto es la v${v.numero} (${ETIQUETA_ESTADO_VERSION[v.estado].toLowerCase()})`;
+}
+
+async function cargarLectura(repo: Repositorio, b: BotConBorrador): Promise<{ version: Version; definicion: Definicion } | null> {
+  const v = versionDeLectura(await repo.versiones(b.bot.id), b.bot.versionPublicadaId);
+  const completa = v ? await repo.version(v.id) : null;
+  if (!v || !completa) return null;
+  const r = validarDefinicion(completa.definicion);
+  return r.ok ? { version: v, definicion: r.definicion } : null;
 }
 
 export async function baseParte(repo: Repositorio, ctx: ContextoPantalla, botId: string, pestana: PestanaBot): Promise<{ b: BotConBorrador; comun: BaseParte } | null> {
   const b = await cargarBot(repo, ctx, botId);
   if (!b) return null;
   const seccion = pestana === 'ajustes' ? '' : pestana;
+  const lectura = !b.borrador && PESTANAS_LECTURA.has(pestana) ? await cargarLectura(repo, b) : null;
+  const hrefFlujos = hrefBot(ctx, b.bot.id, 'flujos');
   return {
-    b,
+    b: lectura ? { ...b, definicion: lectura.definicion } : b,
     comun: {
       mensaje: mensajeDe(ctx.parametros),
       encabezado: encabezadoBot(ctx, b.bot, pestana, b.borrador),
@@ -49,7 +79,8 @@ export async function baseParte(repo: Repositorio, ctx: ContextoPantalla, botId:
       seq: b.borrador?.seq ?? 0,
       deshacer: b.deshacer,
       rehacer: b.rehacer,
-      sinBorrador: b.definicion ? null : { hrefFlujos: hrefBot(ctx, b.bot.id, 'flujos') },
+      sinBorrador: b.definicion || lectura ? null : { hrefFlujos },
+      lectura: lectura ? { numero: lectura.version.numero, texto: textoLectura(lectura.version), hrefFlujos: b.editable ? hrefFlujos : null } : null,
     },
   };
 }

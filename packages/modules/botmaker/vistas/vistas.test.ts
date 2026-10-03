@@ -14,6 +14,8 @@ import { mensajeDe } from './mensajes';
 import { descargaContactos, vistaContactos, vistaFichaContacto } from './contactos';
 import { numerosDiagrama, periodoDe, vistaAnalitica } from './analitica';
 import { vistaEditor } from './editor';
+import { versionDeLectura, vistaContenidos, vistaIntenciones, vistaMaterial, vistaVariables, vistaYaml } from './partes';
+import type { Version } from '../dominio/versiones';
 
 let repo: RepositorioDemo;
 beforeEach(() => {
@@ -212,3 +214,39 @@ describe('analítica', () => {
   });
 });
 
+describe('sin borrador, lo publicado para leer (3.06)', () => {
+  it('Contenidos, Material, Intenciones y Variables muestran la versión publicada, sin formularios', async () => {
+    const c = ctx('p-lucia');
+    const contenidos = (await vistaContenidos(repo, c, 'bot-demo-3'))!;
+    expect(contenidos.lectura).toEqual({ numero: 1, texto: 'Esto es lo publicado (v1)', hrefFlujos: '/pruebas/pa-pruebas/bots/bot-demo-3/flujos' });
+    expect(contenidos).toMatchObject({ editable: false, sinBorrador: null });
+    expect(contenidos.contenidos).toHaveLength(21);
+    expect((await vistaMaterial(repo, c, 'bot-demo-3'))!.secciones).toHaveLength(4);
+    expect((await vistaIntenciones(repo, c, 'bot-demo-3'))!.intenciones).toHaveLength(23);
+    expect((await vistaVariables(repo, c, 'bot-demo-3'))!.identidad.candidato).toBe('Ana Lucía Ríos');
+  });
+
+  it('YAML sigue mandando a Flujos; quien no arma borradores no recibe el enlace', async () => {
+    const yaml = (await vistaYaml(repo, ctx('p-lucia'), 'bot-demo-3'))!;
+    expect(yaml).toMatchObject({ lectura: null, sinBorrador: { hrefFlujos: '/pruebas/pa-pruebas/bots/bot-demo-3/flujos' }, yaml: '' });
+    expect((await vistaContenidos(repo, ctx('p-equipo'), 'bot-demo-3'))!.lectura).toMatchObject({ numero: 1, hrefFlujos: null });
+    expect((await vistaContenidos(repo, ctx('p-joaquin', {}, true), 'bot-demo-3'))!.lectura).toMatchObject({ numero: 1, hrefFlujos: null });
+  });
+
+  it('con borrador, vuelve a ser el borrador y se edita', async () => {
+    await repo.crearBorrador('bot-demo-3', null, 'p-lucia');
+    const v = (await vistaContenidos(repo, ctx('p-lucia'), 'bot-demo-3'))!;
+    expect(v).toMatchObject({ lectura: null, sinBorrador: null, editable: true });
+    expect(v.contenidos).toHaveLength(21);
+  });
+
+  it('elige como un borrador nuevo: la pedida, si no la publicada, si no la última', () => {
+    const v = (numero: number, estado: Version['estado']): Version => ({
+      id: `v${numero}`, botId: 'b', campanaId: 'c', numero, estado, basadaEn: null, seq: 0, creadaPor: null, creadaEn: '', actualizadaEn: '',
+    });
+    expect(versionDeLectura([v(1, 'archivada'), v(2, 'publicada'), v(3, 'pedida')], 'v2')?.id).toBe('v3');
+    expect(versionDeLectura([v(3, 'devuelta'), v(2, 'publicada'), v(1, 'archivada')], 'v2')?.id).toBe('v2');
+    expect(versionDeLectura([v(1, 'archivada'), v(2, 'devuelta')], null)?.id).toBe('v2');
+    expect(versionDeLectura([], null)).toBeNull();
+  });
+});
