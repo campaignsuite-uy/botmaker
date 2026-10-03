@@ -5,7 +5,7 @@
 import { obtenerRepositorioPublico } from '../datos/publico';
 import { capaMotores } from '../motores';
 import { ejecutarTareas } from '../acciones/ejecutar-bandeja';
-import { atenderMensaje, consultarMensajes, type RespuestaWeb } from './nucleo';
+import { atenderMensaje, consultarMensajes, datosWidget, type RespuestaWeb } from './nucleo';
 import { hashConClave, ipDe, turnstileConfigurado, verificarTurnstile } from './servidor';
 import { scriptWidget } from './widget';
 import { tareasWhatsapp } from '../canal-whatsapp/nucleo';
@@ -45,6 +45,23 @@ export async function manejarMensajes(req: Request): Promise<Response> {
   } catch (e) {
     console.error('[bots-publico] mensajes', e instanceof Error ? e.message : e);
     return json({ ok: false, codigo: 'no_se_pudo', status: 500 });
+  }
+}
+
+/**
+ * Los datos del botón del widget (nombre, iniciales y saludo) para el sitio de la campaña: los pide el script desde otro
+ * dominio, así que van con CORS abierto. Es lo mismo que muestra la página pública del bot, sin nada de quien la visita.
+ */
+export async function manejarDatosWidget(req: Request): Promise<Response> {
+  const cors = { 'Access-Control-Allow-Origin': '*' };
+  const bot = new URL(req.url).searchParams.get('bot') ?? '';
+  try {
+    const d = await datosWidget(obtenerRepositorioPublico(), bot);
+    if (!d) return Response.json({ ok: false }, { status: 404, headers: { ...cors, 'Cache-Control': 'public, max-age=60' } });
+    return Response.json({ ok: true, ...d }, { headers: { ...cors, 'Cache-Control': 'public, max-age=300' } });
+  } catch (e) {
+    console.error('[bots-publico] widget', e instanceof Error ? e.message : e);
+    return Response.json({ ok: false }, { status: 500, headers: { ...cors, ...SIN_CACHE } });
   }
 }
 

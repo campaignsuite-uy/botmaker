@@ -259,4 +259,29 @@ export async function datosPagina(repo: RepositorioPublico, id: string): Promise
   };
 }
 
+/** Las iniciales para el avatar: la primera letra de la primera y de la última palabra ("Ana Lucía Ríos" → "AR"). */
+export function inicialesDe(nombre: string): string {
+  const p = nombre.trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return '';
+  return (p[0]!.charAt(0) + (p.length > 1 ? p[p.length - 1]!.charAt(0) : '')).toLocaleUpperCase('es');
+}
+
+/** Lo que muestra el botón del widget en el sitio de la campaña antes de abrir la conversación. */
+export interface DatosWidget {
+  candidato: string;
+  iniciales: string;
+  titulo: string;
+  /** El saludo del globito; sin saludo si el bot está en pausa. */
+  saludo: string | null;
+}
+
+export async function datosWidget(repo: RepositorioPublico, id: string): Promise<DatosWidget | null> {
+  const d = await datosPagina(repo, id);
+  if (!d) return null;
+  return {
+    candidato: d.candidato, iniciales: inicialesDe(d.candidato), titulo: `Asistente virtual de ${d.candidato}`,
+    saludo: d.pausado ? null : d.trato === 'tu' ? 'Hola, ¿en qué te puedo ayudar?' : 'Hola, ¿en qué le puedo ayudar?',
+  };
+}
+
 export type { Contacto };

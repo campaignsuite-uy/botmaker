@@ -41,6 +41,9 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   la etapa 7 en la demo local hasta que esté 360dialog. Se avanza sin 360dialog.
 - **3.06, hecha el 3/10:** sin borrador, Contenidos, Material, Intenciones y Variables muestran para leer la versión de
   la que partiría uno nuevo (la pedida, si no la publicada, si no la última); YAML sigue mandando a Flujos.
+- **Canal web rediseñado (3/10):** la conversación como un chat de mensajería, igual para todas las campañas (decidido
+  con Joaquín: sin colores ni foto por campaña). El widget es una burbuja con saludo (`/api/widget`, `data-saludo="no"` lo
+  apaga), en un shadow DOM, a pantalla completa en el celular. Fuente Inter servida por la propia app.
 - **Antes del piloto:** 8.05 (la clave de Anthropic propia) y la decisión de la 8.04.
 
 ## Etapa 7: WhatsApp con 360dialog simulado

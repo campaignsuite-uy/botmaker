@@ -269,7 +269,9 @@ try {
   const erroresSitio = [];
   sitio.on('pageerror', (e) => erroresSitio.push(String(e.message).slice(0, 160)));
   await sitio.goto(`${BASE}/publico/prueba?bot=p5v9c3h7pa`);
-  await sitio.click('#botmaker-widget button');
+  const saludo = await sitio.locator('#botmaker-widget .bm-saludo--visible').waitFor({ timeout: 8000 }).then(() => true, () => false);
+  prueba('el botón del widget saluda a los pocos segundos con el asistente del candidato', saludo && (await sitio.locator('#botmaker-widget .bm-saludo').textContent()).includes('Asistente virtual de Ana Lucía Ríos'));
+  await sitio.click('#botmaker-widget .bm-lanzador');
   const marco = sitio.frameLocator('#botmaker-widget iframe');
   await marco.locator('.pub-opcion', { hasText: 'Hablar con alguien' }).waitFor({ timeout: 15000 });
   const primero = await marco.locator('.pub-chat__mensajes').textContent();
@@ -277,7 +279,7 @@ try {
   await marco.locator('.pub-opcion', { hasText: 'Hablar con alguien' }).click();
   await marco.locator('.pub-nota').waitFor({ timeout: 15000 });
   prueba('pedir hablar con alguien deriva al equipo y el widget lo dice', (await marco.locator('.pub-nota').textContent()).includes('equipo'));
-  await marco.locator('input[aria-label="Mensaje"]').fill('Es por una reunión en mi barrio');
+  await marco.locator('textarea[aria-label="Mensaje"]').fill('Es por una reunión en mi barrio');
   await marco.locator('button:has-text("Enviar")').click();
   await sitio.waitForTimeout(800);
 
@@ -299,11 +301,17 @@ try {
   await agente.click('button:has-text("Devolver al bot")');
   await agente.waitForURL(/ok=conversacion_devuelta/);
   prueba('devolver la conversación al bot', (await agente.textContent('main')).includes('La atiende el bot'));
+  await marco.locator('.pub-cabecera__cerrar').click();
+  const cerro = await sitio.waitForFunction(() => document.querySelector('#botmaker-widget')?.shadowRoot?.querySelector('.bm')?.getAttribute('data-estado') === 'cerrado', null, { timeout: 5000 }).then(() => true, () => false);
+  prueba('la cruz de la conversación cierra el widget (en el celular ocupa toda la pantalla)', cerro);
 
   await sitio.goto(`${BASE}/publico/b/p5v9c3h7pa/condiciones`);
   prueba('las condiciones del bot, con su versión', (await sitio.textContent('main')).includes('Seguir la conversación es aceptar') && (await sitio.textContent('main')).includes('Versión 1'));
 
-  // Una ráfaga desde la misma IP: pasado el límite, solo menús (sin motores).
+  // Una ráfaga desde la misma IP: pasado el límite, solo menús (sin motores). Los límites cuentan por minuto de reloj:
+  // si faltan pocos segundos para el minuto siguiente, se espera, así la ráfaga entera cae en la misma ventana.
+  const segundo = new Date().getUTCSeconds();
+  if (segundo > 40) await sitio.waitForTimeout((61 - segundo) * 1000);
   let menus = 0;
   for (let i = 0; i < 40; i++) {
     const r = await sitio.request.post(`${BASE}/publico/api/conversar`, { data: { bot: 'p5v9c3h7pa', contacto: `rafaga-navegador-${String(i % 3).padStart(4, '0')}`, canal: 'web', id: `rafaga-${i}-${Date.now()}`, entrada: { tipo: 'texto', texto: '¿Qué propone para el transporte?' } } });
@@ -539,6 +547,10 @@ try {
       prueba('conversa con la versión publicada', r.ok && r.mensajes.some((m) => m.opcionesDe === 'n_menu'), JSON.stringify(r).slice(0, 200));
       const w = await fetch(`${PUB}/widget.js`);
       prueba('sirve el script del widget', (await w.text()).includes('botmaker-widget') && (w.headers.get('content-type') ?? '').includes('javascript'));
+      const dw = await fetch(`${PUB}/api/widget?bot=p5v9c3h7pa`);
+      const datosW = await dw.json();
+      prueba('los datos del botón del widget, para cualquier sitio', datosW.ok && datosW.iniciales === 'AR' && datosW.saludo === 'Hola, ¿en qué le puedo ayudar?' && dw.headers.get('access-control-allow-origin') === '*', JSON.stringify(datosW));
+      prueba('el botón de un bot que no está publicado no aparece', (await fetch(`${PUB}/api/widget?bot=k7m2q9x4pa`)).status === 404);
       const b = await fetch(`${PUB}/b/p5v9c3h7pa`);
       prueba('la página del bot se puede mostrar dentro del widget en cualquier sitio', (b.headers.get('content-security-policy') ?? '').includes('frame-ancestors *'));
       prueba('las tareas de fondo piden su clave', (await fetch(`${PUB}/api/tareas`)).status === 401);
