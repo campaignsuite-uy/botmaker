@@ -36,7 +36,12 @@ para retomar: se lee de arriba abajo y se marca lo hecho. Estado al 29/9/2026.
   https://botmaker-gamma.vercel.app con Supabase (`botmaker-dev`, São Paulo), con los bots de ejemplo; la app pública,
   en https://botmaker-publico.vercel.app. Falta 360dialog (7.01), que espera la cuenta de prueba.
 - **Pruebas de aceptación: con la app publicada.** Decidido con Joaquín el 29/9: se hacen en Vercel con Supabase, después
-  del paso 8 de la lista guiada, y no en la demo.
+  del paso 8 de la lista guiada, y no en la demo. Desde el 3/10, la guía de pruebas tiene «Cómo probar en Vercel»: una
+  cuenta por persona (los dos invitados cambian de rol en Equipo), motor real, Turnstile, y las pruebas del teléfono de
+  la etapa 7 en la demo local hasta que esté 360dialog. Se avanza sin 360dialog.
+- **3.06, hecha el 3/10:** sin borrador, Contenidos, Material, Intenciones y Variables muestran para leer la versión de
+  la que partiría uno nuevo (la pedida, si no la publicada, si no la última); YAML sigue mandando a Flujos.
+- **Antes del piloto:** 8.05 (la clave de Anthropic propia) y la decisión de la 8.04.
 
 ## Etapa 7: WhatsApp con 360dialog simulado
 

@@ -44,6 +44,11 @@ function Cabeza({ b, bajada }: { b: BaseParte; bajada: string }) {
       <MensajeAccion m={b.mensaje} />
       <BarraBorrador b={b} />
       {b.sinBorrador ? <div className="aviso" role="status">Este bot todavía no tiene borrador. <a href={b.sinBorrador.hrefFlujos}>Armalo en Flujos</a>.</div> : null}
+      {b.lectura ? (
+        <div className="aviso" role="status">
+          {b.lectura.texto}, solo para leer.{b.lectura.hrefFlujos ? <> Para cambiarlo, <a href={b.lectura.hrefFlujos}>armá un borrador en Flujos</a>.</> : null}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -177,7 +182,7 @@ export function PantallaContenidos({ v }: { v: VistaContenidos }) {
             <div className="fila"><button type="submit" className="boton">Agregar contenido</button></div>
           </Forma>
         </Caja>
-      ) : !v.sinBorrador ? <SoloLectura>Los contenidos los cambian el editor y el administrador.</SoloLectura> : null}
+      ) : !v.sinBorrador && !v.lectura ? <SoloLectura>Los contenidos los cambian el editor y el administrador.</SoloLectura> : null}
     </>
   );
 }

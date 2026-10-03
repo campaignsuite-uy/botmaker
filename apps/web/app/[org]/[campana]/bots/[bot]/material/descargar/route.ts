@@ -3,7 +3,7 @@ import { materialComoTexto } from '@campaignsuite/botmaker/dominio/material';
 import { vistaMaterial } from '@campaignsuite/botmaker/vistas/partes';
 import { contextoBots } from '@/lib/modulo';
 
-/** Descarga el material del borrador como texto (.md), en el mismo formato con que se carga. */
+/** Descarga el material del borrador (sin borrador, el de lo publicado) como texto (.md), en el mismo formato con que se carga. */
 export async function GET(_: Request, { params }: { params: Promise<{ org: string; campana: string; bot: string }> }) {
   const { bot } = await params;
   const ctx = await contextoBots(params);

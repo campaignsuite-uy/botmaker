@@ -143,6 +143,17 @@ async function main() {
       prueba(`variables y datos: ${e.datos ? 'se editan' : 'solo mirar'}`, tiene(variables, 'Candidato y partido') && tiene(variables, '{{bot.horario}}') && tiene(variables, 'Agregar variable') === e.datos);
       const yaml = html(createElement(PantallaYaml, { v: (await vistaYaml(repo, c, 'bot-demo-1'))! }));
       prueba(`yaml: exportar${e.datos ? ' e importar' : ''}`, tiene(yaml, 'Descargar .yaml') && tiene(yaml, 'Importar</button>') === e.datos);
+      // 3.06: sin borrador, lo publicado se lee en Contenidos, Material, Intenciones y Variables.
+      const leer = [
+        html(createElement(PantallaContenidos, { v: (await vistaContenidos(repo, c, 'bot-demo-3'))! })),
+        html(createElement(PantallaMaterial, { v: (await vistaMaterial(repo, c, 'bot-demo-3'))! })),
+        html(createElement(PantallaIntenciones, { v: (await vistaIntenciones(repo, c, 'bot-demo-3'))! })),
+        html(createElement(PantallaVariables, { v: (await vistaVariables(repo, c, 'bot-demo-3'))! })),
+      ];
+      prueba(`sin borrador: lo publicado para leer${e.datos && !demo ? ', con el enlace para armar uno' : ''}`,
+        leer.every((h) => tiene(h, 'Esto es lo publicado (v1), solo para leer.') && !tiene(h, 'no tiene borrador') && tiene(h, 'armá un borrador en Flujos') === (e.datos && !demo))
+        && tiene(leer[0]!, 'Bienvenida') && !tiene(leer[0]!, 'Agregar contenido') && !tiene(leer[0]!, 'Los contenidos los cambian')
+        && tiene(leer[1]!, '4 secciones') && !tiene(leer[1]!, '>Cargar</button>') && tiene(leer[2]!, 'Intenciones (23)') && tiene(leer[3]!, 'Ana Lucía Ríos'));
 
       const simulador = html(createElement(PantallaSimulador, { v: (await vistaSimulador(repo, c, 'bot-demo-1'))! }));
       prueba(`simulador: ${e.datos ? 'el chat' : 'no lo usa (tiene costo)'}`, tiene(simulador, 'sim-controles') === e.datos && tiene(simulador, 'lo usan el editor y el administrador') === !e.datos);
