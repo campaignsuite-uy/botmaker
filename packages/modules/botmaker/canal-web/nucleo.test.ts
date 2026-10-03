@@ -5,7 +5,7 @@ import { RepositorioDemo } from '../datos/demo/repositorio-demo';
 import { BOT_PUBLICADO, ID_PUBLICO_DEMO } from '../datos/demo/semilla-canal';
 import { CapaMotores } from '../motores/capa';
 import { AdaptadorSimulado } from '../motores/simulado';
-import { atenderMensaje, consultarMensajes, datosPagina, type EntornoWeb, type RespuestaWeb } from './nucleo';
+import { atenderMensaje, consultarMensajes, datosPagina, datosWidget, inicialesDe, type EntornoWeb, type RespuestaWeb } from './nucleo';
 
 // Un miércoles a las 15 de Panamá: dentro del horario de atención por defecto.
 const MIERCOLES = new Date('2026-09-30T20:00:00Z');
@@ -180,5 +180,22 @@ describe('canal web: disponibilidad, pausa y condiciones', () => {
 
   it('la página del bot muestra su nombre, el candidato y las condiciones', async () => {
     expect(await datosPagina(repo, ID_PUBLICO_DEMO)).toMatchObject({ nombre: 'Asistente publicado', candidato: 'Ana Lucía Ríos', condiciones: { numero: 1 } });
+  });
+
+  it('el botón del widget: iniciales y saludo con el trato del bot; sin saludo en pausa; nada si no está publicado', async () => {
+    expect(await datosWidget(repo, ID_PUBLICO_DEMO)).toEqual({
+      candidato: 'Ana Lucía Ríos', iniciales: 'AR', titulo: 'Asistente virtual de Ana Lucía Ríos', saludo: 'Hola, ¿en qué le puedo ayudar?',
+    });
+    await repo.pausarBot(BOT_PUBLICADO, true, 'p-joaquin');
+    expect((await datosWidget(repo, ID_PUBLICO_DEMO))?.saludo).toBeNull();
+    expect(await datosWidget(repo, 'k7m2q9x4pa')).toBeNull();
+    expect(await datosWidget(repo, 'no válido')).toBeNull();
+  });
+
+  it('las iniciales: primera y última palabra, en mayúscula', () => {
+    expect(inicialesDe('Ana Lucía Ríos')).toBe('AR');
+    expect(inicialesDe('  ángel  ')).toBe('Á');
+    expect(inicialesDe('Ricardo Lombana')).toBe('RL');
+    expect(inicialesDe('')).toBe('');
   });
 });
